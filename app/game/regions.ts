@@ -312,16 +312,26 @@ function filteredAnchors(
   });
 }
 
+/**
+ * Seeds one region on the free land cell closest to its anchor.
+ *
+ * Runs once per region against the same land set, so it walks a prepared list
+ * of land cells and derives coordinates inline rather than re-testing every
+ * cell in the world and allocating a coordinate pair for each.
+ */
 function nearestLandIndex(
-  state: Pick<WorldState, "cells" | "config">,
+  width: number,
   anchor: RegionAnchor,
   excluded: Uint8Array,
+  landCells: Int32Array,
 ): number {
   let best = -1;
   let bestDistance = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < state.cells.length; index += 1) {
-    if (excluded[index] || state.cells[index]!.terrain === "water") continue;
-    const [x, y] = cellCoordinates(index, state.config.width);
+  for (let cursor = 0; cursor < landCells.length; cursor += 1) {
+    const index = landCells[cursor]!;
+    if (excluded[index]) continue;
+    const x = index % width;
+    const y = (index - x) / width;
     const distance = (x - anchor.x) ** 2 + (y - anchor.y) ** 2;
     if (distance < bestDistance) {
       best = index;
@@ -402,7 +412,16 @@ function partitionLand(
   meta: StrategicMetaMap,
   previous: readonly number[] | null,
 ): number[] {
-  const landCount = state.cells.reduce((total, cell) => total + (cell.terrain === "water" ? 0 : 1), 0);
+  // Land cells are collected once, ascending, and shared by every region's
+  // seed search instead of each one re-testing the whole world.
+  const landCells = new Int32Array(state.cells.length);
+  let landCount = 0;
+  for (let index = 0; index < state.cells.length; index += 1) {
+    if (state.cells[index]!.terrain === "water") continue;
+    landCells[landCount] = index;
+    landCount += 1;
+  }
+  const land = landCells.subarray(0, landCount);
   const targetCapacity = landCount / anchors.length;
   const counts = anchors.map(() => 0);
   const labels = new Array<number>(state.cells.length).fill(-1);
@@ -411,7 +430,7 @@ function partitionLand(
   const heap = new FrontierHeap();
 
   for (let regionId = 0; regionId < anchors.length; regionId += 1) {
-    const index = nearestLandIndex(state, anchors[regionId]!, seeded);
+    const index = nearestLandIndex(state.config.width, anchors[regionId]!, seeded, land);
     if (index < 0) continue;
     seeded[index] = 1;
     anchorCells[regionId] = index;
