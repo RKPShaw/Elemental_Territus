@@ -20,6 +20,31 @@ npm run simulate:batch -- --games 100 --max-ticks 1800 --workers 8
 
 Node.js `>=22.13.0` is required.
 
+## Play and inspect from the terminal
+
+`npm run sim` runs the real engine with the real ordered systems — no browser,
+no bundler, and no installed dependencies, since `app/game` imports nothing
+outside itself:
+
+```bash
+npm run sim -- watch --speed 8          # play a world in the terminal
+npm run sim -- map --tick 900 --mode regions
+npm run sim -- events --domain trade --limit 20
+npm run sim -- inspect trade --tick 900 # or diplomacy, campaigns, theaters, regions, economy, structures, stories
+npm run sim -- systems                  # per-system timing profile
+npm run sim -- doctor                   # check every system is doing its job
+```
+
+`doctor` runs a world and asserts each of the fourteen systems produced its
+characteristic activity — trade completed journeys, campaigns concluded,
+theaters formed, the partition moved — and exits non-zero naming anything that
+has gone quiet. It is the fastest way to find a system that silently stopped
+working, which aggregate balance metrics tend to hide.
+
+`npm run sim -- help` lists every command and flag. Because none of this needs
+`node_modules`, `npm run test:sim` runs the whole gameplay and determinism suite
+from a bare checkout too.
+
 ## Architecture
 
 The simulation is a headless TypeScript domain core. React renders immutable

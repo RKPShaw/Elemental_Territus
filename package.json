@@ -10,10 +10,12 @@
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vite",
     "build": "bash scripts/build-verified.sh",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs && node --import tsx --test tests/simulation.test.ts tests/determinism.test.ts",
-    "test:determinism": "node --import tsx --test tests/determinism.test.ts",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs && npm run test:sim",
+    "test:sim": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs --test tests/simulation.test.ts tests/determinism.test.ts",
+    "test:determinism": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs --test tests/determinism.test.ts",
+    "sim": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/sim.ts",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
-    "simulate:batch": "node --import tsx scripts/simulate-batch.ts",
+    "simulate:batch": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/simulate-batch.ts",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },
   "dependencies": {

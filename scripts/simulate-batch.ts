@@ -56,7 +56,14 @@ async function runWorker(
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL("./batch-sim-worker.ts", import.meta.url), {
       workerData: { seeds, maximumTicks, checkpointTicks },
-      execArgv: ["--import", "tsx"],
+      // Workers do not inherit execArgv, so each one re-applies the loader that
+      // lets the TypeScript sources run without an install.
+      execArgv: [
+        "--experimental-transform-types",
+        "--disable-warning=ExperimentalWarning",
+        "--import",
+        new URL("./ts-loader.mjs", import.meta.url).href,
+      ],
     });
     worker.once("message", (results: BatchGameResult[]) => resolve(results));
     worker.once("error", reject);
