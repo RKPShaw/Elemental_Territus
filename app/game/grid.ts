@@ -126,8 +126,14 @@ export function cellsWithin(
 }
 
 export function distanceBetween(state: WorldState, first: number, second: number): number {
-  const [ax, ay] = cellCoordinates(first, state.config.width);
-  const [bx, by] = cellCoordinates(second, state.config.width);
+  // Coordinates are derived inline rather than through cellCoordinates: this is
+  // called millions of times per tick by the build and trade planners, and a
+  // returned tuple per endpoint dominated its cost.
+  const width = state.config.width;
+  const ax = first % width;
+  const ay = (first - ax) / width;
+  const bx = second % width;
+  const by = (second - bx) / width;
   return Math.hypot(ax - bx, ay - by) * normalizedCellLength(state.config);
 }
 

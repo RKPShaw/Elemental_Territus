@@ -31,8 +31,16 @@ function nearestDistance(
   candidates: readonly number[],
   fallback = Number.POSITIVE_INFINITY,
 ): number {
+  // Scored once per candidate tile against lists that reach into the thousands
+  // of rail cells, so this runs a plain loop: mapping to a temporary array and
+  // spreading it into Math.min allocated on every one of those calls.
   if (candidates.length === 0) return fallback;
-  return Math.min(...candidates.map((candidate) => distanceBetween(context.state, index, candidate)));
+  let nearest = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    const distance = distanceBetween(context.state, index, candidate);
+    if (distance < nearest) nearest = distance;
+  }
+  return nearest;
 }
 
 function vulnerableBoundaryCells(context: SimulationContext, owner: ElementId): number[] {
