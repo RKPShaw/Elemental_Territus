@@ -14,7 +14,7 @@ import {
   nextStructureCost,
   populationGrowthEfficiency,
 } from "../app/game/rules";
-import { canPlaceStructureSite, distanceBetween, neighborIndices } from "../app/game/grid";
+import { canPlaceStructureSite, cellCoordinates, distanceBetween, neighborIndices } from "../app/game/grid";
 import { CommandExecutionSystem } from "../app/game/systems/commands";
 import { StorySystem } from "../app/game/systems/story";
 import { BATCH_SYSTEMS } from "../app/game/systems";
@@ -322,6 +322,42 @@ test("merchant ships retain contiguous water-only routes", () => {
     }
   }
   assert.ok(observedShips > 0, "the calibration world should launch merchant ships");
+});
+
+test("rail routes stay contiguous, land-only and anchored to their stations", () => {
+  // Rail paths come out of a shared multi-source search, so a single wrong
+  // reconstruction would hand trains a route that skips cells or crosses water.
+  let observedRoutes = 0;
+  for (const seed of [0x240823, 0x5eed01]) {
+    const engine = new ElementalWarEngine(seed);
+    let previous = 0;
+    for (const tick of [200, 600, 1000]) {
+      engine.advance(tick - previous);
+      previous = tick;
+      const state = engine.snapshot();
+      const width = state.config.width;
+      for (const route of state.tradeRoutes.filter((candidate) => candidate.kind === "rail")) {
+        observedRoutes += 1;
+        const path = route.pathIndices;
+        assert.ok(path.length >= 2, `${route.id} has no travellable path`);
+        assert.equal(path[0], route.startIndex, `${route.id} does not begin at its start station`);
+        assert.equal(path.at(-1), route.endIndex, `${route.id} does not end at its end station`);
+        assert.equal(new Set(path).size, path.length, `${route.id} revisits a cell`);
+        for (let step = 1; step < path.length; step += 1) {
+          const [ax, ay] = cellCoordinates(path[step - 1]!, width);
+          const [bx, by] = cellCoordinates(path[step]!, width);
+          assert.ok(
+            Math.abs(ax - bx) <= 1 && Math.abs(ay - by) <= 1,
+            `${route.id} jumps between ${path[step - 1]} and ${path[step]}`,
+          );
+        }
+        for (const index of path) {
+          assert.notEqual(state.cells[index]!.terrain, "water", `${route.id} lays track on water`);
+        }
+      }
+    }
+  }
+  assert.ok(observedRoutes > 0, "the calibration worlds should build rail routes");
 });
 
 test("each trade building finishes its run and cooldown before dispatching again", () => {

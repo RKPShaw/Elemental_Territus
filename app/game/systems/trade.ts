@@ -32,13 +32,6 @@ interface RailNode {
   kind: "city" | "factory";
 }
 
-interface RailEdge {
-  start: RailNode;
-  end: RailNode;
-  distance: number;
-  pathIndices: number[];
-}
-
 interface RailJourney {
   pathIndices: number[];
   stopIndices: number[];
@@ -160,97 +153,175 @@ function railTraversalCost(terrain: LandTerrainId): number {
   return 2.35;
 }
 
-interface HeapEntry {
-  index: number;
-  cost: number;
-}
+/**
+ * Binary heap over cell indices, held in parallel typed arrays.
+ *
+ * A network rebuild performs millions of pushes, so one object per entry was a
+ * meaningful share of the system's cost. The heap is reused across searches;
+ * `poppedCost` carries the cost of the last `pop` so callers avoid a tuple.
+ */
+class RailHeap {
+  private cells = new Int32Array(1024);
+  private costs = new Float64Array(1024);
+  private size = 0;
+  poppedCost = 0;
 
-class MinimumHeap {
-  private readonly entries: HeapEntry[] = [];
-
-  push(entry: HeapEntry): void {
-    this.entries.push(entry);
-    let index = this.entries.length - 1;
-    while (index > 0) {
-      const parent = Math.floor((index - 1) / 2);
-      if (this.entries[parent]!.cost <= entry.cost) break;
-      this.entries[index] = this.entries[parent]!;
-      index = parent;
-    }
-    this.entries[index] = entry;
+  clear(): void {
+    this.size = 0;
   }
 
-  pop(): HeapEntry | null {
-    if (this.entries.length === 0) return null;
-    const root = this.entries[0]!;
-    const tail = this.entries.pop()!;
-    if (this.entries.length === 0) return root;
+  push(cell: number, cost: number): void {
+    if (this.size === this.cells.length) this.grow();
+    let index = this.size;
+    this.size += 1;
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (this.costs[parent]! <= cost) break;
+      this.cells[index] = this.cells[parent]!;
+      this.costs[index] = this.costs[parent]!;
+      index = parent;
+    }
+    this.cells[index] = cell;
+    this.costs[index] = cost;
+  }
+
+  /** Returns the cheapest cell, or -1 when empty. */
+  pop(): number {
+    if (this.size === 0) return -1;
+    const root = this.cells[0]!;
+    this.poppedCost = this.costs[0]!;
+    this.size -= 1;
+    if (this.size === 0) return root;
+    const cell = this.cells[this.size]!;
+    const cost = this.costs[this.size]!;
     let index = 0;
     while (true) {
       const left = index * 2 + 1;
+      if (left >= this.size) break;
       const right = left + 1;
-      if (left >= this.entries.length) break;
-      const child = right < this.entries.length && this.entries[right]!.cost < this.entries[left]!.cost
-        ? right
-        : left;
-      if (this.entries[child]!.cost >= tail.cost) break;
-      this.entries[index] = this.entries[child]!;
+      const child = right < this.size && this.costs[right]! < this.costs[left]! ? right : left;
+      if (this.costs[child]! >= cost) break;
+      this.cells[index] = this.cells[child]!;
+      this.costs[index] = this.costs[child]!;
       index = child;
     }
-    this.entries[index] = tail;
+    this.cells[index] = cell;
+    this.costs[index] = cost;
     return root;
+  }
+
+  private grow(): void {
+    const cells = new Int32Array(this.cells.length * 2);
+    const costs = new Float64Array(this.costs.length * 2);
+    cells.set(this.cells);
+    costs.set(this.costs);
+    this.cells = cells;
+    this.costs = costs;
   }
 }
 
-function findRailPath(
+interface RailLink {
+  /** The seeded node the link grows from. */
+  seedIndex: number;
+  /** The newly reached node the link connects. */
+  targetIndex: number;
+  cost: number;
+  /** Cells from the reached target back to its seed. */
+  path: number[];
+}
+
+// Search scratch is reused between calls. A generation stamp marks visited
+// cells so a search costs only the cells it actually touches, rather than
+// refilling three full-grid arrays before it starts.
+const railHeap = new RailHeap();
+let railDistance = new Float64Array(0);
+let railPrevious = new Int32Array(0);
+let railOrigin = new Int32Array(0);
+let railStamp = new Int32Array(0);
+let railGeneration = 0;
+
+function beginRailSearch(size: number): void {
+  if (railDistance.length !== size) {
+    railDistance = new Float64Array(size);
+    railPrevious = new Int32Array(size);
+    railOrigin = new Int32Array(size);
+    railStamp = new Int32Array(size);
+    railGeneration = 0;
+  }
+  if (railGeneration >= 0x7fffffff) {
+    railStamp.fill(0);
+    railGeneration = 0;
+  }
+  railGeneration += 1;
+  railHeap.clear();
+}
+
+/**
+ * Finds the cheapest buildable rail link from any seed to any accepted target.
+ *
+ * One multi-source Dijkstra expands from every seed at once, so a single sweep
+ * yields the globally cheapest link for this seed set. Because cells settle in
+ * ascending build cost, the first accepted target is that cheapest link and the
+ * search can stop there.
+ */
+function findCheapestRailLink(
   state: WorldState,
-  source: number,
-  destination: number,
+  seeds: readonly RailNode[],
+  accept: (targetIndex: number, seedIndex: number) => boolean,
   coverage: Uint8Array,
   existingTrack: ReadonlySet<number>,
-): number[] | null {
-  const distance = new Float64Array(state.cells.length);
-  distance.fill(Number.POSITIVE_INFINITY);
-  const previous = new Int32Array(state.cells.length);
-  previous.fill(-1);
-  const heap = new MinimumHeap();
-  distance[source] = 0;
-  heap.push({ index: source, cost: 0 });
+  nodeCells: ReadonlySet<number>,
+): RailLink | null {
+  if (seeds.length === 0) return null;
+  const { width, height } = state.config;
+  beginRailSearch(state.cells.length);
+  const seedCells = new Set<number>();
+  for (const seed of seeds) {
+    if (seedCells.has(seed.index)) continue;
+    seedCells.add(seed.index);
+    railDistance[seed.index] = 0;
+    railPrevious[seed.index] = -1;
+    railOrigin[seed.index] = seed.index;
+    railStamp[seed.index] = railGeneration;
+    railHeap.push(seed.index, 0);
+  }
 
   while (true) {
-    const current = heap.pop();
-    if (!current) return null;
-    if (current.cost !== distance[current.index]) continue;
-    if (current.index === destination) break;
-    for (const neighbor of surroundingIndices(current.index, state.config.width, state.config.height)) {
+    const current = railHeap.pop();
+    if (current < 0) return null;
+    const cost = railHeap.poppedCost;
+    // Costs are lowered by re-pushing, so stale entries are skipped here.
+    if (cost !== railDistance[current]) continue;
+    const seedIndex = railOrigin[current]!;
+    if (!seedCells.has(current) && nodeCells.has(current) && accept(current, seedIndex)) {
+      const path: number[] = [];
+      for (let cursor = current; cursor >= 0; cursor = railPrevious[cursor]!) path.push(cursor);
+      return { seedIndex, targetIndex: current, cost, path };
+    }
+    const ax = current % width;
+    const ay = (current - ax) / width;
+    for (const neighbor of surroundingIndices(current, width, height)) {
       const cell = state.cells[neighbor]!;
       if (cell.terrain === "water") continue;
-      if (
-        neighbor !== destination &&
-        !coverage[neighbor] &&
-        !existingTrack.has(neighbor)
-      ) continue;
-      const [ax, ay] = [current.index % state.config.width, Math.floor(current.index / state.config.width)];
-      const [bx, by] = [neighbor % state.config.width, Math.floor(neighbor / state.config.width)];
+      // Track may only be laid inside factory coverage or along existing
+      // track; a station that would terminate the link is exempt.
+      const terminates = nodeCells.has(neighbor) && accept(neighbor, seedIndex);
+      if (!terminates && !coverage[neighbor] && !existingTrack.has(neighbor)) continue;
+      const bx = neighbor % width;
+      const by = (neighbor - bx) / width;
       const stepLength = ax !== bx && ay !== by ? Math.SQRT2 : 1;
       const stepCost = existingTrack.has(neighbor)
         ? TRADE_RULES.railExistingTrackCost * stepLength
         : railTraversalCost(cell.terrain as LandTerrainId) * stepLength;
-      const proposed = current.cost + stepCost;
-      if (proposed >= distance[neighbor]!) continue;
-      distance[neighbor] = proposed;
-      previous[neighbor] = current.index;
-      heap.push({ index: neighbor, cost: proposed });
+      const proposed = cost + stepCost;
+      if (railStamp[neighbor] === railGeneration && proposed >= railDistance[neighbor]!) continue;
+      railStamp[neighbor] = railGeneration;
+      railDistance[neighbor] = proposed;
+      railPrevious[neighbor] = current;
+      railOrigin[neighbor] = seedIndex;
+      railHeap.push(neighbor, proposed);
     }
   }
-
-  const reversed: number[] = [];
-  for (let cursor = destination; cursor >= 0; cursor = previous[cursor]!) {
-    reversed.push(cursor);
-    if (cursor === source) break;
-  }
-  if (reversed.at(-1) !== source) return null;
-  return reversed.reverse();
 }
 
 function routeFromPath(state: WorldState, start: RailNode, end: RailNode, path: number[]): TradeRoute {
@@ -286,60 +357,98 @@ function buildRailNetwork(state: WorldState): TradeRoute[] {
   const connected = new Set(routes.flatMap((route) => [route.startIndex, route.endIndex]));
   const coverage = factoryCoverage(state, nodes);
   const trackCells = new Set(routes.flatMap((route) => route.pathIndices));
+  const nodeCells = new Set(nodes.map((node) => node.index));
   let added = 0;
 
+  // Each pass lays the single cheapest link available, then repeats: laying
+  // track lowers the cost of neighbouring routes, so the remaining candidates
+  // genuinely change. One multi-source sweep per owner answers "what is the
+  // cheapest link this owner can build" for every one of its stations at once,
+  // so a pass costs a handful of sweeps rather than one per candidate pair.
   while (added < TRADE_RULES.railMaximumNewLinksPerRebuild) {
-    const sources = nodes.filter((node) => !connected.has(node.index));
-    if (sources.length === 0) break;
-    let best: RailEdge | null = null;
+    const unconnected = nodes.filter((node) => !connected.has(node.index));
+    if (unconnected.length === 0) break;
+    let best: { start: RailNode; end: RailNode; path: number[]; cost: number } | null = null;
 
     if (connected.size === 0) {
-      for (const factory of sources.filter((node) => node.kind === "factory")) {
-        const destinations = nodes
-          .filter((node) => node.index !== factory.index && canTrade(state, factory.owner, node.owner))
-          .filter((node) => distanceBetween(state, factory.index, node.index) <= TRADE_RULES.trainRadius)
-          .sort((first, second) =>
-            distanceBetween(state, factory.index, first.index) - distanceBetween(state, factory.index, second.index)
-          );
-        for (const destination of destinations.slice(0, 5)) {
-          const path = findRailPath(state, factory.index, destination.index, coverage, trackCells);
-          if (!path) continue;
-          const candidate = { start: factory, end: destination, distance: routeDistance(state, path), pathIndices: path };
-          if (!best || candidate.distance < best.distance) best = candidate;
-        }
+      // The first link of a network grows out of a factory and may not exceed
+      // the train radius. Seeds are grouped by owner because tradeability is a
+      // property of the pair, and a sweep fixes one side of it.
+      const owners = distinctOwners(unconnected.filter((node) => node.kind === "factory"));
+      for (const owner of owners) {
+        const seeds = unconnected.filter((node) => node.kind === "factory" && node.owner === owner);
+        const link = findCheapestRailLink(
+          state,
+          seeds,
+          (targetIndex, seedIndex) => {
+            const target = nodeByIndex.get(targetIndex);
+            if (!target || targetIndex === seedIndex) return false;
+            if (!canTrade(state, owner, target.owner)) return false;
+            return distanceBetween(state, seedIndex, targetIndex) <= TRADE_RULES.trainRadius;
+          },
+          coverage,
+          trackCells,
+          nodeCells,
+        );
+        if (!link || (best && link.cost >= best.cost)) continue;
+        // The factory opens the link, so it stays the route's start; the
+        // reconstructed path runs target-to-seed and is reversed to match.
+        best = {
+          start: nodeByIndex.get(link.seedIndex)!,
+          end: nodeByIndex.get(link.targetIndex)!,
+          path: [...link.path].reverse(),
+          cost: link.cost,
+        };
       }
     } else {
-      const networkNodes = nodes.filter((node) => connected.has(node.index));
-      for (const source of sources) {
-        const destinations = networkNodes
-          .filter((node) => canTrade(state, source.owner, node.owner))
-          .sort((first, second) =>
-            distanceBetween(state, source.index, first.index) - distanceBetween(state, source.index, second.index)
-          )
-          .slice(0, 6);
-        for (const destination of destinations) {
-          const key = routeKey(source.index, destination.index);
-          if (routeIds.has(key)) continue;
-          const path = findRailPath(state, source.index, destination.index, coverage, trackCells);
-          if (!path) continue;
-          const candidate = { start: source, end: destination, distance: routeDistance(state, path), pathIndices: path };
-          if (!best || candidate.distance < best.distance) best = candidate;
-        }
+      const connectedNodes = nodes.filter((node) => connected.has(node.index));
+      for (const owner of distinctOwners(unconnected)) {
+        const seeds = connectedNodes.filter((node) => canTrade(state, owner, node.owner));
+        const link = findCheapestRailLink(
+          state,
+          seeds,
+          (targetIndex, seedIndex) => {
+            const target = nodeByIndex.get(targetIndex);
+            if (!target || target.owner !== owner || connected.has(targetIndex)) return false;
+            return !routeIds.has(routeKey(targetIndex, seedIndex));
+          },
+          coverage,
+          trackCells,
+          nodeCells,
+        );
+        if (!link || (best && link.cost >= best.cost)) continue;
+        // The joining station is the route's start, as when each unconnected
+        // node searched for its own destination.
+        best = {
+          start: nodeByIndex.get(link.targetIndex)!,
+          end: nodeByIndex.get(link.seedIndex)!,
+          path: link.path,
+          cost: link.cost,
+        };
       }
     }
 
     if (!best) break;
-    const route = routeFromPath(state, best.start, best.end, best.pathIndices);
+    const route = routeFromPath(state, best.start, best.end, best.path);
     if (routeIds.has(route.id)) break;
     routes.push(route);
     routeIds.add(route.id);
     connected.add(best.start.index);
     connected.add(best.end.index);
-    for (const index of best.pathIndices) trackCells.add(index);
+    for (const index of best.path) trackCells.add(index);
     added += 1;
   }
 
   return routes;
+}
+
+/** Owners in first-appearance order, keeping sweep order independent of Set iteration. */
+function distinctOwners(nodes: readonly RailNode[]): ElementId[] {
+  const owners: ElementId[] = [];
+  for (const node of nodes) {
+    if (!owners.includes(node.owner)) owners.push(node.owner);
+  }
+  return owners;
 }
 
 function routeAllowedForTrain(state: WorldState, route: TradeRoute, trainOwner: ElementId): boolean {
