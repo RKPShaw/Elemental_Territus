@@ -1,0 +1,505 @@
+import { committedTroopsFor, livingTroopsFor } from "./campaigns";
+import { getRelation } from "./diplomacy";
+import { ELEMENT_ORDER } from "./elements";
+import { isFrontierCell } from "./grid";
+import {
+  ECONOMY_RULES,
+  populationGrowthEfficiency,
+} from "./rules";
+import type {
+  ElementId,
+  StructureCounts,
+  StructureType,
+  WorldReportEvent,
+  WorldState,
+} from "./types";
+
+export interface NationCumulativeMetrics {
+  structuresBuilt: StructureCounts;
+  citySitesBuilt: number;
+  structuresCaptured: StructureCounts;
+  citySitesCaptured: number;
+  structuresLost: StructureCounts;
+  citySitesLost: number;
+  structureSpend: number;
+  warshipSpend: number;
+  navalSpend: number;
+  nominalPassiveIncome: number;
+  trainIncomeEarned: number;
+  trainIncomeHosted: number;
+  shipIncomeEarned: number;
+  shipIncomeHosted: number;
+  domesticStopsServed: number;
+  foreignStopsServed: number;
+  foreignStopsHosted: number;
+  trainsCompleted: number;
+  shipsCompleted: number;
+  warsDeclared: number;
+  peaceTreaties: number;
+  alliancesOffered: number;
+  alliancesFormed: number;
+  alliancesBetrayed: number;
+  campaignsLaunched: number;
+  campaignsReinforced: number;
+  attackingTroopsCommitted: number;
+  defendingTroopsCommitted: number;
+  theatersFormed: number;
+  theatersWon: number;
+  capitalsCaptured: number;
+  realmsConquered: number;
+  ticksAlive: number;
+  ticksAtWar: number;
+  ticksAllied: number;
+  ticksTraitorExposed: number;
+  ticksTreasuryCapped: number;
+  ticksPopulationBelow20: number;
+  ticksPopulation20To50: number;
+  ticksPopulationNearPeak: number;
+  ticksPopulationOver82: number;
+  homeRatioTotal: number;
+  committedRatioTotal: number;
+  growthEfficiencyTotal: number;
+}
+
+export interface NationBalanceSnapshot {
+  id: ElementId;
+  alive: boolean;
+  landShare: number;
+  territory: number;
+  sustainableLand: number;
+  frontierCells: number;
+  homePopulation: number;
+  committedPopulation: number;
+  livingPopulation: number;
+  populationCap: number;
+  homeRatio: number;
+  committedRatio: number;
+  growthEfficiency: number;
+  troopGrowth: number;
+  powerShare: number;
+  gold: number;
+  currentIncome: number;
+  warWeariness: number;
+  casualties: number;
+  absorbedElements: number;
+  structuresOwned: StructureCounts;
+  citySitesOwned: number;
+  stackedCityLevelsOwned: number;
+  activeCampaigns: number;
+  incomingCampaigns: number;
+  activeTheaters: number;
+  activeTrains: number;
+  activeShips: number;
+  activeWars: number;
+  activeAlliances: number;
+  cumulative: NationCumulativeMetrics;
+}
+
+export interface WorldBalanceSnapshot {
+  tick: number;
+  minute: number;
+  champion: ElementId | null;
+  aliveRealms: number;
+  settledShare: number;
+  leader: ElementId | null;
+  leaderLandShare: number;
+  landConcentrationHhi: number;
+  treasuryGini: number;
+  populationConcentrationHhi: number;
+  totalHomePopulation: number;
+  totalCommittedPopulation: number;
+  totalPopulationCap: number;
+  averageHomeRatio: number;
+  averageGrowthEfficiency: number;
+  totalTreasury: number;
+  structuresOwned: StructureCounts;
+  citySitesOwned: number;
+  stackedCityLevelsOwned: number;
+  citiesBuilt: number;
+  citySitesBuilt: number;
+  citiesCaptured: number;
+  citySitesCaptured: number;
+  citiesLost: number;
+  structureSpend: number;
+  nominalPassiveIncome: number;
+  trainIncome: number;
+  shipIncome: number;
+  activeWars: number;
+  activeAlliances: number;
+  activeCampaigns: number;
+  activeTheaters: number;
+  activeTrains: number;
+  activeShips: number;
+  railEdges: number;
+  eventCounts: Record<string, number>;
+  firstEventTicks: Record<string, number>;
+  milestones: Record<string, number>;
+  nations: Record<ElementId, NationBalanceSnapshot>;
+}
+
+function emptyStructures(): StructureCounts {
+  return { city: 0, fort: 0, factory: 0, harbor: 0 };
+}
+
+function emptyNationMetrics(): NationCumulativeMetrics {
+  return {
+    structuresBuilt: emptyStructures(),
+    citySitesBuilt: 0,
+    structuresCaptured: emptyStructures(),
+    citySitesCaptured: 0,
+    structuresLost: emptyStructures(),
+    citySitesLost: 0,
+    structureSpend: 0,
+    warshipSpend: 0,
+    navalSpend: 0,
+    nominalPassiveIncome: 0,
+    trainIncomeEarned: 0,
+    trainIncomeHosted: 0,
+    shipIncomeEarned: 0,
+    shipIncomeHosted: 0,
+    domesticStopsServed: 0,
+    foreignStopsServed: 0,
+    foreignStopsHosted: 0,
+    trainsCompleted: 0,
+    shipsCompleted: 0,
+    warsDeclared: 0,
+    peaceTreaties: 0,
+    alliancesOffered: 0,
+    alliancesFormed: 0,
+    alliancesBetrayed: 0,
+    campaignsLaunched: 0,
+    campaignsReinforced: 0,
+    attackingTroopsCommitted: 0,
+    defendingTroopsCommitted: 0,
+    theatersFormed: 0,
+    theatersWon: 0,
+    capitalsCaptured: 0,
+    realmsConquered: 0,
+    ticksAlive: 0,
+    ticksAtWar: 0,
+    ticksAllied: 0,
+    ticksTraitorExposed: 0,
+    ticksTreasuryCapped: 0,
+    ticksPopulationBelow20: 0,
+    ticksPopulation20To50: 0,
+    ticksPopulationNearPeak: 0,
+    ticksPopulationOver82: 0,
+    homeRatioTotal: 0,
+    committedRatioTotal: 0,
+    growthEfficiencyTotal: 0,
+  };
+}
+
+function realmFromTarget(event: WorldReportEvent): ElementId | null {
+  return event.targets.find((target) => target.type === "realm")?.realmId ?? null;
+}
+
+function structureFrom(event: WorldReportEvent): StructureType | null {
+  const structure = event.facts.structure;
+  return structure === "city" || structure === "fort" || structure === "factory" || structure === "harbor"
+    ? structure
+    : null;
+}
+
+function cloneCumulative(metrics: NationCumulativeMetrics): NationCumulativeMetrics {
+  return {
+    ...metrics,
+    structuresBuilt: { ...metrics.structuresBuilt },
+    structuresCaptured: { ...metrics.structuresCaptured },
+    structuresLost: { ...metrics.structuresLost },
+  };
+}
+
+function concentration(values: number[]): number {
+  const total = values.reduce((sum, value) => sum + Math.max(0, value), 0);
+  if (total <= 0) return 0;
+  return values.reduce((sum, value) => sum + Math.pow(Math.max(0, value) / total, 2), 0);
+}
+
+function gini(values: number[]): number {
+  const sorted = values.map((value) => Math.max(0, value)).sort((a, b) => a - b);
+  const total = sorted.reduce((sum, value) => sum + value, 0);
+  if (total <= 0 || sorted.length <= 1) return 0;
+  const weighted = sorted.reduce((sum, value, index) => sum + (index + 1) * value, 0);
+  return (2 * weighted) / (sorted.length * total) - (sorted.length + 1) / sorted.length;
+}
+
+function addStructure(target: StructureCounts, structure: StructureType, levels = 1): void {
+  target[structure] += levels;
+}
+
+export class BatchMetricsCollector {
+  private readonly nations = Object.fromEntries(
+    ELEMENT_ORDER.map((id) => [id, emptyNationMetrics()]),
+  ) as Record<ElementId, NationCumulativeMetrics>;
+  private readonly tradeIncomeThisTick = Object.fromEntries(
+    ELEMENT_ORDER.map((id) => [id, 0]),
+  ) as Record<ElementId, number>;
+  private readonly eventCounts: Record<string, number> = {};
+  private readonly firstEventTicks: Record<string, number> = {};
+  private readonly milestones: Record<string, number> = {};
+
+  record = (event: WorldReportEvent): void => {
+    this.eventCounts[event.kind] = (this.eventCounts[event.kind] ?? 0) + 1;
+    this.firstEventTicks[event.kind] ??= event.tick;
+    const actor = event.initiator?.realmId ?? null;
+    const target = realmFromTarget(event);
+
+    if (event.kind === "infrastructure.structure-built" && actor) {
+      const structure = structureFrom(event);
+      if (structure) {
+        addStructure(this.nations[actor].structuresBuilt, structure);
+        this.nations[actor].structureSpend += Number(event.facts.cost ?? 0);
+        if (structure === "city" && event.facts.stacked !== true) this.nations[actor].citySitesBuilt += 1;
+      }
+    }
+    if (event.kind === "territory.structure-captured" && actor && target) {
+      const structure = structureFrom(event);
+      if (structure) {
+        const levels = structure === "city" ? Math.max(1, Number(event.facts.structureLevel ?? 1)) : 1;
+        addStructure(this.nations[actor].structuresCaptured, structure, levels);
+        addStructure(this.nations[target].structuresLost, structure, levels);
+        if (structure === "city") {
+          this.nations[actor].citySitesCaptured += 1;
+          this.nations[target].citySitesLost += 1;
+        }
+      }
+    }
+    if (event.kind === "military.warship-built" && actor) {
+      this.nations[actor].warshipSpend += Number(event.facts.cost ?? 0);
+    }
+    if ((event.kind === "military.campaign-launched" || event.kind === "military.campaign-reinforced") && actor) {
+      this.nations[actor].navalSpend += Number(event.facts.goldCost ?? 0);
+      this.nations[actor].attackingTroopsCommitted += Number(event.facts.troops ?? 0);
+      if (event.kind === "military.campaign-launched") this.nations[actor].campaignsLaunched += 1;
+      else this.nations[actor].campaignsReinforced += 1;
+    }
+    if (event.kind === "military.defense-committed" && actor) {
+      this.nations[actor].defendingTroopsCommitted += Number(event.facts.troops ?? 0);
+    }
+    if (event.kind === "military.theater-formed" && actor) this.nations[actor].theatersFormed += 1;
+    if (event.kind === "military.theater-victory" && actor) this.nations[actor].theatersWon += 1;
+    if (event.kind === "territory.capital-captured" && actor) this.nations[actor].capitalsCaptured += 1;
+    if (event.kind === "territory.realm-conquered" && actor) this.nations[actor].realmsConquered += 1;
+    if (event.kind === "diplomacy.war-declared" && actor) this.nations[actor].warsDeclared += 1;
+    if (event.kind === "diplomacy.peace-made" && actor) this.nations[actor].peaceTreaties += 1;
+    if (event.kind === "diplomacy.alliance-offered" && actor) this.nations[actor].alliancesOffered += 1;
+    if (event.kind === "diplomacy.alliance-formed" && actor) this.nations[actor].alliancesFormed += 1;
+    if (event.kind === "diplomacy.alliance-betrayed" && actor) this.nations[actor].alliancesBetrayed += 1;
+
+    if (event.kind === "trade.train-stop-served" && actor) {
+      const ownerIncome = Number(event.facts.ownerIncome ?? 0);
+      this.nations[actor].trainIncomeEarned += ownerIncome;
+      this.tradeIncomeThisTick[actor] += ownerIncome;
+      if (event.facts.foreign === true) this.nations[actor].foreignStopsServed += 1;
+      else this.nations[actor].domesticStopsServed += 1;
+      if (target && target !== actor) {
+        const hostIncome = Number(event.facts.hostIncome ?? 0);
+        this.nations[target].trainIncomeHosted += hostIncome;
+        this.nations[target].foreignStopsHosted += 1;
+        this.tradeIncomeThisTick[target] += hostIncome;
+      }
+    }
+    if (event.kind === "trade.journey-completed" && actor) {
+      if (event.facts.vehicleKind === "train") this.nations[actor].trainsCompleted += 1;
+      if (event.facts.vehicleKind === "ship") {
+        const ownerIncome = Number(event.facts.income ?? 0);
+        this.nations[actor].shipsCompleted += 1;
+        this.nations[actor].shipIncomeEarned += ownerIncome;
+        this.tradeIncomeThisTick[actor] += ownerIncome;
+        if (target && target !== actor) {
+          const hostIncome = Number(event.facts.hostIncome ?? 0);
+          this.nations[target].shipIncomeHosted += hostIncome;
+          this.tradeIncomeThisTick[target] += hostIncome;
+        }
+      }
+    }
+  };
+
+  tick = (state: WorldState): void => {
+    let activeWarPairs = 0;
+    let activeAlliancePairs = 0;
+    for (const relation of Object.values(state.relations)) {
+      if (!relation.parties.every((id) => state.factions[id].alive)) continue;
+      if (relation.status === "war") activeWarPairs += 1;
+      if (relation.status === "truce") activeAlliancePairs += 1;
+    }
+    if (activeWarPairs > 0) this.milestones.firstWarTick ??= state.tick;
+    if (activeAlliancePairs > 0) this.milestones.firstAllianceTick ??= state.tick;
+
+    for (const id of ELEMENT_ORDER) {
+      const faction = state.factions[id];
+      const metrics = this.nations[id];
+      if (!faction.alive) {
+        this.tradeIncomeThisTick[id] = 0;
+        continue;
+      }
+      metrics.ticksAlive += 1;
+      const committed = committedTroopsFor(state, id);
+      const homeRatio = faction.troops / Math.max(1, faction.troopCap);
+      const committedRatio = committed / Math.max(1, faction.troopCap);
+      metrics.homeRatioTotal += homeRatio;
+      metrics.committedRatioTotal += committedRatio;
+      metrics.growthEfficiencyTotal += populationGrowthEfficiency(homeRatio);
+      if (homeRatio < 0.2) metrics.ticksPopulationBelow20 += 1;
+      else if (homeRatio < 0.5) metrics.ticksPopulation20To50 += 1;
+      else if (homeRatio <= 0.75) metrics.ticksPopulationNearPeak += 1;
+      else if (homeRatio > 0.82) metrics.ticksPopulationOver82 += 1;
+      const warCount = Object.values(state.relations).filter(
+        (relation) => relation.status === "war" && relation.parties.includes(id),
+      ).length;
+      const allianceCount = Object.values(state.relations).filter(
+        (relation) => relation.status === "truce" && relation.parties.includes(id),
+      ).length;
+      if (warCount > 0) metrics.ticksAtWar += 1;
+      if (allianceCount > 0) metrics.ticksAllied += 1;
+      if (state.tick < faction.traitorUntil) metrics.ticksTraitorExposed += 1;
+      if (faction.gold >= ECONOMY_RULES.maximumTreasury - 1) metrics.ticksTreasuryCapped += 1;
+      metrics.nominalPassiveIncome += Math.max(0, faction.goldRate - this.tradeIncomeThisTick[id]);
+      this.tradeIncomeThisTick[id] = 0;
+
+      const cityLevels = faction.structures.city;
+      const tradeBuildings = faction.structures.factory + faction.structures.harbor;
+      for (const threshold of [1, 5, 10, 25, 50, 80]) {
+        if (cityLevels >= threshold) this.milestones[`${id}.cities.${threshold}`] ??= state.tick;
+      }
+      for (const threshold of [1, 5, 10, 25, 50, 100]) {
+        if (tradeBuildings >= threshold) this.milestones[`${id}.trade.${threshold}`] ??= state.tick;
+      }
+    }
+
+    // Settlement thresholds are sampled every 30 seconds to avoid turning a
+    // balance observer into another full-grid simulation system.
+    if (state.tick % 30 === 0) {
+      const unclaimed = state.cells.reduce(
+        (total, cell) => total + (cell.terrain !== "water" && cell.owner === null ? 1 : 0),
+        0,
+      );
+      const settled = 1 - unclaimed / state.landTiles;
+      for (const threshold of [0.8, 0.9, 0.98, 1]) {
+        if (settled >= threshold) this.milestones[`world.settled.${threshold}`] ??= state.tick;
+      }
+    }
+  };
+
+  snapshot(state: WorldState): WorldBalanceSnapshot {
+    const citySites = Object.fromEntries(ELEMENT_ORDER.map((id) => [id, 0])) as Record<ElementId, number>;
+    const frontierCells = Object.fromEntries(ELEMENT_ORDER.map((id) => [id, 0])) as Record<ElementId, number>;
+    let unclaimed = 0;
+    for (let index = 0; index < state.cells.length; index += 1) {
+      const cell = state.cells[index]!;
+      if (cell.terrain !== "water" && cell.owner === null) unclaimed += 1;
+      if (!cell.owner) continue;
+      if (cell.structure === "city") citySites[cell.owner] += 1;
+      if (isFrontierCell(state, index)) frontierCells[cell.owner] += 1;
+    }
+    const livingByNation = ELEMENT_ORDER.map((id) => livingTroopsFor(state, id));
+    const totalLiving = livingByNation.reduce((sum, value) => sum + value, 0);
+    const nationSnapshots = {} as Record<ElementId, NationBalanceSnapshot>;
+    for (const [position, id] of ELEMENT_ORDER.entries()) {
+      const faction = state.factions[id];
+      const committed = committedTroopsFor(state, id);
+      const homeRatio = faction.troops / Math.max(1, faction.troopCap);
+      nationSnapshots[id] = {
+        id,
+        alive: faction.alive,
+        landShare: faction.territory / state.landTiles,
+        territory: faction.territory,
+        sustainableLand: faction.sustainableLand,
+        frontierCells: frontierCells[id],
+        homePopulation: faction.troops,
+        committedPopulation: committed,
+        livingPopulation: livingByNation[position]!,
+        populationCap: faction.troopCap,
+        homeRatio,
+        committedRatio: committed / Math.max(1, faction.troopCap),
+        growthEfficiency: populationGrowthEfficiency(homeRatio),
+        troopGrowth: faction.troopGrowth,
+        powerShare: totalLiving > 0 ? livingByNation[position]! / totalLiving : 0,
+        gold: faction.gold,
+        currentIncome: faction.goldRate,
+        warWeariness: faction.warWeariness,
+        casualties: faction.casualties,
+        absorbedElements: faction.absorbedElements.length,
+        structuresOwned: { ...faction.structures },
+        citySitesOwned: citySites[id],
+        stackedCityLevelsOwned: Math.max(0, faction.structures.city - citySites[id]),
+        activeCampaigns: state.campaigns.filter((campaign) => campaign.attacker === id).length,
+        incomingCampaigns: state.campaigns.filter((campaign) => campaign.target === id).length,
+        activeTheaters: state.theaters.filter((theater) => theater.attacker === id && theater.staleRefreshes === 0).length,
+        activeTrains: state.tradeVehicles.filter((vehicle) => vehicle.owner === id && vehicle.kind === "train").length,
+        activeShips: state.tradeVehicles.filter((vehicle) => vehicle.owner === id && vehicle.kind === "ship").length,
+        activeWars: ELEMENT_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "war").length,
+        activeAlliances: ELEMENT_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "truce").length,
+        cumulative: cloneCumulative(this.nations[id]),
+      };
+    }
+
+    const alive = ELEMENT_ORDER.filter((id) => state.factions[id].alive);
+    const leader = [...alive].sort(
+      (first, second) => state.factions[second].territory - state.factions[first].territory,
+    )[0] ?? null;
+    const structuresOwned = emptyStructures();
+    for (const id of ELEMENT_ORDER) {
+      for (const structure of Object.keys(structuresOwned) as StructureType[]) {
+        structuresOwned[structure] += state.factions[id].structures[structure];
+      }
+    }
+    const cumulative = ELEMENT_ORDER.map((id) => this.nations[id]);
+    const total = (selector: (metrics: NationCumulativeMetrics) => number) =>
+      cumulative.reduce((sum, metrics) => sum + selector(metrics), 0);
+    const totalHome = ELEMENT_ORDER.reduce((sum, id) => sum + state.factions[id].troops, 0);
+    const totalCommitted = ELEMENT_ORDER.reduce((sum, id) => sum + committedTroopsFor(state, id), 0);
+    const totalCap = ELEMENT_ORDER.reduce((sum, id) => sum + state.factions[id].troopCap, 0);
+
+    return {
+      tick: state.tick,
+      minute: state.tick / 60,
+      champion: state.champion,
+      aliveRealms: alive.length,
+      settledShare: 1 - unclaimed / state.landTiles,
+      leader,
+      leaderLandShare: leader ? state.factions[leader].territory / state.landTiles : 0,
+      landConcentrationHhi: concentration(ELEMENT_ORDER.map((id) => state.factions[id].territory)),
+      treasuryGini: gini(alive.map((id) => state.factions[id].gold)),
+      populationConcentrationHhi: concentration(livingByNation),
+      totalHomePopulation: totalHome,
+      totalCommittedPopulation: totalCommitted,
+      totalPopulationCap: totalCap,
+      averageHomeRatio: alive.length > 0
+        ? alive.reduce((sum, id) => sum + nationSnapshots[id].homeRatio, 0) / alive.length
+        : 0,
+      averageGrowthEfficiency: alive.length > 0
+        ? alive.reduce((sum, id) => sum + nationSnapshots[id].growthEfficiency, 0) / alive.length
+        : 0,
+      totalTreasury: ELEMENT_ORDER.reduce((sum, id) => sum + state.factions[id].gold, 0),
+      structuresOwned,
+      citySitesOwned: Object.values(citySites).reduce((sum, value) => sum + value, 0),
+      stackedCityLevelsOwned: Math.max(0, structuresOwned.city - Object.values(citySites).reduce((sum, value) => sum + value, 0)),
+      citiesBuilt: total((metrics) => metrics.structuresBuilt.city),
+      citySitesBuilt: total((metrics) => metrics.citySitesBuilt),
+      citiesCaptured: total((metrics) => metrics.structuresCaptured.city),
+      citySitesCaptured: total((metrics) => metrics.citySitesCaptured),
+      citiesLost: total((metrics) => metrics.structuresLost.city),
+      structureSpend: total((metrics) => metrics.structureSpend),
+      nominalPassiveIncome: total((metrics) => metrics.nominalPassiveIncome),
+      trainIncome: total((metrics) => metrics.trainIncomeEarned + metrics.trainIncomeHosted),
+      shipIncome: total((metrics) => metrics.shipIncomeEarned + metrics.shipIncomeHosted),
+      activeWars: Object.values(state.relations).filter(
+        (relation) => relation.status === "war" && relation.parties.every((id) => state.factions[id].alive),
+      ).length,
+      activeAlliances: Object.values(state.relations).filter(
+        (relation) => relation.status === "truce" && relation.parties.every((id) => state.factions[id].alive),
+      ).length,
+      activeCampaigns: state.campaigns.length,
+      activeTheaters: state.theaters.filter((theater) => theater.staleRefreshes === 0).length,
+      activeTrains: state.tradeVehicles.filter((vehicle) => vehicle.kind === "train").length,
+      activeShips: state.tradeVehicles.filter((vehicle) => vehicle.kind === "ship").length,
+      railEdges: state.tradeRoutes.length,
+      eventCounts: { ...this.eventCounts },
+      firstEventTicks: { ...this.firstEventTicks },
+      milestones: { ...this.milestones },
+      nations: nationSnapshots,
+    };
+  }
+}
