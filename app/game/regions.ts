@@ -7,6 +7,13 @@ import type {
   WorldState,
 } from "./types";
 
+/**
+ * The eight neighbour offsets as flat dx, dy pairs, in the same order
+ * `surroundingIndices` returns them. The partition walks these inline to avoid
+ * allocating a neighbour array for every cell it settles.
+ */
+const SURROUNDING_OFFSETS = [-1, -1, 0, -1, 1, -1, -1, 0, 1, 0, -1, 1, 0, 1, 1, 1] as const;
+
 interface RegionAnchor {
   x: number;
   y: number;
@@ -14,12 +21,14 @@ interface RegionAnchor {
   velocityY: number;
 }
 
-interface FrontierNode {
-  cost: number;
-  travelCost: number;
-  index: number;
-  regionId: number;
-}
+/**
+ * Frontier entry fields, held in parallel arrays.
+ *
+ * The partition repeatedly reprices and re-pushes frontier entries, so it
+ * performs far more pushes than there are cells. One object per push made the
+ * partition the most expensive thing in the simulation, so the heap stores
+ * plain numbers and reports the popped entry through its `popped*` fields.
+ */
 
 export interface StrategicMetaMap {
   /** Combined attraction used by the anchor estimator. */
@@ -33,41 +42,87 @@ export interface StrategicMetaMap {
 }
 
 class FrontierHeap {
-  private readonly nodes: FrontierNode[] = [];
+  private cost = new Float64Array(4096);
+  private travelCost = new Float64Array(4096);
+  private cell = new Int32Array(4096);
+  private region = new Int32Array(4096);
+  private length = 0;
 
-  push(node: FrontierNode): void {
-    let index = this.nodes.push(node) - 1;
+  poppedCost = 0;
+  poppedTravelCost = 0;
+  poppedCell = 0;
+  poppedRegion = 0;
+
+  push(cost: number, travelCost: number, cell: number, region: number): void {
+    if (this.length === this.cost.length) this.grow();
+    let index = this.length;
+    this.length += 1;
     while (index > 0) {
-      const parent = Math.floor((index - 1) / 2);
-      if (this.nodes[parent]!.cost <= node.cost) break;
-      this.nodes[index] = this.nodes[parent]!;
+      const parent = (index - 1) >> 1;
+      if (this.cost[parent]! <= cost) break;
+      this.cost[index] = this.cost[parent]!;
+      this.travelCost[index] = this.travelCost[parent]!;
+      this.cell[index] = this.cell[parent]!;
+      this.region[index] = this.region[parent]!;
       index = parent;
     }
-    this.nodes[index] = node;
+    this.cost[index] = cost;
+    this.travelCost[index] = travelCost;
+    this.cell[index] = cell;
+    this.region[index] = region;
   }
 
-  pop(): FrontierNode | undefined {
-    const first = this.nodes[0];
-    const tail = this.nodes.pop();
-    if (!first || !tail || this.nodes.length === 0) return first;
+  /** Moves the cheapest entry into the `popped*` fields; false when empty. */
+  pop(): boolean {
+    if (this.length === 0) return false;
+    this.poppedCost = this.cost[0]!;
+    this.poppedTravelCost = this.travelCost[0]!;
+    this.poppedCell = this.cell[0]!;
+    this.poppedRegion = this.region[0]!;
+    this.length -= 1;
+    if (this.length === 0) return true;
+    const cost = this.cost[this.length]!;
+    const travelCost = this.travelCost[this.length]!;
+    const cell = this.cell[this.length]!;
+    const region = this.region[this.length]!;
     let index = 0;
     while (true) {
       const left = index * 2 + 1;
-      if (left >= this.nodes.length) break;
+      if (left >= this.length) break;
       const right = left + 1;
-      const child = right < this.nodes.length && this.nodes[right]!.cost < this.nodes[left]!.cost
-        ? right
-        : left;
-      if (this.nodes[child]!.cost >= tail.cost) break;
-      this.nodes[index] = this.nodes[child]!;
+      const child = right < this.length && this.cost[right]! < this.cost[left]! ? right : left;
+      if (this.cost[child]! >= cost) break;
+      this.cost[index] = this.cost[child]!;
+      this.travelCost[index] = this.travelCost[child]!;
+      this.cell[index] = this.cell[child]!;
+      this.region[index] = this.region[child]!;
       index = child;
     }
-    this.nodes[index] = tail;
-    return first;
+    this.cost[index] = cost;
+    this.travelCost[index] = travelCost;
+    this.cell[index] = cell;
+    this.region[index] = region;
+    return true;
   }
 
   get size(): number {
-    return this.nodes.length;
+    return this.length;
+  }
+
+  private grow(): void {
+    const capacity = this.cost.length * 2;
+    const cost = new Float64Array(capacity);
+    const travelCost = new Float64Array(capacity);
+    const cell = new Int32Array(capacity);
+    const region = new Int32Array(capacity);
+    cost.set(this.cost);
+    travelCost.set(this.travelCost);
+    cell.set(this.cell);
+    region.set(this.region);
+    this.cost = cost;
+    this.travelCost = travelCost;
+    this.cell = cell;
+    this.region = region;
   }
 }
 
@@ -360,33 +415,46 @@ function partitionLand(
     if (index < 0) continue;
     seeded[index] = 1;
     anchorCells[regionId] = index;
-    heap.push({ cost: 0, travelCost: 0, index, regionId });
+    heap.push(0, 0, index, regionId);
   }
 
-  while (heap.size > 0) {
-    const node = heap.pop()!;
-    if (labels[node.index] >= 0) continue;
-    const fillRatio = counts[node.regionId]! / targetCapacity;
-    const balancedCost = node.travelCost
+  const { width, height } = state.config;
+  while (heap.pop()) {
+    const nodeCost = heap.poppedCost;
+    const nodeTravelCost = heap.poppedTravelCost;
+    const nodeIndex = heap.poppedCell;
+    const nodeRegion = heap.poppedRegion;
+    if (labels[nodeIndex] >= 0) continue;
+    const fillRatio = counts[nodeRegion]! / targetCapacity;
+    const balancedCost = nodeTravelCost
       + STRATEGIC_REGION_RULES.areaBalanceStrength * fillRatio ** 4;
     // Frontier entries are repriced as their region grows. This is a soft
     // capacity constraint: every result remains connected, while fast-growing
     // regions yield space to smaller neighbors before areas diverge.
-    if (balancedCost > node.cost + 0.01) {
-      heap.push({ ...node, cost: balancedCost });
+    if (balancedCost > nodeCost + 0.01) {
+      heap.push(balancedCost, nodeTravelCost, nodeIndex, nodeRegion);
       continue;
     }
-    labels[node.index] = node.regionId;
-    counts[node.regionId]!++;
-    const terrain = state.cells[node.index]!.terrain as LandTerrainId;
-    for (const neighbor of surroundingIndices(node.index, state.config.width, state.config.height)) {
+    labels[nodeIndex] = nodeRegion;
+    counts[nodeRegion]!++;
+    const terrain = state.cells[nodeIndex]!.terrain as LandTerrainId;
+    const anchorCell = anchorCells[nodeRegion]!;
+    const balancePenalty = STRATEGIC_REGION_RULES.areaBalanceStrength * fillRatio ** 4;
+    // Neighbours are walked inline, in the same order surroundingIndices
+    // yields them, because the push order decides how equal costs settle.
+    const nodeX = nodeIndex % width;
+    const nodeY = (nodeIndex - nodeX) / width;
+    for (let offset = 0; offset < SURROUNDING_OFFSETS.length; offset += 2) {
+      const nx = nodeX + SURROUNDING_OFFSETS[offset]!;
+      const ny = nodeY + SURROUNDING_OFFSETS[offset + 1]!;
+      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+      const neighbor = ny * width + nx;
       if (labels[neighbor] >= 0 || state.cells[neighbor]!.terrain === "water") continue;
       const nextTerrain = state.cells[neighbor]!.terrain as LandTerrainId;
-      const inertia = previous?.[neighbor] === node.regionId ? STRATEGIC_REGION_RULES.boundaryInertia : 0;
-      const diagonal = Math.abs(neighbor - node.index) !== 1
-        && Math.abs(neighbor - node.index) !== state.config.width;
+      const inertia = previous?.[neighbor] === nodeRegion ? STRATEGIC_REGION_RULES.boundaryInertia : 0;
+      const diagonal = Math.abs(neighbor - nodeIndex) !== 1
+        && Math.abs(neighbor - nodeIndex) !== width;
       const geometricDistance = diagonal ? Math.SQRT2 : 1;
-      const anchorCell = anchorCells[node.regionId]!;
       const basinAffinity = Math.abs(meta.relief[neighbor]! - meta.relief[anchorCell]!)
           * STRATEGIC_REGION_RULES.reliefBasinAffinity
         + Math.abs(meta.infrastructure[neighbor]! - meta.infrastructure[anchorCell]!)
@@ -396,14 +464,14 @@ function partitionLand(
         geometricDistance * (
           1
           + terrainTransitionCost(terrain, nextTerrain)
-          + metaTransitionCost(meta, node.index, neighbor)
+          + metaTransitionCost(meta, nodeIndex, neighbor)
           + basinAffinity
         )
           - meta.value[neighbor]! * STRATEGIC_REGION_RULES.heatTravelAdvantage
           - inertia,
       );
-      const travelCost = node.travelCost + step;
-      heap.push({ cost: travelCost + STRATEGIC_REGION_RULES.areaBalanceStrength * fillRatio ** 4, travelCost, index: neighbor, regionId: node.regionId });
+      const travelCost = nodeTravelCost + step;
+      heap.push(travelCost + balancePenalty, travelCost, neighbor, nodeRegion);
     }
   }
   repairCardinalConnectivity(state, labels, anchors.length);
