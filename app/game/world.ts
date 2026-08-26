@@ -17,9 +17,23 @@ import type {
   WorldState,
 } from "./types";
 
+/**
+ * How many times wider and taller the map is than the 168x104 world the game
+ * shipped with. Overridable through ELEMENTAL_MAP_SCALE so a sweep can find the
+ * largest map that still fits the tick budget; fixed once the module loads, so
+ * a run stays deterministic. Cell yields are already normalised against a
+ * reference world (see normalizedCellArea), so scaling the map keeps a tile
+ * worth what it was rather than making a bigger world a richer one.
+ */
+const MAP_SCALE = (() => {
+  const raw = typeof process === "undefined" ? undefined : process.env?.ELEMENTAL_MAP_SCALE;
+  const parsed = raw === undefined ? Number.NaN : Number.parseFloat(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+})();
+
 export const DEFAULT_CONFIG: SimulationConfig = {
-  width: 168,
-  height: 104,
+  width: Math.round(168 * MAP_SCALE),
+  height: Math.round(104 * MAP_SCALE),
   aggression: 1,
   decisionInterval: 10,
   diplomacyInterval: 16,
