@@ -1,11 +1,11 @@
-import { warsFor } from "../diplomacy";
-import { ELEMENT_ORDER } from "../elements";
+import { NATION_ORDER } from "../nations";
+import { getRelation, warsFor } from "../diplomacy";
+
 import {
   canPlaceStructureSite,
   cellsWithin,
   distanceBetween,
   isFrontierCell,
-  structureCells,
 } from "../grid";
 import {
   FORT_RADIUS,
@@ -18,7 +18,7 @@ import {
   normalizedCellLength,
 } from "../rules";
 import type {
-  ElementId,
+  NationId,
   SimulationContext,
   SimulationSystem,
   StructureCounts,
@@ -43,7 +43,44 @@ function nearestDistance(
   return nearest;
 }
 
-function vulnerableBoundaryCells(context: SimulationContext, owner: ElementId): number[] {
+interface BuildIndex {
+  /** Land cells each nation owns, ascending, so scans stay in map order. */
+  cellsByOwner: Map<NationId, number[]>;
+  /** Structure sites each nation owns, by type. */
+  structuresByOwner: Map<NationId, Record<StructureType, number[]>>;
+}
+
+/**
+ * One pass over the map, shared by every nation's planning this tick.
+ *
+ * The planner used to re-scan all seventeen thousand cells for each nation, for
+ * each candidate project, and again for each rival whose trade hubs it wanted
+ * to sit near. That is affordable with five nations and ruinous with fifty.
+ */
+function buildIndex(state: SimulationContext["state"]): BuildIndex {
+  const cellsByOwner = new Map<NationId, number[]>();
+  const structuresByOwner = new Map<NationId, Record<StructureType, number[]>>();
+  for (let index = 0; index < state.cells.length; index += 1) {
+    const cell = state.cells[index]!;
+    const owner = cell.owner;
+    if (!owner) continue;
+    let owned = cellsByOwner.get(owner);
+    if (!owned) {
+      owned = [];
+      cellsByOwner.set(owner, owned);
+      structuresByOwner.set(owner, { city: [], fort: [], factory: [], harbor: [] });
+    }
+    owned.push(index);
+    if (cell.structure) structuresByOwner.get(owner)![cell.structure].push(index);
+  }
+  return { cellsByOwner, structuresByOwner };
+}
+
+const NO_STRUCTURES: Record<StructureType, number[]> = {
+  city: [], fort: [], factory: [], harbor: [],
+};
+
+function vulnerableBoundaryCells(context: SimulationContext, owner: NationId): number[] {
   const campaignIds = new Set(
     context.state.campaigns
       .filter((campaign) => campaign.target === owner && campaign.remaining > 0)
@@ -57,34 +94,36 @@ function vulnerableBoundaryCells(context: SimulationContext, owner: ElementId): 
 
 function bestBuildTile(
   context: SimulationContext,
-  owner: ElementId,
+  owner: NationId,
   structure: StructureType,
   reserved: ReadonlySet<number>,
+  sites: BuildIndex,
+  railNodes: readonly number[],
 ): number | null {
   const { state } = context;
   let bestIndex: number | null = null;
   let bestScore = Number.NEGATIVE_INFINITY;
   const atWar = warsFor(state, owner).length > 0;
-  const ownFactories = structureCells(state, owner, "factory");
-  const ownCities = structureCells(state, owner, "city");
+  const ownSites = sites.structuresByOwner.get(owner) ?? NO_STRUCTURES;
+  const ownFactories = ownSites.factory;
+  const ownCities = ownSites.city;
   const vulnerable = vulnerableBoundaryCells(context, owner);
-  const peacefulForeignHubs = ELEMENT_ORDER
-    .filter((id) => id !== owner)
-    .filter((id) => Object.values(state.relations).some(
-      (relation) => relation.parties.includes(owner) &&
-        relation.parties.includes(id) &&
-        relation.status !== "war" &&
-        relation.tradeActive,
-    ))
-    .flatMap((id) => [
-      ...structureCells(state, id, "factory"),
-      ...structureCells(state, id, "city"),
-    ]);
-  const railNodes = [...new Set(state.tradeRoutes.flatMap((route) => route.pathIndices))];
+  const peacefulForeignHubs = NATION_ORDER
+    .filter((id) => {
+      if (id === owner) return false;
+      // A keyed lookup, not a scan: fifty nations means 1,225 relations, and
+      // this runs for every rival of every nation planning this tick.
+      const relation = getRelation(state, owner, id);
+      return relation.status !== "war" && relation.tradeActive;
+    })
+    .flatMap((id) => {
+      const hubs = sites.structuresByOwner.get(id) ?? NO_STRUCTURES;
+      return [...hubs.factory, ...hubs.city];
+    });
 
-  for (let index = 0; index < state.cells.length; index += 1) {
+  for (const index of sites.cellsByOwner.get(owner) ?? []) {
     const cell = state.cells[index]!;
-    if (cell.owner !== owner || cell.terrain === "water" || reserved.has(index)) continue;
+    if (cell.terrain === "water" || reserved.has(index)) continue;
 
     const stackingCity = structure === "city" && cell.structure === "city";
     if (!stackingCity && !canPlaceStructureSite(state, index, reserved)) continue;
@@ -163,7 +202,7 @@ function bestBuildTile(
 
 function desiredInfrastructure(
   context: SimulationContext,
-  owner: ElementId,
+  owner: NationId,
   counts: StructureCounts,
   allowFort = true,
 ): StructureType | null {
@@ -201,7 +240,9 @@ export class ConstructionAiSystem implements SimulationSystem {
     const { state } = context;
     if (state.tick === 0 || state.tick % state.config.constructionInterval !== 0) return;
 
-    for (const id of ELEMENT_ORDER) {
+    const sites = buildIndex(state);
+    const railNodes = [...new Set(state.tradeRoutes.flatMap((route) => route.pathIndices))];
+    for (const id of NATION_ORDER) {
       const faction = state.factions[id];
       if (!faction.alive) continue;
       const shadowCounts = { ...faction.structures };
@@ -220,13 +261,13 @@ export class ConstructionAiSystem implements SimulationSystem {
           cost = nextStructureCost(desired, shadowCounts);
         }
         if (budget < cost) break;
-        let tileIndex = bestBuildTile(context, id, desired, reserved);
+        let tileIndex = bestBuildTile(context, id, desired, reserved, sites, railNodes);
 
         if (tileIndex === null && desired === "fort") {
           desired = desiredInfrastructure(context, id, shadowCounts, false);
           if (!desired) break;
           cost = nextStructureCost(desired, shadowCounts);
-          tileIndex = budget >= cost ? bestBuildTile(context, id, desired, reserved) : null;
+          tileIndex = budget >= cost ? bestBuildTile(context, id, desired, reserved, sites, railNodes) : null;
         }
 
         // An inland realm should not stall its whole program because no harbor
@@ -234,7 +275,7 @@ export class ConstructionAiSystem implements SimulationSystem {
         if (tileIndex === null && desired === "harbor") {
           desired = "factory";
           cost = nextStructureCost(desired, shadowCounts);
-          tileIndex = budget >= cost ? bestBuildTile(context, id, desired, reserved) : null;
+          tileIndex = budget >= cost ? bestBuildTile(context, id, desired, reserved, sites, railNodes) : null;
         }
         if (tileIndex === null) break;
 

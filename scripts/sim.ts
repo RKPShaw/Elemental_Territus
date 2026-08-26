@@ -6,7 +6,7 @@
  * from a terminal. See `sim.ts help` for the commands.
  */
 import { committedTroopsFor } from "../app/game/campaigns";
-import { ELEMENTS, ELEMENT_ORDER } from "../app/game/elements";
+import { NATIONS, NATION_ORDER } from "../app/game/nations";
 import { ElementalWarEngine } from "../app/game/engine";
 import { latestStories } from "../app/game/reporting";
 import { compactNumber } from "../app/game/rules";
@@ -96,7 +96,7 @@ function commandWatch(): void {
       // The frame for this tick has already been drawn, so only the verdict is
       // left to print; drawing again would report an empty event feed.
       write(dim(
-        champion ? `${ELEMENTS[champion].realmName} united the world at tick ${engine.tick}` : `stopped at tick ${engine.tick}`,
+        champion ? `${NATIONS[champion]!.realmName} united the world at tick ${engine.tick}` : `stopped at tick ${engine.tick}`,
         color,
       ));
       return;
@@ -155,17 +155,28 @@ function heading(text: string): string {
 }
 
 function inspectDiplomacy(state: WorldState): void {
+  const all = Object.values(state.relations);
+  const notable = all.filter((relation) =>
+    relation.status !== "peace" || relation.truceOfferBy !== null || !relation.tradeActive);
   write(heading("relations"));
-  for (const relation of Object.values(state.relations)) {
+  write(dim(
+    `  ${all.length} pairs; ${all.filter((r) => r.status === "war").length} at war, ` +
+    `${all.filter((r) => r.status === "truce").length} allied, ` +
+    `${all.filter((r) => !r.tradeActive).length} with trade closed`,
+    color,
+  ));
+  // Listing every pair would be 1,225 lines, so only the ones doing something.
+  if (notable.length === 0) write(dim("  every pair is at ordinary peace", color));
+  for (const relation of notable.slice(0, 40)) {
     const [first, second] = relation.parties;
     const detail = relation.status === "truce"
       ? `expires tick ${relation.truceUntil}`
       : relation.truceOfferBy
-        ? `${ELEMENTS[relation.truceOfferBy].name} has offered a truce`
+        ? `${NATIONS[relation.truceOfferBy]!.name} has offered a truce`
         : "";
     write(
-      `  ${paint(ELEMENTS[first].name.padEnd(6), ELEMENTS[first].color, color)} ` +
-      `${paint(ELEMENTS[second].name.padEnd(6), ELEMENTS[second].color, color)} ` +
+      `  ${paint(NATIONS[first]!.name.padEnd(6), NATIONS[first]!.color, color)} ` +
+      `${paint(NATIONS[second]!.name.padEnd(6), NATIONS[second]!.color, color)} ` +
       `${relation.status.padEnd(6)} trade ${relation.tradeActive ? "open  " : "closed"} ${dim(detail, color)}`,
     );
   }
@@ -183,7 +194,7 @@ function inspectTrade(state: WorldState): void {
   write(heading("longest rail routes"));
   for (const route of [...rail].sort((a, b) => b.value - a.value).slice(0, 10)) {
     write(
-      `  ${paint(ELEMENTS[route.owner].name.padEnd(6), ELEMENTS[route.owner].color, color)} ` +
+      `  ${paint(NATIONS[route.owner]!.name.padEnd(6), NATIONS[route.owner]!.color, color)} ` +
       `${String(route.startIndex).padStart(6)} → ${String(route.endIndex).padStart(6)} ` +
       `${route.pathIndices.length.toString().padStart(4)} cells  value ${route.value.toFixed(1)}` +
       `${route.foreign ? dim("  foreign", color) : ""}`,
@@ -195,10 +206,10 @@ function inspectCampaigns(state: WorldState): void {
   write(heading("campaigns"));
   if (state.campaigns.length === 0) write(dim("  none active", color));
   for (const campaign of state.campaigns) {
-    const target = campaign.target === "wilderness" ? "wilderness" : ELEMENTS[campaign.target].name;
+    const target = campaign.target === "wilderness" ? "wilderness" : NATIONS[campaign.target]!.name;
     const theaters = state.theaters.filter((theater) => theater.campaignId === campaign.id);
     write(
-      `  ${paint(ELEMENTS[campaign.attacker].name.padEnd(6), ELEMENTS[campaign.attacker].color, color)} → ${target.padEnd(11)} ` +
+      `  ${paint(NATIONS[campaign.attacker]!.name.padEnd(6), NATIONS[campaign.attacker]!.color, color)} → ${target.padEnd(11)} ` +
       `${campaign.mode.padEnd(6)} committed ${compactNumber(campaign.remaining).padStart(7)} ` +
       `opposed ${compactNumber(campaign.defenderRemaining).padStart(7)} ${theaters.length} theaters`,
     );
@@ -229,10 +240,10 @@ function inspectRegions(state: WorldState): void {
 
 function inspectEconomy(state: WorldState): void {
   write(heading("economy"));
-  for (const id of ELEMENT_ORDER) {
+  for (const id of NATION_ORDER) {
     const faction = state.factions[id];
     write(
-      `  ${paint(ELEMENTS[id].name.padEnd(6), ELEMENTS[id].color, color)} ` +
+      `  ${paint(NATIONS[id]!.name.padEnd(6), NATIONS[id]!.color, color)} ` +
       `gold ${compactNumber(faction.gold).padStart(8)} ` +
       `income ${compactNumber(faction.goldRate).padStart(7)}/tick ` +
       `population ${compactNumber(faction.troops).padStart(7)}/${compactNumber(faction.troopCap)} ` +
@@ -244,10 +255,10 @@ function inspectEconomy(state: WorldState): void {
 
 function inspectStructures(state: WorldState): void {
   write(heading("structures"));
-  for (const id of ELEMENT_ORDER) {
+  for (const id of NATION_ORDER) {
     const faction = state.factions[id];
     write(
-      `  ${paint(ELEMENTS[id].name.padEnd(6), ELEMENTS[id].color, color)} ` +
+      `  ${paint(NATIONS[id]!.name.padEnd(6), NATIONS[id]!.color, color)} ` +
       `cities ${String(faction.structures.city).padStart(3)} ` +
       `factories ${String(faction.structures.factory).padStart(3)} ` +
       `harbors ${String(faction.structures.harbor).padStart(3)} ` +

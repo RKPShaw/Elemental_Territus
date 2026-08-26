@@ -1,4 +1,5 @@
-import { ELEMENT_ORDER, ELEMENTS } from "../elements";
+import { NATIONS, NATION_ORDER } from "../nations";
+import { ELEMENTS } from "../elements";
 import { getRelation } from "../diplomacy";
 import { realmSubject } from "../reporting";
 import { applyRealmAccounting, collectRealmAccounting } from "./shared";
@@ -10,7 +11,7 @@ export class RealmAccountingSystem implements SimulationSystem {
   update(context: SimulationContext): void {
     const { state } = context;
     const drafts = collectRealmAccounting(state);
-    for (const id of ELEMENT_ORDER) {
+    for (const id of NATION_ORDER) {
       const wasAlive = state.factions[id].alive;
       applyRealmAccounting(state, id, drafts[id]);
       if (wasAlive && !state.factions[id].alive) {
@@ -41,13 +42,13 @@ export class RealmAccountingSystem implements SimulationSystem {
             finalTerritory: state.factions[id].territory,
           },
           summary: conquerorId && conqueror?.alive
-            ? `${ELEMENTS[conquerorId].realmName} conquered ${ELEMENTS[id].realmName} and absorbed its elemental powers.`
-            : `${ELEMENTS[id].realmName} lost its final territory without a surviving conqueror.`,
+            ? `${NATIONS[conquerorId].realmName} conquered ${NATIONS[id].realmName} and absorbed its elemental powers.`
+            : `${NATIONS[id].realmName} lost its final territory without a surviving conqueror.`,
         });
         context.emit(
           conquerorId && conqueror?.alive
-            ? `${ELEMENTS[conquerorId].realmName} conquers ${ELEMENTS[id].realmName} and absorbs ${state.factions[id].absorbedElements.map((element) => ELEMENTS[element].name).join(" and ")}.`
-            : `${ELEMENTS[id].realmName} has lost its last piece of sustainable land.`,
+            ? `${NATIONS[conquerorId].realmName} conquers ${NATIONS[id].realmName} and absorbs ${state.factions[id].absorbedElements.map((element) => ELEMENTS[element].name).join(" and ")}.`
+            : `${NATIONS[id].realmName} has lost its last piece of sustainable land.`,
           "fall",
           conquerorId ?? id,
         );

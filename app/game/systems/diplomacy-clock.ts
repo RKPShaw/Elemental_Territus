@@ -1,4 +1,5 @@
-import { ELEMENTS } from "../elements";
+
+import { NATIONS } from "../nations";
 import { realmSubject } from "../reporting";
 import { DIPLOMACY_RULES } from "../rules";
 import type { SimulationContext, SimulationSystem } from "../types";
@@ -25,7 +26,7 @@ export class DiplomacyClockSystem implements SimulationSystem {
           participants: relation.parties.map(realmSubject),
           links: { relation: relation.key },
           facts: { offeredAt: relation.truceOfferAt },
-          summary: `${ELEMENTS[receiver].realmName} allowed ${ELEMENTS[offeredBy].realmName}'s alliance offer to expire.`,
+          summary: `${NATIONS[receiver].realmName} allowed ${NATIONS[offeredBy].realmName}'s alliance offer to expire.`,
         });
         relation.truceOfferBy = null;
         relation.truceOfferAt = 0;
@@ -47,11 +48,11 @@ export class DiplomacyClockSystem implements SimulationSystem {
         participants: relation.parties.map(realmSubject),
         links: { relation: relation.key },
         facts: { duration: allianceDuration, tradeRemainedOpen: relation.tradeActive },
-        summary: `${ELEMENTS[relation.parties[0]].realmName} and ${ELEMENTS[relation.parties[1]].realmName} completed their alliance without betrayal.`,
+        summary: `${NATIONS[relation.parties[0]].realmName} and ${NATIONS[relation.parties[1]].realmName} completed their alliance without betrayal.`,
       });
       relation.storyKey = null;
       context.emit(
-        `${ELEMENTS[relation.parties[0]].realmName} and ${ELEMENTS[relation.parties[1]].realmName} complete their ten-minute truce and return to ordinary peace.`,
+        `${NATIONS[relation.parties[0]].realmName} and ${NATIONS[relation.parties[1]].realmName} complete their ten-minute truce and return to ordinary peace.`,
         "treaty",
       );
     }

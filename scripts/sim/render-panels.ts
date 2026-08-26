@@ -1,8 +1,9 @@
 import { warsFor } from "../../app/game/diplomacy";
 import { committedTroopsFor } from "../../app/game/campaigns";
-import { ELEMENTS, ELEMENT_ORDER } from "../../app/game/elements";
+import { ELEMENTS } from "../../app/game/elements";
+import { NATIONS, NATION_ORDER } from "../../app/game/nations";
 import { compactNumber } from "../../app/game/rules";
-import type { ElementId, WorldReportEvent, WorldState } from "../../app/game/types";
+import type { NationId, WorldReportEvent, WorldState } from "../../app/game/types";
 
 const IMPORTANCE_MARK = {
   routine: " ",
@@ -43,44 +44,77 @@ export function renderHeader(state: WorldState, color: boolean): string {
   const head = `${bold(state.worldName, color)}  ${seasonFor(state.tick)} · Age ${state.age}`;
   const clock = dim(`tick ${state.tick} · seed ${seed}`, color);
   const champion = state.champion
-    ? `  ${paint(`♛ ${ELEMENTS[state.champion].realmName} has united the world`, ELEMENTS[state.champion].color, color)}`
+    ? `  ${paint(`♛ ${NATIONS[state.champion]!.realmName} has united the world`, NATIONS[state.champion]!.color, color)}`
     : "";
   return `${head}  ${clock}${champion}`;
 }
 
-/** One line per realm: land, population, treasury, diplomacy and what it is doing. */
-export function renderStandings(state: WorldState, color: boolean): string {
-  const rows = ELEMENT_ORDER.map((id) => {
-    const faction = state.factions[id];
-    const element = ELEMENTS[id];
+/**
+ * The leaderboard: the strongest realms by land, plus what became of the rest.
+ *
+ * Fifty rows is not a standings table, so only the leaders are listed and the
+ * remainder is summarised. Elements are reported alongside, since ten nations
+ * share each one and the family totals are what a player reads the board for.
+ */
+export function renderStandings(state: WorldState, color: boolean, limit = 12): string {
+  const living = NATION_ORDER
+    .map((id) => state.factions[id]!)
+    .filter((faction) => faction.alive)
+    .sort((first, second) => second.territory - first.territory);
+
+  const rows = living.slice(0, limit).map((faction) => {
+    const definition = NATIONS[faction.id]!;
     const share = (faction.territory / state.landTiles) * 100;
-    const committed = committedTroopsFor(state, id);
-    const wars = warsFor(state, id).length;
-    if (!faction.alive) {
-      return [padVisible(paint(element.name, element.color, color), 8), dim("fallen", color)].join(" ");
-    }
+    const committed = committedTroopsFor(state, faction.id);
+    const wars = warsFor(state, faction.id).length;
     const structures = `${faction.structures.city}c ${faction.structures.factory}f ${faction.structures.harbor}h ${faction.structures.fort}F`;
     return [
-      padVisible(paint(element.name, element.color, color), 8),
+      padVisible(paint(definition.name, definition.color, color), 12),
       padVisible(`${share.toFixed(1)}%`, 6),
       padVisible(compactNumber(faction.troops), 7),
       padVisible(committed > 0 ? `+${compactNumber(committed)}` : "", 7),
       padVisible(compactNumber(faction.gold), 8),
       padVisible(structures, 16),
-      padVisible(wars > 0 ? `${wars} war${wars > 1 ? "s" : ""}` : "peace", 7),
+      padVisible(wars > 0 ? `${wars}w` : "peace", 6),
       dim(faction.intent.posture, color),
     ].join(" ");
   });
+
   const heading = dim(
-    `${padVisible("realm", 8)} ${padVisible("land", 6)} ${padVisible("home", 7)} ${padVisible("away", 7)} ${padVisible("gold", 8)} ${padVisible("structures", 16)} ${padVisible("state", 7)} doing`,
+    `${padVisible("realm", 12)} ${padVisible("land", 6)} ${padVisible("home", 7)} ${padVisible("away", 7)} ${padVisible("gold", 8)} ${padVisible("structures", 16)} ${padVisible("wars", 6)} doing`,
     color,
   );
-  return [heading, ...rows].join("\n");
+  const fallen = NATION_ORDER.length - living.length;
+  const footer = dim(
+    `${living.length} realms standing, ${fallen} fallen` +
+    (living.length > limit ? ` · ${living.length - limit} more not shown` : ""),
+    color,
+  );
+  return [heading, ...rows, footer].join("\n");
+}
+
+/** Land held by each elemental family, which is what survives a fifty-way war. */
+export function renderElementSummary(state: WorldState, color: boolean): string {
+  const totals = new Map<string, { land: number; alive: number }>();
+  for (const faction of Object.values(state.factions)) {
+    const entry = totals.get(faction.element) ?? { land: 0, alive: 0 };
+    entry.land += faction.territory;
+    if (faction.alive) entry.alive += 1;
+    totals.set(faction.element, entry);
+  }
+  return [...totals.entries()]
+    .sort((first, second) => second[1].land - first[1].land)
+    .map(([element, entry]) => {
+      const definition = ELEMENTS[element as keyof typeof ELEMENTS];
+      const share = ((entry.land / state.landTiles) * 100).toFixed(1);
+      return `${paint(definition.name, definition.color, color)} ${share}% (${entry.alive})`;
+    })
+    .join("   ");
 }
 
 export function formatEvent(event: WorldReportEvent, color: boolean): string {
-  const realm = event.initiator?.realmId as ElementId | undefined;
-  const tint = realm ? ELEMENTS[realm].color : "#f1c46d";
+  const realm = event.initiator?.realmId as NationId | undefined;
+  const tint = realm ? (NATIONS[realm]?.color ?? "#f1c46d") : "#f1c46d";
   return [
     dim(String(event.tick).padStart(5), color),
     IMPORTANCE_MARK[event.importance],

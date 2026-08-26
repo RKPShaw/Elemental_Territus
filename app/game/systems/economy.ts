@@ -1,6 +1,7 @@
+import { NATION_ORDER } from "../nations";
 import { warsFor } from "../diplomacy";
 import { committedTroopsFor } from "../campaigns";
-import { ELEMENT_ORDER } from "../elements";
+
 import {
   ECONOMY_RULES,
   POPULATION_RULES,
@@ -9,28 +10,28 @@ import {
   normalizedCellArea,
   populationGrowthEfficiency,
 } from "../rules";
-import type { SimulationContext, SimulationSystem } from "../types";
+import type { NationId, SimulationContext, SimulationSystem } from "../types";
 
 export class EconomySystem implements SimulationSystem {
   readonly id = "troop-and-gold-economy";
 
   update({ state }: SimulationContext): void {
     const cellArea = normalizedCellArea(state.config);
-    const landIncome = {
-      ember: 0,
-      tide: 0,
-      grove: 0,
-      stone: 0,
-      gale: 0,
-    };
+    // Keyed by nation, not by element: ten nations share each element, so a
+    // fixed five-key tally would silently drop every owner's income.
+    const landIncome = new Map<NationId, number>();
     for (const cell of state.cells) {
-      if (cell.owner) landIncome[cell.owner] += TERRAIN_RULES[cell.terrain].goldYield * cellArea;
+      if (!cell.owner) continue;
+      landIncome.set(
+        cell.owner,
+        (landIncome.get(cell.owner) ?? 0) + TERRAIN_RULES[cell.terrain].goldYield * cellArea,
+      );
     }
-    for (const id of ELEMENT_ORDER) {
+    for (const id of NATION_ORDER) {
       const faction = state.factions[id];
       if (!faction.alive) continue;
       faction.goldRate =
-        landIncome[id] * ECONOMY_RULES.landIncomeScale +
+        (landIncome.get(id) ?? 0) * ECONOMY_RULES.landIncomeScale +
         faction.structures.city * ECONOMY_RULES.cityIncome;
       faction.gold = clamp(
         faction.gold + faction.goldRate,

@@ -1,4 +1,5 @@
 import { ELEMENTS, ELEMENT_ORDER } from "../../app/game/elements";
+import { NATIONS, nationElement } from "../../app/game/nations";
 import { TERRAIN_RULES } from "../../app/game/rules";
 import type { ElementId, WorldState } from "../../app/game/types";
 
@@ -80,7 +81,7 @@ function cellColor(state: WorldState, index: number, mode: MapMode): Rgb {
   }
 
   if (!cell.owner) return mix(terrain, rgb("#d8cfb1"), 0.16);
-  const owned = mix(terrain, rgb(ELEMENTS[cell.owner].color), 0.72);
+  const owned = mix(terrain, rgb(NATIONS[cell.owner]!.color), 0.72);
   // Structures read as brighter pips at map scale.
   return cell.structure ? mix(owned, rgb("#fff6d8"), cell.capitalOf ? 0.55 : 0.3) : owned;
 }
@@ -116,7 +117,7 @@ function plainChar(state: WorldState, index: number, mode: MapMode): string {
     return " .:-=+*#%@"[Math.min(9, Math.max(0, Math.round(value * 9)))]!;
   }
   if (!cell.owner) return ".";
-  const letter = REALM_LETTER[cell.owner];
+  const letter = REALM_LETTER[nationElement(cell.owner)];
   return cell.structure ? letter : letter.toLowerCase();
 }
 
@@ -173,11 +174,18 @@ export function renderMap(state: WorldState, options: MapOptions): string {
 /** One-line key describing what the colours mean in the current mode. */
 export function mapLegend(state: WorldState, options: MapOptions): string {
   if (options.mode === "owner") {
-    return ELEMENT_ORDER.map((id) => {
-      const share = ((state.factions[id].territory / state.landTiles) * 100).toFixed(1);
-      const label = `${REALM_LETTER[id]} ${ELEMENTS[id].name} ${share}%`;
-      if (!options.color) return state.factions[id].alive ? label : `${label} (fallen)`;
-      const { red, green, blue } = rgb(ELEMENTS[id].color);
+    return ELEMENT_ORDER.map((element) => {
+      let territory = 0;
+      let alive = 0;
+      for (const faction of Object.values(state.factions)) {
+        if (faction.element !== element) continue;
+        territory += faction.territory;
+        if (faction.alive) alive += 1;
+      }
+      const share = ((territory / state.landTiles) * 100).toFixed(1);
+      const label = `${REALM_LETTER[element]} ${ELEMENTS[element].name} ${share}% (${alive} alive)`;
+      if (!options.color) return label;
+      const { red, green, blue } = rgb(ELEMENTS[element].color);
       return `\u001b[38;2;${red};${green};${blue}m■\u001b[0m ${label}`;
     }).join("  ");
   }

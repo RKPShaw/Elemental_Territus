@@ -1,5 +1,6 @@
+import { NATIONS, NATION_ORDER } from "../nations";
 import { otherParty, warsFor } from "../diplomacy";
-import { ELEMENT_ORDER, ELEMENTS, realmMatchup } from "../elements";
+import { realmMatchup } from "../elements";
 import {
   borderLength,
   coastalCells,
@@ -7,7 +8,7 @@ import {
   structureCells,
 } from "../grid";
 import { CLAIM_RULES, POPULATION_RULES, compactNumber, clamp } from "../rules";
-import type { ElementId, SimulationContext, SimulationSystem } from "../types";
+import type { NationId, SimulationContext, SimulationSystem } from "../types";
 
 export class StrategyAiSystem implements SimulationSystem {
   readonly id = "military-strategy-ai";
@@ -16,7 +17,7 @@ export class StrategyAiSystem implements SimulationSystem {
     const { state, random } = context;
     if (state.tick !== 1 && state.tick % state.config.decisionInterval !== 0) return;
 
-    for (const id of ELEMENT_ORDER) {
+    for (const id of NATION_ORDER) {
       const faction = state.factions[id];
       if (!faction.alive) continue;
       const homeRatio = faction.troops / Math.max(1, faction.troopCap);
@@ -128,7 +129,7 @@ export class StrategyAiSystem implements SimulationSystem {
         continue;
       }
 
-      let target: ElementId | null = null;
+      let target: NationId | null = null;
       let bestScore = Number.NEGATIVE_INFINITY;
       for (const relation of wars) {
         if (relation.lastAggressor !== id) continue;
@@ -216,12 +217,12 @@ export class StrategyAiSystem implements SimulationSystem {
         confidence: clamp(0.5 + bestScore * 0.08, 0.36, 0.94),
         plannedCommitment,
         reason: defending
-          ? `${ELEMENTS[target].realmName} has ${compactNumber(incomingThreat)} troops pressing inward. Preserve the reserve.`
+          ? `${NATIONS[target].realmName} has ${compactNumber(incomingThreat)} troops pressing inward. Preserve the reserve.`
           : recovering
             ? `The available host is too thin. Let cities refill the army before spending more troops.`
             : outgoing
               ? `${compactNumber(outgoing.remaining)} committed troops are pushing the ${route}; reinforce only if momentum fades.`
-              : `${ELEMENTS[target].name} offers the best troop, terrain and elemental balance for the next ${route} campaign.`,
+              : `${NATIONS[target].name} offers the best troop, terrain and elemental balance for the next ${route} campaign.`,
       };
     }
   }

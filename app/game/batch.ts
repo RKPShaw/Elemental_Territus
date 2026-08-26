@@ -2,7 +2,7 @@ import { BatchMetricsCollector } from "./batch-metrics";
 import type { WorldBalanceSnapshot } from "./batch-metrics";
 import { ElementalWarEngine } from "./engine";
 import { BATCH_SYSTEMS } from "./systems";
-import type { ElementId } from "./types";
+import type { NationId } from "./types";
 
 export const DEFAULT_BATCH_CHECKPOINTS = [
   60,
@@ -32,7 +32,7 @@ export interface BatchCheckpoint {
 
 export interface BatchGameResult {
   seed: number;
-  champion: ElementId | null;
+  champion: NationId | null;
   completionTick: number | null;
   horizonTick: number;
   resolved: boolean;

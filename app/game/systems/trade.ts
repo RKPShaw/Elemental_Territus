@@ -1,5 +1,6 @@
+import { NATION_ORDER } from "../nations";
 import { getRelation } from "../diplomacy";
-import { ELEMENT_ORDER } from "../elements";
+
 import {
   cellsWithin,
   distanceBetween,
@@ -15,7 +16,7 @@ import {
   normalizedCellLength,
 } from "../rules";
 import type {
-  ElementId,
+  NationId,
   LandTerrainId,
   SimulationContext,
   SimulationSystem,
@@ -28,7 +29,7 @@ import { isValidWaterPath, waterPathBetweenLandCells } from "../water-navigation
 
 interface RailNode {
   index: number;
-  owner: ElementId;
+  owner: NationId;
   kind: "city" | "factory";
 }
 
@@ -83,18 +84,18 @@ function dispatchReady(
   return dispatch.activeVehicleId === null && state.tick >= dispatch.readyAt;
 }
 
-function tradeStoryKey(first: ElementId, second: ElementId, tick: number): string {
+function tradeStoryKey(first: NationId, second: NationId, tick: number): string {
   const parties = [first, second].sort();
   return `trade:${parties[0]}:${parties[1]}:${Math.floor(tick / 240)}`;
 }
 
-function canTrade(state: WorldState, first: ElementId, second: ElementId): boolean {
+function canTrade(state: WorldState, first: NationId, second: NationId): boolean {
   if (first === second) return true;
   const relation = getRelation(state, first, second);
   return relation.status !== "war" && relation.tradeActive;
 }
 
-function stationOwner(state: WorldState, index: number): ElementId | null {
+function stationOwner(state: WorldState, index: number): NationId | null {
   const cell = state.cells[index]!;
   return cell.structure === "city" || cell.structure === "factory" ? cell.owner : null;
 }
@@ -109,7 +110,7 @@ function routeDistance(state: WorldState, path: number[]): number {
 
 function railNodes(state: WorldState): RailNode[] {
   const nodes: RailNode[] = [];
-  for (const owner of ELEMENT_ORDER) {
+  for (const owner of NATION_ORDER) {
     if (!state.factions[owner].alive) continue;
     for (const index of structureCells(state, owner, "city")) nodes.push({ index, owner, kind: "city" });
     for (const index of structureCells(state, owner, "factory")) nodes.push({ index, owner, kind: "factory" });
@@ -370,27 +371,28 @@ function buildRailNetwork(state: WorldState): TradeRoute[] {
     if (unconnected.length === 0) break;
     let best: { start: RailNode; end: RailNode; path: number[]; cost: number } | null = null;
 
+    // Tradeability is a property of the pair, but the sweep hands `accept` both
+    // ends, so one sweep answers for every owner at once. That matters: with
+    // fifty nations, one sweep per owner meant fifty full-grid searches per link.
     if (connected.size === 0) {
       // The first link of a network grows out of a factory and may not exceed
-      // the train radius. Seeds are grouped by owner because tradeability is a
-      // property of the pair, and a sweep fixes one side of it.
-      const owners = distinctOwners(unconnected.filter((node) => node.kind === "factory"));
-      for (const owner of owners) {
-        const seeds = unconnected.filter((node) => node.kind === "factory" && node.owner === owner);
-        const link = findCheapestRailLink(
-          state,
-          seeds,
-          (targetIndex, seedIndex) => {
-            const target = nodeByIndex.get(targetIndex);
-            if (!target || targetIndex === seedIndex) return false;
-            if (!canTrade(state, owner, target.owner)) return false;
-            return distanceBetween(state, seedIndex, targetIndex) <= TRADE_RULES.trainRadius;
-          },
-          coverage,
-          trackCells,
-          nodeCells,
-        );
-        if (!link || (best && link.cost >= best.cost)) continue;
+      // the train radius.
+      const seeds = unconnected.filter((node) => node.kind === "factory");
+      const link = findCheapestRailLink(
+        state,
+        seeds,
+        (targetIndex, seedIndex) => {
+          const target = nodeByIndex.get(targetIndex);
+          const seed = nodeByIndex.get(seedIndex);
+          if (!target || !seed || targetIndex === seedIndex) return false;
+          if (!canTrade(state, seed.owner, target.owner)) return false;
+          return distanceBetween(state, seedIndex, targetIndex) <= TRADE_RULES.trainRadius;
+        },
+        coverage,
+        trackCells,
+        nodeCells,
+      );
+      if (link) {
         // The factory opens the link, so it stays the route's start; the
         // reconstructed path runs target-to-seed and is reversed to match.
         best = {
@@ -401,22 +403,22 @@ function buildRailNetwork(state: WorldState): TradeRoute[] {
         };
       }
     } else {
-      const connectedNodes = nodes.filter((node) => connected.has(node.index));
-      for (const owner of distinctOwners(unconnected)) {
-        const seeds = connectedNodes.filter((node) => canTrade(state, owner, node.owner));
-        const link = findCheapestRailLink(
-          state,
-          seeds,
-          (targetIndex, seedIndex) => {
-            const target = nodeByIndex.get(targetIndex);
-            if (!target || target.owner !== owner || connected.has(targetIndex)) return false;
-            return !routeIds.has(routeKey(targetIndex, seedIndex));
-          },
-          coverage,
-          trackCells,
-          nodeCells,
-        );
-        if (!link || (best && link.cost >= best.cost)) continue;
+      const seeds = nodes.filter((node) => connected.has(node.index));
+      const link = findCheapestRailLink(
+        state,
+        seeds,
+        (targetIndex, seedIndex) => {
+          const target = nodeByIndex.get(targetIndex);
+          const seed = nodeByIndex.get(seedIndex);
+          if (!target || !seed || connected.has(targetIndex)) return false;
+          if (!canTrade(state, target.owner, seed.owner)) return false;
+          return !routeIds.has(routeKey(targetIndex, seedIndex));
+        },
+        coverage,
+        trackCells,
+        nodeCells,
+      );
+      if (link) {
         // The joining station is the route's start, as when each unconnected
         // node searched for its own destination.
         best = {
@@ -442,20 +444,11 @@ function buildRailNetwork(state: WorldState): TradeRoute[] {
   return routes;
 }
 
-/** Owners in first-appearance order, keeping sweep order independent of Set iteration. */
-function distinctOwners(nodes: readonly RailNode[]): ElementId[] {
-  const owners: ElementId[] = [];
-  for (const node of nodes) {
-    if (!owners.includes(node.owner)) owners.push(node.owner);
-  }
-  return owners;
-}
-
-function routeAllowedForTrain(state: WorldState, route: TradeRoute, trainOwner: ElementId): boolean {
+function routeAllowedForTrain(state: WorldState, route: TradeRoute, trainOwner: NationId): boolean {
   const owners = new Set(
     route.pathIndices
       .map((index) => state.cells[index]!.owner)
-      .filter((owner): owner is ElementId => owner !== null),
+      .filter((owner): owner is NationId => owner !== null),
   );
   return [...owners].every((owner) => canTrade(state, trainOwner, owner));
 }
@@ -465,7 +458,7 @@ function shortestRailPath(
   routes: TradeRoute[],
   source: number,
   destination: number,
-  trainOwner: ElementId,
+  trainOwner: NationId,
 ): RailJourney | null {
   const adjacency = new Map<number, Array<{ index: number; route: TradeRoute }>>();
   for (const route of routes) {
@@ -525,7 +518,7 @@ function shortestRailPath(
   };
 }
 
-function addIncome(state: WorldState, owner: ElementId, amount: number): void {
+function addIncome(state: WorldState, owner: NationId, amount: number): void {
   const faction = state.factions[owner];
   faction.gold = clamp(faction.gold + amount, 0, ECONOMY_RULES.maximumTreasury);
   faction.goldRate += amount;
@@ -587,7 +580,7 @@ function journeyAllowed(state: WorldState, vehicle: TradeVehicle): boolean {
   const owners = new Set(
     vehicle.pathIndices
       .map((index) => state.cells[index]!.owner)
-      .filter((owner): owner is ElementId => owner !== null),
+      .filter((owner): owner is NationId => owner !== null),
   );
   return [...owners].every((owner) => canTrade(state, vehicle.owner, owner));
 }
@@ -731,7 +724,7 @@ function spawnTrains(context: SimulationContext): void {
   const trains = state.tradeVehicles.filter((vehicle) => vehicle.kind === "train");
   if (trains.length >= TRADE_RULES.trainLimit) return;
   const stations = new Set(state.tradeRoutes.flatMap((route) => [route.startIndex, route.endIndex]));
-  const factories = ELEMENT_ORDER.flatMap((owner) => structureCells(state, owner, "factory"))
+  const factories = NATION_ORDER.flatMap((owner) => structureCells(state, owner, "factory"))
     .filter((factory) => stations.has(factory) && dispatchReady(state, "train", factory));
   for (const source of factories) {
     if (state.tradeVehicles.filter((vehicle) => vehicle.kind === "train").length >= TRADE_RULES.trainLimit) break;
@@ -806,7 +799,7 @@ function spawnShips(context: SimulationContext): void {
   const { state, random } = context;
   let shipCount = state.tradeVehicles.filter((vehicle) => vehicle.kind === "ship").length;
   if (shipCount >= TRADE_RULES.shipLimit) return;
-  const harbors = ELEMENT_ORDER.flatMap((owner) => structureCells(state, owner, "harbor"));
+  const harbors = NATION_ORDER.flatMap((owner) => structureCells(state, owner, "harbor"));
   for (const source of harbors) {
     if (shipCount >= TRADE_RULES.shipLimit) break;
     if (!dispatchReady(state, "ship", source)) continue;

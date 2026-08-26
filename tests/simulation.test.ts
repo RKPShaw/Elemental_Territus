@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ElementalWarEngine } from "../app/game/engine";
 import { runBatchGame } from "../app/game/batch";
-import { ELEMENT_ORDER } from "../app/game/elements";
+import { NATION_ORDER } from "../app/game/nations";
 import {
   ENEMY_TERRAIN_COST,
   STRUCTURE_MIN_SPACING,
@@ -98,12 +98,12 @@ test("structure ladders, spacing, and stacked-city capacity share one rule bound
   assert.equal(TROOP_CAP_RULES.troopsPerCity, 10_000);
 
   const state = createWorld(7);
-  const actor = state.factions.ember;
+  const actor = state.factions["ember-1"]!;
   const cityIndex = actor.capitalIndex;
   actor.gold = 1_000_000;
   state.commands.push(
-    { type: "build-structure", actor: "ember", structure: "city", tileIndex: cityIndex },
-    { type: "build-structure", actor: "ember", structure: "city", tileIndex: cityIndex },
+    { type: "build-structure", actor: "ember-1", structure: "city", tileIndex: cityIndex },
+    { type: "build-structure", actor: "ember-1", structure: "city", tileIndex: cityIndex },
   );
   const context: SimulationContext = {
     state,
@@ -119,7 +119,7 @@ test("structure ladders, spacing, and stacked-city capacity share one rule bound
   assert.equal(cityStationMultiplier(2), 1.5);
 
   const tooClose = neighborIndices(cityIndex, state.config.width, state.config.height)
-    .find((index) => state.cells[index]!.owner === "ember" && state.cells[index]!.terrain !== "water");
+    .find((index) => state.cells[index]!.owner === "ember-1" && state.cells[index]!.terrain !== "water");
   assert.notEqual(tooClose, undefined);
   assert.ok(distanceBetween(state, cityIndex, tooClose!) < STRUCTURE_MIN_SPACING);
   assert.equal(canPlaceStructureSite(state, tooClose!), false);
@@ -132,7 +132,7 @@ test("target campaigns discover theaters and conserve their commitment", () => {
 
   assert.equal(
     state.campaigns.filter((campaign) => campaign.target === "wilderness").length,
-    ELEMENT_ORDER.length,
+    NATION_ORDER.length,
   );
   assert.ok(state.theaters.some((theater) => theater.target === "wilderness"));
 
@@ -224,7 +224,7 @@ test("the factual report is complete enough to drive consolidated stories", () =
 
 test("each realm evaluates every strategic theater through its own priorities", () => {
   const state = new ElementalWarEngine(0x240823).step(90);
-  const byRealm = ELEMENT_ORDER.map((realm) => evaluateTheaterMap(state, realm));
+  const byRealm = NATION_ORDER.map((realm) => evaluateTheaterMap(state, realm));
   for (const evaluations of byRealm) {
     assert.equal(evaluations.length, state.strategicRegions.length);
     assert.ok(evaluations.every((evaluation) => evaluation.score >= 0 && evaluation.score <= 100));
@@ -238,8 +238,8 @@ test("each realm evaluates every strategic theater through its own priorities", 
 
 test("visible theater intelligence is continuous, layered, and realm-specific", () => {
   const state = new ElementalWarEngine(0x240823).step(90);
-  const ember = evaluateTheaterCellMaps(state, "ember");
-  const tide = evaluateTheaterCellMaps(state, "tide");
+  const ember = evaluateTheaterCellMaps(state, "ember-1");
+  const tide = evaluateTheaterCellMaps(state, "tide-1");
   for (const layer of THEATER_LAYERS) {
     assert.equal(ember[layer].length, state.cells.length);
     assert.ok(ember[layer].every((value) => value >= 0 && value <= 1));
@@ -438,8 +438,8 @@ test("future feature namespaces feed the same story system", () => {
         kind: "dynasty.marriage",
         importance: "major",
         storyKey: "dynasty:ember:grove:1",
-        initiator: { type: "character", id: "ember-heir", label: "the Ember heir", realmId: "ember" },
-        targets: [{ type: "character", id: "grove-heir", label: "the Grove heir", realmId: "grove" }],
+        initiator: { type: "character", id: "ember-heir", label: "the Ember heir", realmId: "ember-1" },
+        targets: [{ type: "character", id: "grove-heir", label: "the Grove heir", realmId: "grove-1" }],
         participants: [],
         links: { firstCharacter: "ember-heir", secondCharacter: "grove-heir" },
         facts: { politicalValue: 0.82 },

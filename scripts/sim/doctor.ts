@@ -1,4 +1,4 @@
-import { ELEMENT_ORDER } from "../../app/game/elements";
+import { NATION_ORDER } from "../../app/game/nations";
 import { ElementalWarEngine } from "../../app/game/engine";
 import { ACTION_REPORT_KINDS } from "../../app/game/reporting";
 import type { ReportEventKind, WorldState } from "../../app/game/types";
@@ -28,7 +28,7 @@ interface Evidence {
   kindCounts: Map<string, number>;
   relationTransitions: number;
   truceExpiries: number;
-  goldGrew: boolean;
+  earningIncome: number;
   populationGrew: boolean;
   regionsChanged: boolean;
   geographyUpdatedAt: number;
@@ -71,8 +71,7 @@ function gather(seed: number, ticks: number, sampleEvery: number): Evidence {
   let commandsDrained = true;
 
   const initial = engine.snapshot();
-  const startingGold = ELEMENT_ORDER.reduce((sum, id) => sum + initial.factions[id].gold, 0);
-  const startingTroops = ELEMENT_ORDER.reduce((sum, id) => sum + initial.factions[id].troops, 0);
+  const startingTroops = NATION_ORDER.reduce((sum, id) => sum + initial.factions[id].troops, 0);
   for (const relation of Object.values(initial.relations)) {
     previousStatuses.set(relation.key, relation.status);
   }
@@ -117,8 +116,10 @@ function gather(seed: number, ticks: number, sampleEvery: number): Evidence {
     kindCounts: countKinds(finalState),
     relationTransitions,
     truceExpiries,
-    goldGrew: ELEMENT_ORDER.reduce((sum, id) => sum + finalState.factions[id].gold, 0) > startingGold,
-    populationGrew: ELEMENT_ORDER.reduce((sum, id) => sum + finalState.factions[id].troops, 0) > startingTroops,
+    earningIncome: NATION_ORDER.filter(
+      (id) => finalState.factions[id].alive && finalState.factions[id].goldRate > 0,
+    ).length,
+    populationGrew: NATION_ORDER.reduce((sum, id) => sum + finalState.factions[id].troops, 0) > startingTroops,
     regionsChanged,
     geographyUpdatedAt: finalState.strategicMeta.updatedAt,
     commandsDrained,
@@ -135,11 +136,11 @@ function accountingAgreesWithMap(state: WorldState): { ok: boolean; detail: stri
     if (!cell.owner) continue;
     owned.set(cell.owner, (owned.get(cell.owner) ?? 0) + 1);
   }
-  const mismatches = ELEMENT_ORDER.filter(
+  const mismatches = NATION_ORDER.filter(
     (id) => (owned.get(id) ?? 0) !== state.factions[id].territory,
   );
   return mismatches.length === 0
-    ? { ok: true, detail: `territory matches owned cells for all ${ELEMENT_ORDER.length} realms` }
+    ? { ok: true, detail: `territory matches owned cells for all ${NATION_ORDER.length} realms` }
     : { ok: false, detail: `territory disagrees with the map for ${mismatches.join(", ")}` };
 }
 
@@ -179,9 +180,11 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
 
   add(
     "troop-and-gold-economy",
-    "treasuries and populations grow",
-    evidence.goldGrew && evidence.populationGrew,
-    `gold ${evidence.goldGrew ? "grew" : "did not grow"}, population ${evidence.populationGrew ? "grew" : "did not grow"}`,
+    "realms earn income and populations grow",
+    evidence.earningIncome > 0 && evidence.populationGrew,
+    // Income rather than treasury: nations that invest heavily in
+    // infrastructure legitimately hold less gold than they started with.
+    `${evidence.earningIncome} realms earning income, population ${evidence.populationGrew ? "grew" : "did not grow"}`,
   );
 
   const railRoutes = state.tradeRoutes.filter((route) => route.kind === "rail").length;

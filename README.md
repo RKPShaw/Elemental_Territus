@@ -66,13 +66,30 @@ The core is deterministic: the same seed, configuration and ordered system list
 produce the same world. This makes balance sweeps, replays, multiplayer lockstep,
 server-authoritative simulation and save migration natural future extensions.
 
+### Nations and elements
+
+A nation is not an element. Fifty nations compete, ten sharing each of the five
+elements, so siblings inherit an element's matchups, favoured terrain and
+temperament while playing as separate powers with their own territory, treasury
+and diplomacy. `app/game/nations.ts` holds the roster, the element behind each
+id, and a distinct colour per nation; `ElementId` still means the elemental
+character, and `NationId` means the power.
+
+Starts are drafted rather than fixed. Terrain is generated first, then each
+nation in turn takes the best site still available to it, scoring the shared
+strategic value field against how well the surrounding terrain suits its
+element, with a minimum separation between rivals. The pick order snakes across
+the elements, because picking sequentially is otherwise unfair to whoever picks
+last. `app/game/spawn.ts` owns this; `SPAWN_RULES` in `rules.ts` tunes it.
+
 ### Domain boundaries
 
 - `app/game/types.ts` is the shared domain contract.
 - `app/game/rules.ts` is the centralized balance surface: terrain, buildings,
-  diplomacy, economy, troop capacity and campaign constants.
-- `app/game/world.ts` generates seeded terrain, water, starting realms and the
-  all-peace diplomatic graph.
+  diplomacy, economy, troop capacity, spawn placement and campaign constants.
+- `app/game/nations.ts` is the nation roster and the nation-to-element mapping.
+- `app/game/world.ts` generates seeded terrain and water, then drafts starts
+  through `spawn.ts` and builds the all-peace diplomatic graph.
 - `app/game/engine.ts` owns deterministic stepping and immutable snapshots.
 - `app/game/batch.ts` runs the exact headless pipeline, while
   `batch-metrics.ts` collects compact balance counters and checkpoint snapshots.

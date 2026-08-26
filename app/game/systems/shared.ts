@@ -8,7 +8,8 @@ import {
 } from "../rules";
 import { committedTroopsFor } from "../campaigns";
 import { cellsWithin } from "../grid";
-import type { ElementId, StructureCounts, WorldState } from "../types";
+import { NATION_ORDER } from "../nations";
+import type { NationId, StructureCounts, WorldState } from "../types";
 
 export interface RealmAccountingDraft {
   territory: number;
@@ -23,7 +24,7 @@ export function emptyStructureCounts(): StructureCounts {
 export function defenseMultiplier(
   state: WorldState,
   tileIndex: number,
-  defender: ElementId,
+  defender: NationId,
 ): number {
   const tile = state.cells[tileIndex]!;
   let protection = 1;
@@ -40,7 +41,7 @@ export function defenseMultiplier(
   return TERRAIN_RULES[tile.terrain].defenseCost * protection * cityResistance;
 }
 
-export function recalculateRealm(state: WorldState, id: ElementId): void {
+export function recalculateRealm(state: WorldState, id: NationId): void {
   const draft = collectRealmAccounting(state)[id];
   applyRealmAccounting(state, id, draft);
 }
@@ -48,18 +49,15 @@ export function recalculateRealm(state: WorldState, id: ElementId): void {
 /** Collects every realm in one cell pass while preserving per-realm sum order. */
 export function collectRealmAccounting(
   state: WorldState,
-): Record<ElementId, RealmAccountingDraft> {
+): Record<NationId, RealmAccountingDraft> {
   const cellArea = normalizedCellArea(state.config);
-  const drafts = {
-    ember: { territory: 0, sustainableLand: 0, structures: emptyStructureCounts() },
-    tide: { territory: 0, sustainableLand: 0, structures: emptyStructureCounts() },
-    grove: { territory: 0, sustainableLand: 0, structures: emptyStructureCounts() },
-    stone: { territory: 0, sustainableLand: 0, structures: emptyStructureCounts() },
-    gale: { territory: 0, sustainableLand: 0, structures: emptyStructureCounts() },
-  } satisfies Record<ElementId, RealmAccountingDraft>;
+  const drafts: Record<NationId, RealmAccountingDraft> = {};
+  for (const id of NATION_ORDER) {
+    drafts[id] = { territory: 0, sustainableLand: 0, structures: emptyStructureCounts() };
+  }
   for (const cell of state.cells) {
     if (!cell.owner) continue;
-    const draft = drafts[cell.owner];
+    const draft = drafts[cell.owner]!;
     draft.territory += 1;
     draft.sustainableLand += TERRAIN_RULES[cell.terrain].sustain * cellArea;
     if (cell.structure) {
@@ -73,7 +71,7 @@ export function collectRealmAccounting(
 
 export function applyRealmAccounting(
   state: WorldState,
-  id: ElementId,
+  id: NationId,
   draft: RealmAccountingDraft,
 ): void {
   const faction = state.factions[id];

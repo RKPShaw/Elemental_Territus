@@ -1,13 +1,14 @@
 import { relationKey } from "./diplomacy";
-import { ELEMENT_ORDER } from "./elements";
-import { cellCoordinates, neighborIndices } from "./grid";
+import { neighborIndices } from "./grid";
+import { NATIONS, NATION_ORDER, nationElement } from "./nations";
 import { SeededRandom, smoothCellNoise } from "./random";
 import { createStrategicRegions } from "./regions";
 import { realmSubject } from "./reporting";
-import { CLAIM_RULES, TERRAIN_RULES, calculateTroopCap, normalizedCellArea } from "./rules";
+import { TERRAIN_RULES, calculateTroopCap, normalizedCellArea } from "./rules";
+import { claimInitialTerritory, draftSpawnSites } from "./spawn";
 import type {
   Cell,
-  ElementId,
+  NationId,
   FactionState,
   RelationState,
   SimulationConfig,
@@ -26,14 +27,6 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   minimumPeaceTicks: 180,
   victoryShare: 0.8,
   maximumTroops: 1_500_000,
-};
-
-const WORLD_STARTS: Record<ElementId, readonly [number, number]> = {
-  ember: [0.26, 0.29],
-  tide: [0.51, 0.18],
-  grove: [0.27, 0.73],
-  stone: [0.72, 0.3],
-  gale: [0.73, 0.72],
 };
 
 const WORLD_FIRST = [
@@ -83,12 +76,6 @@ function landAt(seed: number, x: number, y: number, config: SimulationConfig): b
   const tideSouth = ellipse(nx, ny, 0.505, 0.76, 0.095, 0.12) < 1 + coastWobble * 0.7;
   let land = west || east || tideNorth || tideSouth;
 
-  for (const [sx, sy] of Object.values(WORLD_STARTS)) {
-    const dx = x - sx * config.width;
-    const dy = y - sy * config.height;
-    if (Math.hypot(dx, dy) < 4.2 / Math.sqrt(normalizedCellArea(config))) land = true;
-  }
-
   if (x < 2 || y < 2 || x >= config.width - 2 || y >= config.height - 2) return false;
   return land;
 }
@@ -112,29 +99,15 @@ function terrainAt(
   return "plains";
 }
 
-function initialOwnerAt(x: number, y: number, config: SimulationConfig): ElementId | null {
-  let best: ElementId | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const candidate of ELEMENT_ORDER) {
-    const [sx, sy] = WORLD_STARTS[candidate];
-    const dx = x - sx * config.width;
-    const dy = y - sy * config.height;
-    const distance = Math.hypot(dx, dy) * Math.sqrt(normalizedCellArea(config));
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = candidate;
-    }
-  }
-  return bestDistance <= CLAIM_RULES.initialRegionRadius ? best : null;
-}
-
 function emptyStructures(): StructureCounts {
   return { city: 0, fort: 0, factory: 0, harbor: 0 };
 }
 
-function makeFaction(id: ElementId): FactionState {
+function makeFaction(id: NationId): FactionState {
+  const element = nationElement(id);
   return {
     id,
+    element,
     alive: true,
     territory: 0,
     previousTerritory: 0,
@@ -153,7 +126,7 @@ function makeFaction(id: ElementId): FactionState {
     warships: 0,
     structures: emptyStructures(),
     capitalIndex: -1,
-    absorbedElements: [id],
+    absorbedElements: [element],
     lastConqueror: null,
     intent: {
       target: null,
@@ -165,26 +138,6 @@ function makeFaction(id: ElementId): FactionState {
   };
 }
 
-function closestOwnedCell(
-  state: Pick<WorldState, "cells" | "config">,
-  owner: ElementId,
-  x: number,
-  y: number,
-): number {
-  let bestIndex = -1;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < state.cells.length; index += 1) {
-    if (state.cells[index]!.owner !== owner) continue;
-    const [cx, cy] = cellCoordinates(index, state.config.width);
-    const distance = Math.hypot(cx - x, cy - y);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = index;
-    }
-  }
-  return bestIndex;
-}
-
 export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
   const random = new SeededRandom(seed);
   const cells: Cell[] = [];
@@ -192,7 +145,8 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
     for (let x = 0; x < config.width; x += 1) {
       const land = landAt(seed, x, y, config);
       cells.push({
-        owner: land ? initialOwnerAt(x, y, config) : null,
+        // Ownership is decided by the spawn draft once the whole map exists.
+        owner: null,
         terrain: land ? terrainAt(seed, x, y, config) : "water",
         structure: null,
         structureLevel: 0,
@@ -215,23 +169,19 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
   }
 
   const factions = Object.fromEntries(
-    ELEMENT_ORDER.map((id) => [id, makeFaction(id)]),
-  ) as Record<ElementId, FactionState>;
+    NATION_ORDER.map((id) => [id, makeFaction(id)]),
+  ) as Record<NationId, FactionState>;
 
-  const skeletonState = { cells, config } as Pick<WorldState, "cells" | "config">;
-  for (const id of ELEMENT_ORDER) {
-    const [sx, sy] = WORLD_STARTS[id];
-    const capitalIndex = closestOwnedCell(
-      skeletonState,
-      id,
-      sx * config.width,
-      sy * config.height,
-    );
-    const faction = factions[id];
-    faction.capitalIndex = capitalIndex;
-    if (capitalIndex >= 0) {
-      cells[capitalIndex]!.capitalOf = id;
-    }
+  // Every nation drafts a start from the finished map, then opens holding the
+  // land around it. Terrain is generated first and independently, so the sites
+  // are chosen from the world rather than the world bent around the sites.
+  const sites = draftSpawnSites({ cells, config });
+  claimInitialTerritory({ cells, config }, sites);
+  for (const site of sites) {
+    const faction = factions[site.nation]!;
+    faction.capitalIndex = site.index;
+    cells[site.index]!.capitalOf = site.nation;
+    cells[site.index]!.owner = site.nation;
   }
 
   const cellArea = normalizedCellArea(config);
@@ -254,14 +204,16 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
       faction.structures.city,
       config.maximumTroops,
     );
-    faction.troops = faction.id === "tide" ? 16_000 : 12_000;
+    // Fifty realms each open with a tenth of the land the old five did, so
+    // starting population is capped by what the realm can actually sustain.
+    faction.troops = Math.min(12_000, faction.troopCap);
   }
 
   const relations: Record<string, RelationState> = {};
-  for (let first = 0; first < ELEMENT_ORDER.length; first += 1) {
-    for (let second = first + 1; second < ELEMENT_ORDER.length; second += 1) {
-      const a = ELEMENT_ORDER[first]!;
-      const b = ELEMENT_ORDER[second]!;
+  for (let first = 0; first < NATION_ORDER.length; first += 1) {
+    for (let second = first + 1; second < NATION_ORDER.length; second += 1) {
+      const a = NATION_ORDER[first]!;
+      const b = NATION_ORDER[second]!;
       const key = relationKey(a, b);
       relations[key] = {
         key,
@@ -309,7 +261,7 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
         id: 1,
         tick: 0,
         tone: "world",
-        text: `${worldName} wakes mostly unclaimed. Five elemental peoples raise banners with 20K treasuries and no developed infrastructure.`,
+        text: `${worldName} wakes mostly unclaimed. ${NATION_ORDER.length} nations across five elemental families raise banners with 20K treasuries and no developed infrastructure.`,
         actor: null,
       },
     ],
@@ -325,14 +277,14 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
         storyKey: `world:${seed}`,
         initiator: null,
         targets: [],
-        participants: ELEMENT_ORDER.map(realmSubject),
+        participants: NATION_ORDER.map(realmSubject),
         links: {},
         facts: {
           seed,
           landTiles,
-          foundingRealms: ELEMENT_ORDER.length,
+          foundingRealms: NATION_ORDER.length,
         },
-        summary: `${worldName} wakes mostly unclaimed as five elemental realms raise their first banners.`,
+        summary: `${worldName} wakes mostly unclaimed as ${NATION_ORDER.length} realms of five elemental families raise their first banners.`,
       },
     ],
     stories: [],

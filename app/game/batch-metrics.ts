@@ -1,13 +1,14 @@
+import { NATION_ORDER } from "./nations";
 import { committedTroopsFor, livingTroopsFor } from "./campaigns";
 import { getRelation } from "./diplomacy";
-import { ELEMENT_ORDER } from "./elements";
+
 import { isFrontierCell } from "./grid";
 import {
   ECONOMY_RULES,
   populationGrowthEfficiency,
 } from "./rules";
 import type {
-  ElementId,
+  NationId,
   StructureCounts,
   StructureType,
   WorldReportEvent,
@@ -62,7 +63,7 @@ export interface NationCumulativeMetrics {
 }
 
 export interface NationBalanceSnapshot {
-  id: ElementId;
+  id: NationId;
   alive: boolean;
   landShare: number;
   territory: number;
@@ -98,10 +99,10 @@ export interface NationBalanceSnapshot {
 export interface WorldBalanceSnapshot {
   tick: number;
   minute: number;
-  champion: ElementId | null;
+  champion: NationId | null;
   aliveRealms: number;
   settledShare: number;
-  leader: ElementId | null;
+  leader: NationId | null;
   leaderLandShare: number;
   landConcentrationHhi: number;
   treasuryGini: number;
@@ -134,7 +135,7 @@ export interface WorldBalanceSnapshot {
   eventCounts: Record<string, number>;
   firstEventTicks: Record<string, number>;
   milestones: Record<string, number>;
-  nations: Record<ElementId, NationBalanceSnapshot>;
+  nations: Record<NationId, NationBalanceSnapshot>;
 }
 
 function emptyStructures(): StructureCounts {
@@ -190,7 +191,7 @@ function emptyNationMetrics(): NationCumulativeMetrics {
   };
 }
 
-function realmFromTarget(event: WorldReportEvent): ElementId | null {
+function realmFromTarget(event: WorldReportEvent): NationId | null {
   return event.targets.find((target) => target.type === "realm")?.realmId ?? null;
 }
 
@@ -230,11 +231,11 @@ function addStructure(target: StructureCounts, structure: StructureType, levels 
 
 export class BatchMetricsCollector {
   private readonly nations = Object.fromEntries(
-    ELEMENT_ORDER.map((id) => [id, emptyNationMetrics()]),
-  ) as Record<ElementId, NationCumulativeMetrics>;
+    NATION_ORDER.map((id) => [id, emptyNationMetrics()]),
+  ) as Record<NationId, NationCumulativeMetrics>;
   private readonly tradeIncomeThisTick = Object.fromEntries(
-    ELEMENT_ORDER.map((id) => [id, 0]),
-  ) as Record<ElementId, number>;
+    NATION_ORDER.map((id) => [id, 0]),
+  ) as Record<NationId, number>;
   private readonly eventCounts: Record<string, number> = {};
   private readonly firstEventTicks: Record<string, number> = {};
   private readonly milestones: Record<string, number> = {};
@@ -327,7 +328,7 @@ export class BatchMetricsCollector {
     if (activeWarPairs > 0) this.milestones.firstWarTick ??= state.tick;
     if (activeAlliancePairs > 0) this.milestones.firstAllianceTick ??= state.tick;
 
-    for (const id of ELEMENT_ORDER) {
+    for (const id of NATION_ORDER) {
       const faction = state.factions[id];
       const metrics = this.nations[id];
       if (!faction.alive) {
@@ -383,8 +384,8 @@ export class BatchMetricsCollector {
   };
 
   snapshot(state: WorldState): WorldBalanceSnapshot {
-    const citySites = Object.fromEntries(ELEMENT_ORDER.map((id) => [id, 0])) as Record<ElementId, number>;
-    const frontierCells = Object.fromEntries(ELEMENT_ORDER.map((id) => [id, 0])) as Record<ElementId, number>;
+    const citySites = Object.fromEntries(NATION_ORDER.map((id) => [id, 0])) as Record<NationId, number>;
+    const frontierCells = Object.fromEntries(NATION_ORDER.map((id) => [id, 0])) as Record<NationId, number>;
     let unclaimed = 0;
     for (let index = 0; index < state.cells.length; index += 1) {
       const cell = state.cells[index]!;
@@ -393,10 +394,10 @@ export class BatchMetricsCollector {
       if (cell.structure === "city") citySites[cell.owner] += 1;
       if (isFrontierCell(state, index)) frontierCells[cell.owner] += 1;
     }
-    const livingByNation = ELEMENT_ORDER.map((id) => livingTroopsFor(state, id));
+    const livingByNation = NATION_ORDER.map((id) => livingTroopsFor(state, id));
     const totalLiving = livingByNation.reduce((sum, value) => sum + value, 0);
-    const nationSnapshots = {} as Record<ElementId, NationBalanceSnapshot>;
-    for (const [position, id] of ELEMENT_ORDER.entries()) {
+    const nationSnapshots = {} as Record<NationId, NationBalanceSnapshot>;
+    for (const [position, id] of NATION_ORDER.entries()) {
       const faction = state.factions[id];
       const committed = committedTroopsFor(state, id);
       const homeRatio = faction.troops / Math.max(1, faction.troopCap);
@@ -429,28 +430,28 @@ export class BatchMetricsCollector {
         activeTheaters: state.theaters.filter((theater) => theater.attacker === id && theater.staleRefreshes === 0).length,
         activeTrains: state.tradeVehicles.filter((vehicle) => vehicle.owner === id && vehicle.kind === "train").length,
         activeShips: state.tradeVehicles.filter((vehicle) => vehicle.owner === id && vehicle.kind === "ship").length,
-        activeWars: ELEMENT_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "war").length,
-        activeAlliances: ELEMENT_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "truce").length,
+        activeWars: NATION_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "war").length,
+        activeAlliances: NATION_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "truce").length,
         cumulative: cloneCumulative(this.nations[id]),
       };
     }
 
-    const alive = ELEMENT_ORDER.filter((id) => state.factions[id].alive);
+    const alive = NATION_ORDER.filter((id) => state.factions[id].alive);
     const leader = [...alive].sort(
       (first, second) => state.factions[second].territory - state.factions[first].territory,
     )[0] ?? null;
     const structuresOwned = emptyStructures();
-    for (const id of ELEMENT_ORDER) {
+    for (const id of NATION_ORDER) {
       for (const structure of Object.keys(structuresOwned) as StructureType[]) {
         structuresOwned[structure] += state.factions[id].structures[structure];
       }
     }
-    const cumulative = ELEMENT_ORDER.map((id) => this.nations[id]);
+    const cumulative = NATION_ORDER.map((id) => this.nations[id]);
     const total = (selector: (metrics: NationCumulativeMetrics) => number) =>
       cumulative.reduce((sum, metrics) => sum + selector(metrics), 0);
-    const totalHome = ELEMENT_ORDER.reduce((sum, id) => sum + state.factions[id].troops, 0);
-    const totalCommitted = ELEMENT_ORDER.reduce((sum, id) => sum + committedTroopsFor(state, id), 0);
-    const totalCap = ELEMENT_ORDER.reduce((sum, id) => sum + state.factions[id].troopCap, 0);
+    const totalHome = NATION_ORDER.reduce((sum, id) => sum + state.factions[id].troops, 0);
+    const totalCommitted = NATION_ORDER.reduce((sum, id) => sum + committedTroopsFor(state, id), 0);
+    const totalCap = NATION_ORDER.reduce((sum, id) => sum + state.factions[id].troopCap, 0);
 
     return {
       tick: state.tick,
@@ -460,7 +461,7 @@ export class BatchMetricsCollector {
       settledShare: 1 - unclaimed / state.landTiles,
       leader,
       leaderLandShare: leader ? state.factions[leader].territory / state.landTiles : 0,
-      landConcentrationHhi: concentration(ELEMENT_ORDER.map((id) => state.factions[id].territory)),
+      landConcentrationHhi: concentration(NATION_ORDER.map((id) => state.factions[id].territory)),
       treasuryGini: gini(alive.map((id) => state.factions[id].gold)),
       populationConcentrationHhi: concentration(livingByNation),
       totalHomePopulation: totalHome,
@@ -472,7 +473,7 @@ export class BatchMetricsCollector {
       averageGrowthEfficiency: alive.length > 0
         ? alive.reduce((sum, id) => sum + nationSnapshots[id].growthEfficiency, 0) / alive.length
         : 0,
-      totalTreasury: ELEMENT_ORDER.reduce((sum, id) => sum + state.factions[id].gold, 0),
+      totalTreasury: NATION_ORDER.reduce((sum, id) => sum + state.factions[id].gold, 0),
       structuresOwned,
       citySitesOwned: Object.values(citySites).reduce((sum, value) => sum + value, 0),
       stackedCityLevelsOwned: Math.max(0, structuresOwned.city - Object.values(citySites).reduce((sum, value) => sum + value, 0)),
