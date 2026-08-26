@@ -316,6 +316,14 @@ export const THEATER_MAP_RULES = {
   observationInterval: 80,
 } as const;
 
+/**
+ * How much a settler's preference for ground can speed or slow taking it.
+ * The floor keeps unattractive ground merely slow rather than never taken, so
+ * a realm hemmed in by mountains still expands instead of stalling.
+ */
+export const SETTLE_PREFERENCE_FLOOR = 0.55;
+export const SETTLE_PREFERENCE_RANGE = 0.9;
+
 export const CLAIM_RULES = {
   initialRegionRadius: 2.8,
   pressurePerTick: 8,

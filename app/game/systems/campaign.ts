@@ -1,4 +1,5 @@
 import { markCellsChanged } from "../structure-index";
+import { openLens } from "../lenses";
 import { PLAYERS } from "../players";
 import { getRelation, isAtWar } from "../diplomacy";
 import { realmMatchup } from "../elements";
@@ -6,6 +7,8 @@ import { ownedNeighborCount } from "../grid";
 import {
   CAMPAIGN_RULES,
   CLAIM_RULES,
+  SETTLE_PREFERENCE_FLOOR,
+  SETTLE_PREFERENCE_RANGE,
   DIPLOMACY_RULES,
   compactNumber,
   clamp,
@@ -418,6 +421,7 @@ function processSettlementCampaign(context: SimulationContext, campaign: Campaig
     boundaryByRegion.set(regionId, regionBoundary);
   }
   const lengthScale = normalizedCellLength(state.config);
+  const settle = openLens(state, campaign.attacker, "settle");
 
   for (const theater of theaters) {
     const targets = boundaryByRegion.get(theater.regionId) ?? [];
@@ -430,10 +434,18 @@ function processSettlementCampaign(context: SimulationContext, campaign: Campaig
       const compactness = 1 + ownedNeighborCount(state, targetIndex, campaign.attacker) * 0.045;
       const assignedTroops = theater.allocation * (weights.get(targetIndex) ?? 0);
       const readiness = clamp(assignedTroops / 850, 0.015, 1.45);
+      // Settlers press hardest on the ground they most want. Preference comes
+      // from the theater map rather than from terrain cost alone, so a tile is
+      // judged by what its owner believes about the country around it as well
+      // as by what the tile is: identical ground in a region thought rich and
+      // open is taken before the same ground in one written off or unknown.
+      const preference = SETTLE_PREFERENCE_FLOOR
+        + settle.at(targetIndex) * SETTLE_PREFERENCE_RANGE;
       const progress =
         CLAIM_RULES.pressurePerTick *
         readiness *
         compactness *
+        preference *
         state.config.aggression /
         (cost * Math.max(0.7, lengthScale));
       if (tile.pressureBy && tile.pressureBy !== campaign.attacker) {

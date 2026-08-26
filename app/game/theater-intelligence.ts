@@ -55,7 +55,7 @@ const INFRASTRUCTURE_VALUE = {
   fort: 7,
 } as const;
 
-const RELATED_TERRAINS: Record<LandTerrainId, readonly LandTerrainId[]> = {
+export const RELATED_TERRAINS: Record<LandTerrainId, readonly LandTerrainId[]> = {
   farmland: ["plains"],
   plains: ["farmland", "hills"],
   forest: ["hills"],
