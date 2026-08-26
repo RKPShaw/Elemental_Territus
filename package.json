@@ -18,7 +18,8 @@
     "capture:replay": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/capture-replay.ts",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "simulate:batch": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/simulate-batch.ts",
-    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
+    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
+    "build:replay": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/build-replay-page.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

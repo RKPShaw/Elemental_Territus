@@ -8,6 +8,16 @@
  * inline into a single page.
  *
  *   npm run capture:replay -- --ticks 600 --every 4 --out replay.json
+ *
+ * Or sampled by the clock rather than by the tick, for a time-lapse of however
+ * far a world gets in a sitting:
+ *
+ *   npm run capture:replay -- --wall 3600 --interval 15 --out timelapse.jsonl
+ *
+ * Wall mode writes one JSON line per frame as it goes, rather than one document
+ * at the end. An hour is a long time to hold in memory and a longer time to
+ * lose: a run cut short still leaves every frame it managed, and the page
+ * builder is happy to read a partial file.
  */
 import { committedTroopsFor } from "../app/game/campaigns";
 import { ELEMENTS, ELEMENT_ORDER } from "../app/game/elements";
@@ -16,13 +26,17 @@ import { PLAYERS, PLAYER_ORDER } from "../app/game/players";
 import { TERRAIN_RULES } from "../app/game/rules";
 import type { WorldState } from "../app/game/types";
 import { parseArgs, DEFAULT_SEED } from "./sim/args";
-import { writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 
 const args = parseArgs(process.argv.slice(2));
 const seed = args.number("seed", DEFAULT_SEED);
 const totalTicks = args.integer("ticks", 600);
 const every = Math.max(1, args.integer("every", 4));
 const out = args.flag("out") ?? "replay.json";
+/** Wall-clock seconds to run for; 0 keeps the tick-counted behaviour. */
+const wallSeconds = args.number("wall", 0);
+/** Wall-clock seconds between frames in wall mode. */
+const intervalSeconds = Math.max(0.1, args.number("interval", 15));
 
 const OWNER_INDEX = new Map(PLAYER_ORDER.map((id, index) => [id, index]));
 const UNOWNED = 250;
@@ -114,6 +128,63 @@ function capture(state: WorldState, codes: Uint8Array, isFirst: boolean): void {
     ] as [number, string]);
   seenReports = state.reports.length;
   frames.push({ tick: state.tick, age: state.age, changes, standings, events });
+}
+
+function headerOf(): Record<string, unknown> {
+  return {
+    seed,
+    worldName: first.worldName,
+    width: first.config.width,
+    height: first.config.height,
+    landTiles: first.landTiles,
+    tickEvery: every,
+    terrainRuns: runLength(terrain),
+    initialOwnerRuns: runLength(ownerCodes(first)),
+    terrainFills: TERRAIN_ORDER.map((id) => TERRAIN_RULES[id].fill),
+    players: PLAYER_ORDER.map((id) => ({
+      name: PLAYERS[id]!.name,
+      realm: PLAYERS[id]!.realmName,
+      color: PLAYERS[id]!.color,
+      element: ELEMENT_ORDER.indexOf(PLAYERS[id]!.element),
+    })),
+    elements: ELEMENT_ORDER.map((id) => ({ name: ELEMENTS[id].name, color: ELEMENTS[id].color })),
+  };
+}
+
+/**
+ * Time-lapse: play continuously and take a frame every so many seconds of real
+ * time, for a fixed sitting. Frames are appended as they are taken, so the file
+ * is readable at any point rather than only once the run ends.
+ */
+if (wallSeconds > 0) {
+  writeFileSync(out, `${JSON.stringify({ kind: "timelapse", intervalSeconds, wallSeconds, ...headerOf() })}\n`);
+  capture(first, previous, true);
+  appendFileSync(out, `${JSON.stringify(frames[0])}\n`);
+  frames.length = 0;
+
+  const deadline = startedAt + wallSeconds * 1000;
+  let nextFrameAt = startedAt + intervalSeconds * 1000;
+  let taken = 1;
+  // Advance in small batches so a frame lands near its moment rather than
+  // whenever a long block of ticks happens to finish.
+  while (performance.now() < deadline) {
+    engine.advance(every);
+    if (performance.now() < nextFrameAt) continue;
+    const state = engine.snapshot();
+    const codes = ownerCodes(state);
+    capture(state, codes, false);
+    previous = codes;
+    appendFileSync(out, `${JSON.stringify(frames[0])}\n`);
+    frames.length = 0;
+    taken += 1;
+    nextFrameAt += intervalSeconds * 1000;
+    const elapsed = (performance.now() - startedAt) / 1000;
+    process.stderr.write(
+      `  frame ${taken} at tick ${state.tick} (${elapsed.toFixed(0)}s of ${wallSeconds}s)\n`,
+    );
+  }
+  process.stderr.write(`captured ${taken} frames over ${wallSeconds}s -> ${out}\n`);
+  process.exit(0);
 }
 
 capture(first, previous, true);
