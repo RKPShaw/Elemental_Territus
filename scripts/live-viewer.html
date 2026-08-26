@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elemental Frontiers — live</title>
+<style>
+  :root {
+    --ground: #0e1a1f; --panel: #16252b; --edge: #26383f;
+    --ink: #e3eaea; --muted: #93a6a7; --accent: #63aebe; --warm: #d9a441;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
+    padding: .85rem 1.1rem; border-bottom: 1px solid var(--edge);
+  }
+  h1 { margin: 0; font-size: 1.05rem; letter-spacing: -.01em; }
+  .meta { color: var(--muted); font-size: .8rem; display: flex; gap: 1rem; flex-wrap: wrap; }
+  .meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; margin-left: .35rem; }
+  .live { margin-left: auto; display: flex; align-items: center; gap: .45rem; font-size: .78rem; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #3fa66a; }
+  .dot.off { background: #b4544a; }
+  main { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 1rem; padding: 1rem; }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0,1fr); } }
+  .card { background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: .75rem; }
+  canvas { width: 100%; height: auto; display: block; image-rendering: pixelated; border-radius: 4px; }
+  h2 { margin: 0 0 .6rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; }
+  .row { display: grid; grid-template-columns: 12px 1fr auto; gap: .5rem; align-items: center; padding: .18rem 0; font-size: .8rem; }
+  .sw { width: 10px; height: 10px; border-radius: 2px; }
+  .row span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .log { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column-reverse; gap: .3rem; font-size: .78rem; }
+  .log div { color: var(--muted); border-left: 2px solid var(--edge); padding-left: .5rem; }
+  .log div.i2 { color: var(--ink); border-left-color: var(--accent); }
+  .log div.i3 { color: var(--warm); border-left-color: var(--warm); }
+  .side { display: flex; flex-direction: column; gap: 1rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="name">connecting…</h1>
+  <div class="meta">
+    <div>tick<b id="tick">—</b></div>
+    <div>age<b id="age">—</b></div>
+    <div>players<b id="alive">—</b></div>
+    <div>settled<b id="settled">—</b></div>
+  </div>
+  <div class="live"><span class="dot off" id="dot"></span><span id="status">offline</span></div>
+</header>
+<main>
+  <div class="card"><canvas id="map"></canvas></div>
+  <div class="side">
+    <div class="card"><h2>Standings — land held</h2><div id="standings"></div></div>
+    <div class="card"><h2>Dispatches</h2><div class="log" id="log"></div></div>
+  </div>
+</main>
+<script>
+(function () {
+  "use strict";
+  var W, H, owners, terrain, ownedLut, wildLut, players, ctx, image;
+  var WATER = 255, UNOWNED = 250;
+
+  function expand(runs, length) {
+    var out = new Uint8Array(length), at = 0;
+    for (var i = 0; i < runs.length; i += 2) {
+      for (var j = 0; j < runs[i + 1]; j += 1) out[at++] = runs[i];
+    }
+    return out;
+  }
+  function hex(v) { var n = parseInt(v.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  function mix(a, b, t) {
+    return [Math.round(a[0]+(b[0]-a[0])*t), Math.round(a[1]+(b[1]-a[1])*t), Math.round(a[2]+(b[2]-a[2])*t)];
+  }
+
+  function setup(world) {
+    W = world.width; H = world.height;
+    document.getElementById("name").textContent = world.worldName;
+    terrain = expand(world.terrainRuns, W * H);
+    owners = expand(world.ownerRuns, W * H);
+    players = world.players;
+    var terrainRgb = world.terrainFills.map(hex);
+    var playerRgb = players.map(function (p) { return hex(p.color); });
+    ownedLut = terrainRgb.map(function (t) {
+      return playerRgb.map(function (p) { return mix(t, p, 0.72); });
+    });
+    wildLut = terrainRgb.map(function (t) { return mix(t, [216, 207, 177], 0.16); });
+    var canvas = document.getElementById("map");
+    canvas.width = W; canvas.height = H;
+    ctx = canvas.getContext("2d");
+    image = ctx.createImageData(W, H);
+    apply(world.frame);
+    paint();
+  }
+
+  function paint() {
+    var data = image.data;
+    for (var i = 0; i < owners.length; i += 1) {
+      var code = owners[i], t = terrain[i], rgb;
+      if (code === WATER) rgb = wildLut[0];
+      else if (code === UNOWNED) rgb = wildLut[t];
+      else rgb = ownedLut[t][code];
+      var o = i * 4;
+      data[o] = rgb[0]; data[o+1] = rgb[1]; data[o+2] = rgb[2]; data[o+3] = 255;
+    }
+    ctx.putImageData(image, 0, 0);
+  }
+
+  function apply(frame) {
+    var c = frame.changes;
+    for (var i = 0; i < c.length; i += 2) owners[c[i]] = c[i + 1];
+    document.getElementById("tick").textContent = frame.tick.toLocaleString();
+    document.getElementById("age").textContent = frame.age;
+
+    var s = frame.standings, rows = [];
+    for (var k = 0; k < s.length; k += 5) {
+      rows.push({ i: s[k], land: s[k+1], troops: s[k+2], gold: s[k+3], wars: s[k+4] });
+    }
+    rows.sort(function (a, b) { return b.land - a.land; });
+    document.getElementById("alive").textContent = rows.length;
+    var held = 0;
+    for (var r = 0; r < rows.length; r += 1) held += rows[r].land;
+    document.getElementById("settled").textContent = held.toLocaleString() + " tiles";
+
+    var html = "";
+    for (var n = 0; n < Math.min(12, rows.length); n += 1) {
+      var p = players[rows[n].i];
+      html += '<div class="row"><span class="sw" style="background:' + p.color + '"></span>'
+        + '<span>' + p.realm + (rows[n].wars ? ' <small style="opacity:.6">⚔' + rows[n].wars + '</small>' : '')
+        + '</span><span>' + rows[n].land.toLocaleString() + '</span></div>';
+    }
+    document.getElementById("standings").innerHTML = html;
+
+    if (frame.events && frame.events.length) {
+      var log = document.getElementById("log");
+      for (var e = 0; e < frame.events.length; e += 1) {
+        var div = document.createElement("div");
+        div.className = "i" + frame.events[e][0];
+        div.textContent = frame.events[e][1];
+        log.insertBefore(div, log.firstChild);
+      }
+      while (log.childNodes.length > 60) log.removeChild(log.lastChild);
+    }
+  }
+
+  function online(is) {
+    document.getElementById("dot").className = "dot" + (is ? "" : " off");
+    document.getElementById("status").textContent = is ? "live" : "reconnecting…";
+  }
+
+  fetch("/world").then(function (r) { return r.json(); }).then(function (world) {
+    setup(world);
+    var source = new EventSource("/stream");
+    source.onopen = function () { online(true); };
+    source.onerror = function () { online(false); };
+    source.onmessage = function (event) {
+      apply(JSON.parse(event.data));
+      paint();
+    };
+  });
+})();
+</script>
+</body>
+</html>

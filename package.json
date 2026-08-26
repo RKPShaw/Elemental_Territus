@@ -19,7 +19,8 @@
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "simulate:batch": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/simulate-batch.ts",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
-    "build:replay": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/build-replay-page.ts"
+    "build:replay": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/build-replay-page.ts",
+    "serve": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/serve.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
