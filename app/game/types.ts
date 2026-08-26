@@ -110,6 +110,8 @@ export interface FactionState {
   troopGrowth: number;
   gold: number;
   goldRate: number;
+  /** Lifetime economics per structure kind; see economics.ts. */
+  economy: EconomyLedger;
   sustainableLand: number;
   casualties: number;
   capturedTiles: number;
@@ -210,6 +212,25 @@ export interface TheaterMapState {
   byPlayer: Record<PlayerId, RegionObservation>;
   regionCount: number;
 }
+
+/**
+ * What each kind of building has cost a player and earned it, for the life of
+ * the game. Cumulative and never reset, so a reading late in a game answers
+ * "was this worth building" over the whole run rather than over a moment.
+ */
+export interface StructureEconomics {
+  /** Gold sunk into building and upgrading. */
+  spent: number;
+  /** Gold earned that this kind of building is responsible for. */
+  earned: number;
+  /** Journeys, voyages or stops the building generated. */
+  runs: number;
+}
+
+export type EconomyLedger = Record<StructureType, StructureEconomics> & {
+  /** Income from held ground, the baseline every other source competes with. */
+  land: number;
+};
 
 export interface StrategicMetaState {
   value: Float32Array;

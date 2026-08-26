@@ -2,6 +2,7 @@ import { relationKey } from "./diplomacy";
 import { neighborIndices } from "./grid";
 import { PLAYERS, PLAYER_ORDER, playerElement } from "./players";
 import { SeededRandom, smoothCellNoise } from "./random";
+import { createEconomyLedger } from "./economics";
 import { createStrategicRegions } from "./regions";
 import { createTheaterMap } from "./theater-map";
 import { realmSubject } from "./reporting";
@@ -132,6 +133,7 @@ function makeFaction(id: PlayerId): FactionState {
     troopGrowth: 0,
     gold: 20_000,
     goldRate: 0,
+    economy: createEconomyLedger(),
     sustainableLand: 0,
     casualties: 0,
     capturedTiles: 0,

@@ -11,6 +11,7 @@ import {
   populationGrowthEfficiency,
 } from "../rules";
 import type { PlayerId, SimulationContext, SimulationSystem } from "../types";
+import { recordLandIncome } from "../economics";
 
 export class EconomySystem implements SimulationSystem {
   readonly id = "troop-and-gold-economy";
@@ -30,6 +31,7 @@ export class EconomySystem implements SimulationSystem {
     for (const id of PLAYER_ORDER) {
       const faction = state.factions[id];
       if (!faction.alive) continue;
+      recordLandIncome(state, id, (landIncome.get(id) ?? 0) * ECONOMY_RULES.landIncomeScale);
       faction.goldRate =
         (landIncome.get(id) ?? 0) * ECONOMY_RULES.landIncomeScale +
         faction.structures.city * ECONOMY_RULES.cityIncome;

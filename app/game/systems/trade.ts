@@ -8,6 +8,7 @@ import {
   surroundingIndices,
 } from "../grid";
 import { cellRevision } from "../structure-index";
+import { recordEarned } from "../economics";
 import { realmSubject } from "../reporting";
 import {
   ECONOMY_RULES,
@@ -624,10 +625,15 @@ function payTrainStop(
       : TRADE_RULES.domesticTrainStopPayout
   ) * stationMultiplier;
   addIncome(state, vehicle.owner, ownerIncome);
+  // The train came from a factory, so the factory is what earned this.
+  recordEarned(state, vehicle.owner, "factory", ownerIncome, 1);
   let hostIncome = 0;
   if (foreign) {
     hostIncome = TRADE_RULES.foreignTrainStopPayout * stationMultiplier;
     addIncome(state, hostOwner, hostIncome);
+    // The host earned it by having somewhere worth stopping, so it belongs to
+    // the station that took the stop rather than to the visitor's factory.
+    recordEarned(state, hostOwner, stop.structure ?? "city", hostIncome, 1);
   }
   vehicle.earnedIncome += ownerIncome;
   vehicle.hostIncome += hostIncome;
@@ -762,6 +768,10 @@ function updateVehicles(context: SimulationContext): void {
       }
     } else if (vehicle.progress >= 1) {
       addIncome(state, vehicle.owner, vehicle.payout);
+      // Ships sail from harbours and trains from factories, so a completed
+      // voyage credits whichever kind of building sent it.
+      const sender = vehicle.kind === "ship" ? "harbor" : "factory";
+      recordEarned(state, vehicle.owner, sender, vehicle.payout, 1);
       vehicle.earnedIncome += vehicle.payout;
       if (vehicle.foreign) {
         const hostIncome = vehicle.payout * (
@@ -769,6 +779,8 @@ function updateVehicles(context: SimulationContext): void {
         );
         vehicle.hostIncome += hostIncome;
         addIncome(state, vehicle.destinationOwner, hostIncome);
+        // The receiving end earned it through the same kind of building.
+        recordEarned(state, vehicle.destinationOwner, sender, hostIncome, 0);
       }
       const nextDepartureAt = releaseDispatch(state, vehicle);
       context.report({

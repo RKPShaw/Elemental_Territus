@@ -7,6 +7,7 @@ import type {
   WorldReportDraft,
   WorldState,
 } from "./types";
+import { cloneEconomyLedger } from "./economics";
 import { createWorld } from "./world";
 
 export interface ElementalWarEngineOptions {
@@ -117,6 +118,7 @@ export class ElementalWarEngine {
             absorbedElements: [...faction.absorbedElements],
             structures: { ...faction.structures },
             intent: { ...faction.intent },
+            economy: cloneEconomyLedger(faction.economy),
           },
         ]),
       ) as WorldState["factions"],

@@ -10,7 +10,8 @@ import { PLAYERS, PLAYER_ORDER } from "../app/game/players";
 import { ElementalWarEngine } from "../app/game/engine";
 import { latestStories } from "../app/game/reporting";
 import { compactNumber } from "../app/game/rules";
-import type { WorldReportEvent, WorldState } from "../app/game/types";
+import type { StructureType, WorldReportEvent, WorldState } from "../app/game/types";
+import { viabilityFor } from "../app/game/economics";
 import { DEFAULT_SEED, parseArgs, terminalWidth, wantsColor } from "./sim/args";
 import { runDoctor } from "./sim/doctor";
 import { profileRun, quantile } from "./sim/profile";
@@ -396,6 +397,98 @@ function commandHelp(): void {
   write(dim("  npm run sim -- events --domain trade --limit 20", color));
   write(dim("  npm run sim -- inspect trade --tick 900", color));
   write(dim("  npm run sim -- doctor", color));
+  write(dim("  npm run sim -- viability --tick 1200 --seeds 0x240823,0x5eed01", color));
+}
+
+/**
+ * What each kind of building was worth, and whether the winner agreed.
+ *
+ * Built for playtesting a balance question that counts alone cannot answer: if
+ * harbours return more per gold than factories but nobody builds them, is that
+ * the planner misreading the game or the game misreading itself? The leader
+ * column is the point -- a building that pays well across the roster but that
+ * the leading realm ignores is a different problem from one nobody can afford.
+ */
+function commandViability(): void {
+  const color = wantsColor(args);
+  const ticks = args.integer("tick", 1200);
+  const seeds = (args.flag("seeds") ?? String(DEFAULT_SEED)).split(",").map((s) => Number(s.trim()));
+  const structures: StructureType[] = ["city", "factory", "harbor", "fort"];
+
+  interface Totals { spent: number; earned: number; runs: number; standing: number }
+  const make = (): Totals => ({ spent: 0, earned: 0, runs: 0, standing: 0 });
+  const roster = new Map<StructureType, Totals>(structures.map((s) => [s, make()]));
+  const leaders = new Map<StructureType, Totals>(structures.map((s) => [s, make()]));
+  let landTotal = 0;
+  let leaderLand = 0;
+  const leaderNames: string[] = [];
+
+  for (const seed of seeds) {
+    const engine = new ElementalWarEngine(seed);
+    engine.advance(ticks);
+    const state = engine.snapshot();
+    // The leader by territory stands in for the victor: most runs have not
+    // resolved a champion by the horizon a playtest can afford to watch.
+    let leader = PLAYER_ORDER[0]!;
+    for (const id of PLAYER_ORDER) {
+      if (state.factions[id]!.territory > state.factions[leader]!.territory) leader = id;
+    }
+    leaderNames.push(`${PLAYERS[leader]!.realmName} (${state.factions[leader]!.territory} tiles)`);
+
+    for (const id of PLAYER_ORDER) {
+      const faction = state.factions[id]!;
+      landTotal += faction.economy.land;
+      if (id === leader) leaderLand += faction.economy.land;
+      for (const entry of viabilityFor(state, id)) {
+        for (const bucket of id === leader ? [roster, leaders] : [roster]) {
+          const totals = bucket.get(entry.structure)!;
+          totals.spent += entry.spent;
+          totals.earned += entry.earned;
+          totals.runs += entry.runs;
+          totals.standing += faction.structures[entry.structure];
+        }
+      }
+    }
+  }
+
+  write("");
+  write(bold(`building economics over ${seeds.length} seed(s) to tick ${ticks}`, color));
+  write(dim(`leader: ${leaderNames.join(", ")}`, color));
+  write("");
+  write(dim("                 ---------- whole roster ----------   ------- leading realm -------", color));
+  write(bold("structure         spent    earned   return  per bld     spent    earned   return", color));
+  write("-".repeat(80));
+
+  const money = (value: number): string => `${(value / 1e6).toFixed(1)}M`;
+  for (const structure of structures) {
+    const all = roster.get(structure)!;
+    const top = leaders.get(structure)!;
+    const ret = (t: Totals): string => (t.spent > 0 ? `${(t.earned / t.spent).toFixed(1)}x` : "—");
+    const per = all.standing > 0 ? money(all.earned / all.standing) : "—";
+    write(
+      `${structure.padEnd(12)}${money(all.spent).padStart(9)}${money(all.earned).padStart(10)}`
+      + `${ret(all).padStart(9)}${per.padStart(9)}`
+      + `${money(top.spent).padStart(10)}${money(top.earned).padStart(10)}${ret(top).padStart(9)}`,
+    );
+  }
+  write("-".repeat(80));
+  write(`${"land".padEnd(12)}${"—".padStart(9)}${money(landTotal).padStart(10)}${"—".padStart(9)}${"—".padStart(9)}`
+    + `${"—".padStart(10)}${money(leaderLand).padStart(10)}`);
+  write("");
+
+  const best = structures
+    .filter((s) => roster.get(s)!.spent > 0 && roster.get(s)!.earned > 0)
+    .sort((a, b) => roster.get(b)!.earned / roster.get(b)!.spent - roster.get(a)!.earned / roster.get(a)!.spent);
+  if (best.length > 0) {
+    const top = best[0]!;
+    const totals = roster.get(top)!;
+    write(dim(
+      `best return: ${top} at ${(totals.earned / totals.spent).toFixed(1)}x, `
+      + `${totals.standing} standing across the roster`,
+      color,
+    ));
+  }
+  write("");
 }
 
 const COMMANDS: Record<string, () => void> = {
@@ -405,6 +498,7 @@ const COMMANDS: Record<string, () => void> = {
   inspect: commandInspect,
   systems: commandSystems,
   doctor: commandDoctor,
+  viability: commandViability,
   help: commandHelp,
 };
 

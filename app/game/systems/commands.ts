@@ -1,4 +1,5 @@
 import { markCellsChanged } from "../structure-index";
+import { recordSpend } from "../economics";
 import { PLAYERS } from "../players";
 import { getRelation } from "../diplomacy";
 
@@ -520,6 +521,7 @@ export class CommandExecutionSystem implements SimulationSystem {
           continue;
         }
         actor.gold -= cost;
+        recordSpend(state, command.actor, command.structure, cost);
         if (stackingCity) {
           cell.structureLevel = Math.max(1, cell.structureLevel) + 1;
           markCellsChanged(state);
