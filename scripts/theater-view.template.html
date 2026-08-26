@@ -1,0 +1,337 @@
+<title>Theater Lens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground:#eef2f3; --panel:#ffffff; --edge:#cfdadd; --sunk:#e2e9eb;
+    --ink:#12212a; --muted:#5b7079; --faint:#8ea3ab;
+    --committed:#b4610f; --committed-soft:#f6e3cd;
+    --idle:#3c7183; --idle-soft:#dceaef;
+    --rule:#dae3e5;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --ground:#0d1519; --panel:#15222a; --edge:#25373f; --sunk:#101b21;
+      --ink:#dfe8ea; --muted:#8ba0a7; --faint:#5f757d;
+      --committed:#e5943f; --committed-soft:#3a2814;
+      --idle:#66a7bd; --idle-soft:#152b34;
+      --rule:#22343b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0d1519; --panel:#15222a; --edge:#25373f; --sunk:#101b21;
+    --ink:#dfe8ea; --muted:#8ba0a7; --faint:#5f757d;
+    --committed:#e5943f; --committed-soft:#3a2814;
+    --idle:#66a7bd; --idle-soft:#152b34;
+    --rule:#22343b;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:Archivo,"Helvetica Neue",Arial,sans-serif; font-size:14px; line-height:1.5;
+  }
+  header {
+    display:flex; align-items:baseline; gap:1.25rem; flex-wrap:wrap;
+    padding:.9rem 1.25rem; border-bottom:1px solid var(--edge); background:var(--panel);
+  }
+  h1 { margin:0; font-size:1rem; font-weight:700; letter-spacing:-.01em; }
+  .facts { display:flex; gap:1.25rem; flex-wrap:wrap; color:var(--muted); font-size:.78rem; }
+  .facts b {
+    color:var(--ink); font-weight:600; margin-left:.35rem;
+    font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums;
+  }
+  main { display:grid; grid-template-columns:210px minmax(0,1fr) 300px; gap:1rem; padding:1rem; align-items:start; }
+  @media (max-width:1100px){ main{ grid-template-columns:minmax(0,1fr);} }
+  .card { background:var(--panel); border:1px solid var(--edge); border-radius:5px; padding:.8rem; }
+  h2 {
+    margin:0 0 .65rem; font-size:.68rem; font-weight:600; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--muted);
+  }
+  canvas { width:100%; height:auto; display:block; image-rendering:pixelated; border-radius:4px; background:var(--sunk); }
+  .rail { display:flex; flex-direction:column; gap:1rem; }
+  button, select {
+    font:inherit; color:var(--ink); background:var(--panel);
+    border:1px solid var(--edge); border-radius:4px; padding:.4rem .55rem; width:100%; text-align:left; cursor:pointer;
+  }
+  button:hover, select:hover { border-color:var(--idle); }
+  button[aria-pressed="true"] { background:var(--idle-soft); border-color:var(--idle); font-weight:600; }
+  .stack { display:flex; flex-direction:column; gap:.3rem; }
+  .legend { display:flex; flex-direction:column; gap:.35rem; font-size:.76rem; color:var(--muted); }
+  .legend .row { display:grid; grid-template-columns:14px 1fr; gap:.5rem; align-items:center; }
+  .chip { width:12px; height:12px; border-radius:2px; }
+  .ramp { height:10px; border-radius:2px; background:linear-gradient(90deg,#2c3f52,#3c7183,#7fae8c,#d8c26a,#e5943f); }
+  .theaters { display:flex; flex-direction:column; gap:.35rem; max-height:62vh; overflow-y:auto; }
+  .theater {
+    border:1px solid var(--edge); border-left:3px solid var(--idle); border-radius:4px;
+    padding:.5rem .6rem; cursor:pointer; background:var(--panel);
+  }
+  .theater.committed { border-left-color:var(--committed); }
+  .theater[aria-selected="true"] { background:var(--idle-soft); border-color:var(--idle); }
+  .theater .head { display:flex; justify-content:space-between; gap:.5rem; align-items:baseline; }
+  .theater .rid { font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--muted); }
+  .theater .val { font-family:"IBM Plex Mono",monospace; font-size:.85rem; font-weight:600; font-variant-numeric:tabular-nums; }
+  .theater .sub { font-size:.72rem; color:var(--muted); display:flex; gap:.7rem; margin-top:.15rem; font-variant-numeric:tabular-nums; }
+  .pill {
+    display:inline-block; font-size:.62rem; letter-spacing:.08em; text-transform:uppercase;
+    font-weight:600; padding:.1rem .35rem; border-radius:2px;
+  }
+  .pill.committed { background:var(--committed-soft); color:var(--committed); }
+  .pill.idle { background:var(--idle-soft); color:var(--idle); }
+  .note { font-size:.76rem; color:var(--muted); margin:.6rem 0 0; }
+  .empty { color:var(--faint); font-size:.8rem; padding:.5rem 0; }
+  :focus-visible { outline:2px solid var(--idle); outline-offset:2px; }
+</style>
+
+<header>
+  <h1 id="world">Theater Lens</h1>
+  <div class="facts">
+    <div>tick<b id="f-tick">—</b></div>
+    <div>regions<b id="f-regions">—</b></div>
+    <div>wars<b id="f-wars">—</b></div>
+    <div>theaters<b id="f-theaters">—</b></div>
+    <div>pressed cap<b id="f-cap">—</b></div>
+  </div>
+</header>
+
+<main>
+  <div class="rail">
+    <div class="card">
+      <h2>Layer</h2>
+      <div class="stack" id="layers"></div>
+    </div>
+    <div class="card">
+      <h2>Seen by</h2>
+      <select id="viewer"></select>
+      <p class="note" id="viewer-note">The lens is one player's opinion, so it changes with who is looking.</p>
+    </div>
+    <div class="card">
+      <h2>Reading</h2>
+      <div class="legend">
+        <div class="ramp"></div>
+        <div class="row"><span></span><span id="ramp-note">low value to high</span></div>
+        <div class="row"><span class="chip" style="background:var(--committed)"></span><span>theater holding troops</span></div>
+        <div class="row"><span class="chip" style="background:var(--idle)"></span><span>theater formed, no troops</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="map"></canvas>
+    <p class="note" id="caption">Pick a war to see the fronts it opened.</p>
+  </div>
+
+  <div class="card">
+    <h2>Wars</h2>
+    <select id="war"></select>
+    <h2 style="margin-top:.9rem">Fronts opened</h2>
+    <div class="theaters" id="theaters"></div>
+  </div>
+</main>
+
+<script id="theater-data" type="application/json">__THEATER_JSON__</script>
+<script>
+(function () {
+  "use strict";
+  var D = JSON.parse(document.getElementById("theater-data").textContent);
+  var W = D.width, H = D.height, N = W * H;
+  var WATER = 255, UNOWNED = 250;
+
+  function expand(runs, len, Type) {
+    var out = new (Type || Uint8Array)(len), at = 0;
+    for (var i = 0; i < runs.length; i += 2) {
+      for (var j = 0; j < runs[i + 1]; j += 1) out[at++] = runs[i];
+    }
+    return out;
+  }
+  function unb64(s) {
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function hex(v) { var n = parseInt(v.slice(1), 16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+  function mix(a, b, t) {
+    return [Math.round(a[0]+(b[0]-a[0])*t), Math.round(a[1]+(b[1]-a[1])*t), Math.round(a[2]+(b[2]-a[2])*t)];
+  }
+
+  var terrain = expand(D.terrainRuns, N);
+  var owners = expand(D.ownerRuns, N);
+  var regions = expand(D.regionRuns, N, Int16Array);
+  var terrainRgb = D.terrainFills.map(hex);
+  var playerRgb = D.players.map(function (p) { return hex(p.color); });
+  var ownedLut = terrainRgb.map(function (t) {
+    return playerRgb.map(function (p) { return mix(t, p, 0.72); });
+  });
+  var wildLut = terrainRgb.map(function (t) { return mix(t, [216,207,177], 0.16); });
+
+  // A hypsometric ramp: the lens is a value surface, so it reads as one.
+  var RAMP = [[44,63,82],[60,113,131],[127,174,140],[216,194,106],[229,148,63]];
+  function rampAt(t) {
+    var x = Math.max(0, Math.min(0.9999, t)) * (RAMP.length - 1);
+    var i = Math.floor(x);
+    return mix(RAMP[i], RAMP[i + 1], x - i);
+  }
+
+  var canvas = document.getElementById("map");
+  canvas.width = W; canvas.height = H;
+  var ctx = canvas.getContext("2d");
+  var image = ctx.createImageData(W, H);
+
+  var layer = "lens";
+  var viewerIdx = D.viewers.length ? D.viewers[0].index : -1;
+  var warId = D.campaigns.length ? D.campaigns[0].id : null;
+  var selected = null;
+
+  function viewer() {
+    for (var i = 0; i < D.viewers.length; i += 1) if (D.viewers[i].index === viewerIdx) return D.viewers[i];
+    return null;
+  }
+  var fieldCache = {};
+  function field() {
+    var v = viewer();
+    if (!v) return null;
+    if (!fieldCache[v.index]) fieldCache[v.index] = unb64(v.data);
+    return fieldCache[v.index];
+  }
+
+  function draw() {
+    var data = image.data;
+    var f = layer === "lens" ? field() : null;
+    for (var i = 0; i < N; i += 1) {
+      var rgb;
+      if (terrain[i] === 0) {
+        rgb = wildLut[0];
+      } else if (layer === "lens" && f) {
+        rgb = f[i] === 0 ? wildLut[0] : rampAt((f[i] - 1) / 254);
+      } else if (layer === "regions") {
+        var r = regions[i] - 1;
+        // Region hue is arbitrary but stable; the point is where the seams are.
+        rgb = r < 0 ? wildLut[terrain[i]] : rampAt(((r * 37) % 100) / 100);
+      } else {
+        rgb = owners[i] === UNOWNED ? wildLut[terrain[i]] : ownedLut[terrain[i]][owners[i]];
+      }
+      var o = i * 4;
+      data[o] = rgb[0]; data[o+1] = rgb[1]; data[o+2] = rgb[2]; data[o+3] = 255;
+    }
+
+    // Fronts on top, so the lens is read against what it produced.
+    var list = warTheaters();
+    for (var k = 0; k < list.length; k += 1) {
+      var t = list[k];
+      var committed = t.allocation > 0;
+      var tint = committed ? [229,148,63] : [102,167,189];
+      var strong = selected === null || selected === t.id;
+      var cells = t.boundaryCells;
+      for (var c = 0; c < cells.length; c += 1) paint(data, cells[c], tint, strong ? 0.85 : 0.25);
+      if (strong) {
+        for (var q = 0; q < t.objectiveCells.length; q += 1) paint(data, t.objectiveCells[q], [255,255,255], 0.8);
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+  }
+  function paint(data, index, rgb, alpha) {
+    if (index < 0 || index >= N) return;
+    var o = index * 4;
+    data[o] = Math.round(data[o]*(1-alpha)+rgb[0]*alpha);
+    data[o+1] = Math.round(data[o+1]*(1-alpha)+rgb[1]*alpha);
+    data[o+2] = Math.round(data[o+2]*(1-alpha)+rgb[2]*alpha);
+  }
+
+  function warTheaters() {
+    return D.theaters.filter(function (t) { return t.campaignId === warId; })
+      .sort(function (a, b) { return b.allocation - a.allocation || b.strategicValue - a.strategicValue; });
+  }
+
+  function renderTheaters() {
+    var host = document.getElementById("theaters");
+    var list = warTheaters();
+    if (!list.length) { host.innerHTML = '<div class="empty">This war has opened no fronts.</div>'; return; }
+    host.innerHTML = "";
+    list.forEach(function (t) {
+      var v = viewer();
+      var belief = v && v.beliefs[t.regionId] ? v.beliefs[t.regionId] : null;
+      var seen = v ? v.seenAt[t.regionId] : -1;
+      var el = document.createElement("div");
+      el.className = "theater" + (t.allocation > 0 ? " committed" : "");
+      el.setAttribute("aria-selected", String(selected === t.id));
+      el.tabIndex = 0;
+      el.innerHTML =
+        '<div class="head"><span class="rid">region ' + t.regionId + '</span>'
+        + '<span class="val">' + t.strategicValue.toFixed(1) + '</span></div>'
+        + '<div class="sub"><span class="pill ' + (t.allocation > 0 ? "committed" : "idle") + '">'
+        + (t.allocation > 0 ? t.allocation.toLocaleString() + " troops" : "no troops") + '</span></div>'
+        + '<div class="sub"><span>resist ' + t.resistance.toFixed(1) + '</span>'
+        + '<span>supply ' + t.supplyQuality.toFixed(2) + '</span>'
+        + '<span>' + t.boundaryCells.length + ' cells</span></div>'
+        + (belief ? '<div class="sub"><span>prize ' + belief.prize.toFixed(2) + '</span>'
+            + '<span>open ' + belief.undefended.toFixed(2) + '</span>'
+            + '<span>' + (seen < 0 ? "never seen" : "seen t" + seen) + '</span></div>' : "");
+      el.onclick = function () { selected = selected === t.id ? null : t.id; renderTheaters(); draw(); };
+      el.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.onclick(); } };
+      host.appendChild(el);
+    });
+    var pressed = list.filter(function (t) { return t.allocation > 0; }).length;
+    document.getElementById("caption").textContent =
+      pressed + " of " + list.length + " fronts hold troops"
+      + (pressed < D.maximumActiveTheaters
+        ? " — below the cap of " + D.maximumActiveTheaters + ", so this border offered no more to choose from."
+        : " — at the cap of " + D.maximumActiveTheaters + ".");
+  }
+
+  // --- controls -------------------------------------------------------------
+  var layers = [["lens","Settle lens"],["owners","Who holds what"],["regions","Region seams"]];
+  var layerHost = document.getElementById("layers");
+  layers.forEach(function (pair) {
+    var b = document.createElement("button");
+    b.textContent = pair[1];
+    b.setAttribute("aria-pressed", String(layer === pair[0]));
+    b.onclick = function () {
+      layer = pair[0];
+      [].forEach.call(layerHost.children, function (c, i) {
+        c.setAttribute("aria-pressed", String(layers[i][0] === layer));
+      });
+      document.getElementById("ramp-note").textContent =
+        layer === "lens" ? "low value to high, as this player reads it"
+        : layer === "regions" ? "region identity, arbitrary hue" : "realm colour over terrain";
+      draw();
+    };
+    layerHost.appendChild(b);
+  });
+
+  var viewerSelect = document.getElementById("viewer");
+  D.viewers.forEach(function (v) {
+    var o = document.createElement("option");
+    o.value = String(v.index);
+    o.textContent = D.players[v.index].realm;
+    viewerSelect.appendChild(o);
+  });
+  viewerSelect.onchange = function () { viewerIdx = Number(viewerSelect.value); renderTheaters(); draw(); };
+
+  var warSelect = document.getElementById("war");
+  D.campaigns.forEach(function (c) {
+    var o = document.createElement("option");
+    o.value = c.id;
+    o.textContent = D.players[c.attacker].realm + " → " + D.players[c.target].realm;
+    warSelect.appendChild(o);
+  });
+  warSelect.onchange = function () {
+    warId = warSelect.value; selected = null;
+    var war = D.campaigns.filter(function (c) { return c.id === warId; })[0];
+    // Follow the attacker: the lens that matters is the one doing the pressing.
+    if (war && D.viewers.some(function (v) { return v.index === war.attacker; })) {
+      viewerIdx = war.attacker; viewerSelect.value = String(viewerIdx);
+    }
+    renderTheaters(); draw();
+  };
+
+  document.getElementById("world").textContent = D.worldName;
+  document.getElementById("f-tick").textContent = D.tick.toLocaleString();
+  document.getElementById("f-regions").textContent = D.regionCount;
+  document.getElementById("f-wars").textContent = D.campaigns.length;
+  document.getElementById("f-theaters").textContent = D.theaters.length;
+  document.getElementById("f-cap").textContent = D.maximumActiveTheaters;
+
+  renderTheaters();
+  draw();
+})();
+</script>
