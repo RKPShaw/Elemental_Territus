@@ -15,8 +15,10 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Deep checkpoints cost roughly a minute each and are opt-in:
- *   DETERMINISM_DEEP=1 node --import tsx --test tests/determinism.test.ts
+ * Checkpoints are shallower than the world's age would suggest. Fifty players
+ * make a tick roughly forty times more expensive than five did, so the routine
+ * gate stops at 200 ticks and the 600-tick checkpoints are opt-in:
+ *   DETERMINISM_DEEP=1 npm run test:determinism
  */
 
 interface Checkpoint {
@@ -30,25 +32,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 120, world: "45188a9be1b061dc8aa1a11d3b8fa592", cells: "37b3d58eab3cf32b" },
-      { tick: 600, world: "7580b54d4f731cc09b7b794977936fd2", cells: "bfbea5608b9aa7ec" },
-      { tick: 1400, world: "90114607087b3daacf128b65f209d59b", cells: "74844744c1c8ec0e", deep: true },
+      { tick: 60, world: "14cc1c988c9ef1a5ac6fa63711d56e9b", cells: "85594ff96c770cd1" },
+      { tick: 200, world: "7ebde767f1aea959c890185666f0fc7b", cells: "9df5ca4bfefe522e" },
+      { tick: 600, world: "700e82d44032808ab65c2a0bf00c4a1c", cells: "c5f28b9d507d9059", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 120, world: "8635f6eb1fe95e2fd9570e2dd747345d", cells: "2afa9ea6f5fd0e1d" },
-      { tick: 600, world: "d68bcc03a36bbc09e8210a7d338bf7d3", cells: "b7bd11c2d792a2c2" },
-      { tick: 1400, world: "3a14bfef8c5ae1018f54740311d2bf6a", cells: "3859e9abf1f18743", deep: true },
+      { tick: 60, world: "c302f8895dbd9ad8d4d1c2c30c83eb30", cells: "34a92cb8b0543897" },
+      { tick: 200, world: "44d57d4e25801056adad85a8bd2172e8", cells: "b72cf12b1d86b91b" },
+      { tick: 600, world: "0ba1b3ee423f36e9c9fca03b7b773a8a", cells: "58c55ae3aaa3f230", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 120, world: "0a8da5c8eb01c809fbe51e8828a7acd6", cells: "d79ad020acdfdbfc" },
-      { tick: 600, world: "7ba69e09ddd64ed15f1e783a487a3134", cells: "ca49f4337bc7c81a" },
-      { tick: 1400, world: "5ecc7358d6320bdcbd7b63600105f860", cells: "72c00ba281b61e6c", deep: true },
+      { tick: 60, world: "0b93e0af626b97b5a771786355bb40fd", cells: "743513b6ce50bac2" },
+      { tick: 200, world: "f58c3a4641b3361a4de25674421dcb4b", cells: "7f8d072e6e67a7b5" },
+      { tick: 600, world: "a31b800517aec54c2b2dcbad3f49fb8a", cells: "0e2d1ae4801dc272", deep: true },
     ],
   },
 ];
