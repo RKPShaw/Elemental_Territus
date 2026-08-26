@@ -1,3 +1,4 @@
+import { markCellsChanged } from "../structure-index";
 import { PLAYERS } from "../players";
 import { getRelation, isAtWar } from "../diplomacy";
 import { realmMatchup } from "../elements";
@@ -43,6 +44,7 @@ function captureEnemyTile(
   const capturedStructureLevel = tile.structureLevel;
   const capturedCapital = tile.capitalOf === defender;
   tile.owner = campaign.attacker;
+  markCellsChanged(state);
   tile.pressure = 0;
   tile.pressureBy = null;
   tile.capturedAt = state.tick;
@@ -142,6 +144,7 @@ function settleWildernessTile(
   theater.lastAdvanceAt = state.tick;
   theater.captures += 1;
   tile.owner = campaign.attacker;
+  markCellsChanged(state);
   tile.pressure = 0;
   tile.pressureBy = null;
   tile.capturedAt = state.tick;

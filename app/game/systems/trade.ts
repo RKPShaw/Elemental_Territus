@@ -7,6 +7,7 @@ import {
   structureCells,
   surroundingIndices,
 } from "../grid";
+import { cellRevision } from "../structure-index";
 import { realmSubject } from "../reporting";
 import {
   ECONOMY_RULES,
@@ -444,28 +445,69 @@ function buildRailNetwork(state: WorldState): TradeRoute[] {
   return routes;
 }
 
+const ROUTE_OWNERS = new WeakMap<TradeRoute, { revision: number; owners: PlayerId[] }>();
+
+/**
+ * Distinct owners along a route, in first-appearance order.
+ *
+ * Cached against the cell revision, because a route's ground changes only when
+ * territory does. Recomputing it walked the whole path, and it is asked for
+ * every route on every path search: a spawning factory retries destinations
+ * until one connects, so at a hundred players this ran hundreds of thousands of
+ * times a tick and was most of the trade system's cost.
+ */
+function routePathOwners(state: WorldState, route: TradeRoute): readonly PlayerId[] {
+  const revision = cellRevision(state);
+  const cached = ROUTE_OWNERS.get(route);
+  if (cached && cached.revision === revision) return cached.owners;
+  const owners: PlayerId[] = [];
+  for (const index of route.pathIndices) {
+    const owner = state.cells[index]!.owner;
+    if (owner !== null && !owners.includes(owner)) owners.push(owner);
+  }
+  ROUTE_OWNERS.set(route, { revision, owners });
+  return owners;
+}
+
 function routeAllowedForTrain(state: WorldState, route: TradeRoute, trainOwner: PlayerId): boolean {
-  const owners = new Set(
-    route.pathIndices
-      .map((index) => state.cells[index]!.owner)
-      .filter((owner): owner is PlayerId => owner !== null),
-  );
-  return [...owners].every((owner) => canTrade(state, trainOwner, owner));
+  for (const owner of routePathOwners(state, route)) {
+    if (!canTrade(state, trainOwner, owner)) return false;
+  }
+  return true;
+}
+
+type RailAdjacency = Map<number, Array<{ index: number; route: TradeRoute }>>;
+
+/**
+ * The rail graph this owner is allowed to run on. Identical in content and
+ * insertion order to building it inline, but built once per owner rather than
+ * once per attempted destination.
+ */
+function railAdjacencyFor(
+  state: WorldState,
+  routes: readonly TradeRoute[],
+  trainOwner: PlayerId,
+): RailAdjacency {
+  const adjacency: RailAdjacency = new Map();
+  const link = (from: number, to: number, route: TradeRoute) => {
+    const existing = adjacency.get(from);
+    if (existing) existing.push({ index: to, route });
+    else adjacency.set(from, [{ index: to, route }]);
+  };
+  for (const route of routes) {
+    if (route.kind !== "rail" || !routeAllowedForTrain(state, route, trainOwner)) continue;
+    link(route.startIndex, route.endIndex, route);
+    link(route.endIndex, route.startIndex, route);
+  }
+  return adjacency;
 }
 
 function shortestRailPath(
   state: WorldState,
-  routes: TradeRoute[],
+  adjacency: RailAdjacency,
   source: number,
   destination: number,
-  trainOwner: PlayerId,
 ): RailJourney | null {
-  const adjacency = new Map<number, Array<{ index: number; route: TradeRoute }>>();
-  for (const route of routes) {
-    if (route.kind !== "rail" || !routeAllowedForTrain(state, route, trainOwner)) continue;
-    adjacency.set(route.startIndex, [...(adjacency.get(route.startIndex) ?? []), { index: route.endIndex, route }]);
-    adjacency.set(route.endIndex, [...(adjacency.get(route.endIndex) ?? []), { index: route.startIndex, route }]);
-  }
   if (!adjacency.has(source) || !adjacency.has(destination)) return null;
   const distances = new Map<number, number>([[source, 0]]);
   const previous = new Map<number, { index: number; route: TradeRoute }>();
@@ -726,8 +768,20 @@ function spawnTrains(context: SimulationContext): void {
   const stations = new Set(state.tradeRoutes.flatMap((route) => [route.startIndex, route.endIndex]));
   const factories = PLAYER_ORDER.flatMap((owner) => structureCells(state, owner, "factory"))
     .filter((factory) => stations.has(factory) && dispatchReady(state, "train", factory));
+  // One graph per owner, shared by that owner's factories and by every
+  // destination they retry.
+  const adjacencyByOwner = new Map<PlayerId, RailAdjacency>();
+  const adjacencyFor = (owner: PlayerId): RailAdjacency => {
+    const cached = adjacencyByOwner.get(owner);
+    if (cached) return cached;
+    const built = railAdjacencyFor(state, state.tradeRoutes, owner);
+    adjacencyByOwner.set(owner, built);
+    return built;
+  };
+  let activeTrains = trains.length;
+
   for (const source of factories) {
-    if (state.tradeVehicles.filter((vehicle) => vehicle.kind === "train").length >= TRADE_RULES.trainLimit) break;
+    if (activeTrains >= TRADE_RULES.trainLimit) break;
     const owner = state.cells[source]!.owner;
     if (!owner) continue;
     const pool = [...stations].filter((index) => index !== source && stationOwner(state, index) !== null);
@@ -736,7 +790,7 @@ function spawnTrains(context: SimulationContext): void {
     while (pool.length > 0 && !journey) {
       const choice = random.int(0, pool.length - 1);
       destination = pool.splice(choice, 1)[0]!;
-      journey = shortestRailPath(state, state.tradeRoutes, source, destination, owner);
+      journey = shortestRailPath(state, adjacencyFor(owner), source, destination);
     }
     if (!journey || destination < 0) continue;
     const destinationOwner = stationOwner(state, destination)!;
@@ -770,6 +824,7 @@ function spawnTrains(context: SimulationContext): void {
       dwellRemaining: 0,
     };
     state.tradeVehicles.push(vehicle);
+    activeTrains += 1;
     reserveDispatch(state, vehicle);
     context.report({
       domain: "trade",

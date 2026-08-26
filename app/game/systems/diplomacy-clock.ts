@@ -1,4 +1,5 @@
 
+import { allRelations } from "../diplomacy";
 import { PLAYERS } from "../players";
 import { realmSubject } from "../reporting";
 import { DIPLOMACY_RULES } from "../rules";
@@ -9,7 +10,7 @@ export class DiplomacyClockSystem implements SimulationSystem {
 
   update(context: SimulationContext): void {
     const { state } = context;
-    for (const relation of Object.values(state.relations)) {
+    for (const relation of allRelations(state)) {
       if (
         relation.truceOfferBy &&
         state.tick - relation.truceOfferAt >= DIPLOMACY_RULES.truceOfferDurationTicks

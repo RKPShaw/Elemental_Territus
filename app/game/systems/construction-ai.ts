@@ -1,5 +1,7 @@
 import { PLAYER_ORDER } from "../players";
 import { getRelation, warsFor } from "../diplomacy";
+import { buildDistanceField, distanceAt } from "../distance-field";
+import type { DistanceField } from "../distance-field";
 
 import {
   canPlaceStructureSite,
@@ -24,6 +26,21 @@ import type {
   StructureCounts,
   StructureType,
 } from "../types";
+
+/**
+ * Minimum distance from a tile to any of a set of sites, via a prepared
+ * distance field. The field answers for every tile at once, so scoring no
+ * longer walks the site list per candidate.
+ */
+function nearestFromField(
+  state: SimulationContext["state"],
+  field: DistanceField,
+  index: number,
+  fallback = Number.POSITIVE_INFINITY,
+): number {
+  const cells = distanceAt(field, index);
+  return Number.isFinite(cells) ? cells * normalizedCellLength(state.config) : fallback;
+}
 
 function nearestDistance(
   context: SimulationContext,
@@ -98,7 +115,7 @@ function bestBuildTile(
   structure: StructureType,
   reserved: ReadonlySet<number>,
   sites: BuildIndex,
-  railNodes: readonly number[],
+  railField: DistanceField,
 ): number | null {
   const { state } = context;
   let bestIndex: number | null = null;
@@ -111,8 +128,7 @@ function bestBuildTile(
   const peacefulForeignHubs = PLAYER_ORDER
     .filter((id) => {
       if (id === owner) return false;
-      // A keyed lookup, not a scan: fifty players means 1,225 relations, and
-      // this runs for every rival of every player planning this tick.
+      // A keyed lookup, not a scan over every pair in the world.
       const relation = getRelation(state, owner, id);
       return relation.status !== "war" && relation.tradeActive;
     })
@@ -133,20 +149,28 @@ function bestBuildTile(
     const frontier = isFrontierCell(state, index);
     if ((structure === "city" || structure === "factory") && frontier && !stackingCity) continue;
 
-    const nearestThreat = nearestDistance(context, index, vulnerable);
+    // Only forts and stacking cities read the threat distance, and `vulnerable`
+    // is every boundary cell of every theater aimed at this player -- thousands
+    // late in a large game. Computing it for candidates that never look at it
+    // was the planner's dominant cost.
+    let threatDistance = -1;
+    const nearestThreat = () => {
+      if (threatDistance < 0) threatDistance = nearestDistance(context, index, vulnerable);
+      return threatDistance;
+    };
     if (structure === "fort") {
-      if (vulnerable.length === 0 || nearestThreat > FORT_RADIUS * 1.45) continue;
+      if (vulnerable.length === 0 || nearestThreat() > FORT_RADIUS * 1.45) continue;
     }
 
     let score = context.random.next() * 0.35;
     if (structure === "city") {
-      const nearestRail = nearestDistance(context, index, railNodes);
+      const nearestRail = nearestFromField(state, railField, index);
       if (stackingCity) {
         // Spread cities are stronger station economics. Stacking becomes the
         // deliberate defensive choice when an important urban site is exposed.
         score += -3.2 - Math.max(1, cell.structureLevel) * 0.7;
         if (atWar) score += 4.8;
-        if (nearestThreat < 8) score += 4.2 - nearestThreat * 0.35;
+        if (nearestThreat() < 8) score += 4.2 - nearestThreat() * 0.35;
         if (cell.capitalOf === owner) score += 1.2;
       } else {
         score += TERRAIN_RULES[cell.terrain].sustain * 2.4;
@@ -163,7 +187,7 @@ function bestBuildTile(
       const desiredCityGap = TRADE_RULES.trainRadius * 0.9;
       const nearestFactory = nearestDistance(context, index, ownFactories, desiredFactoryGap);
       const nearestCity = nearestDistance(context, index, ownCities, desiredCityGap);
-      const nearestRail = nearestDistance(context, index, railNodes);
+      const nearestRail = nearestFromField(state, railField, index);
       const nearestForeign = nearestDistance(context, index, peacefulForeignHubs);
       score += Math.max(0, 6.2 - Math.abs(nearestFactory - desiredFactoryGap) * 0.52);
       score += Math.max(0, 4.4 - Math.abs(nearestCity - desiredCityGap) * 0.48);
@@ -189,7 +213,7 @@ function bestBuildTile(
         return total + (nearbyCell.structure === "city" ? 2 + nearbyCell.structureLevel : 1);
       }, 0);
       score += TERRAIN_RULES[cell.terrain].defenseCost * 1.8;
-      score += Math.max(0, 7 - nearestThreat) * 1.5;
+      score += Math.max(0, 7 - nearestThreat()) * 1.5;
       score += Math.min(6, nearbyInfrastructure * 0.65);
     }
     if (score > bestScore) {
@@ -241,7 +265,9 @@ export class ConstructionAiSystem implements SimulationSystem {
     if (state.tick === 0 || state.tick % state.config.constructionInterval !== 0) return;
 
     const sites = buildIndex(state);
+    const { width, height } = state.config;
     const railNodes = [...new Set(state.tradeRoutes.flatMap((route) => route.pathIndices))];
+    const railField = buildDistanceField(railNodes, width, height);
     for (const id of PLAYER_ORDER) {
       const faction = state.factions[id];
       if (!faction.alive) continue;
@@ -261,13 +287,13 @@ export class ConstructionAiSystem implements SimulationSystem {
           cost = nextStructureCost(desired, shadowCounts);
         }
         if (budget < cost) break;
-        let tileIndex = bestBuildTile(context, id, desired, reserved, sites, railNodes);
+        let tileIndex = bestBuildTile(context, id, desired, reserved, sites, railField);
 
         if (tileIndex === null && desired === "fort") {
           desired = desiredInfrastructure(context, id, shadowCounts, false);
           if (!desired) break;
           cost = nextStructureCost(desired, shadowCounts);
-          tileIndex = budget >= cost ? bestBuildTile(context, id, desired, reserved, sites, railNodes) : null;
+          tileIndex = budget >= cost ? bestBuildTile(context, id, desired, reserved, sites, railField) : null;
         }
 
         // An inland realm should not stall its whole program because no harbor
@@ -275,7 +301,7 @@ export class ConstructionAiSystem implements SimulationSystem {
         if (tileIndex === null && desired === "harbor") {
           desired = "factory";
           cost = nextStructureCost(desired, shadowCounts);
-          tileIndex = budget >= cost ? bestBuildTile(context, id, desired, reserved, sites, railNodes) : null;
+          tileIndex = budget >= cost ? bestBuildTile(context, id, desired, reserved, sites, railField) : null;
         }
         if (tileIndex === null) break;
 

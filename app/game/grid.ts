@@ -1,5 +1,7 @@
 import type { PlayerId, WorldState } from "./types";
 import { STRUCTURE_MIN_SPACING, normalizedCellLength } from "./rules";
+import { sharedBorderEdges } from "./borders";
+import { coastalOf, sitesOf } from "./structure-index";
 
 const CARDINAL = [
   [0, -1],
@@ -61,19 +63,13 @@ export function isFrontierCell(state: WorldState, index: number): boolean {
   );
 }
 
+/** Served from the shared border index rather than sweeping the map. */
 export function borderLength(
   state: WorldState,
   first: PlayerId,
   second: PlayerId,
 ): number {
-  let edges = 0;
-  for (let index = 0; index < state.cells.length; index += 1) {
-    if (state.cells[index]!.owner !== first) continue;
-    for (const neighbor of neighborIndices(index, state.config.width, state.config.height)) {
-      if (state.cells[neighbor]!.owner === second) edges += 1;
-    }
-  }
-  return edges;
+  return sharedBorderEdges(state, first, second);
 }
 
 export function frontTargets(
@@ -137,41 +133,61 @@ export function distanceBetween(state: WorldState, first: number, second: number
   return Math.hypot(ax - bx, ay - by) * normalizedCellLength(state.config);
 }
 
+/** Served from the shared structure index rather than sweeping the map. */
 export function structureCells(
   state: WorldState,
   owner: PlayerId,
   structure: WorldState["cells"][number]["structure"],
-): number[] {
-  const result: number[] = [];
-  for (let index = 0; index < state.cells.length; index += 1) {
-    const cell = state.cells[index]!;
-    if (cell.owner === owner && cell.structure === structure) result.push(index);
-  }
-  return result;
+): readonly number[] {
+  return structure === null ? [] : sitesOf(state, owner, structure);
 }
 
-/** A new physical site must be spaced from every structure. City stacking is validated separately. */
+const NO_RESERVATIONS: ReadonlySet<number> = new Set();
+
+/**
+ * A new physical site must be spaced from every structure. City stacking is
+ * validated separately.
+ *
+ * The build planner asks this of ten thousand candidate tiles a tick in a large
+ * game, so the neighbourhood is walked in place. Materialising the disc through
+ * cellsWithin allocated an array per candidate and measured every cell in the
+ * box twice -- once to decide disc membership, once for the spacing test --
+ * when the spacing test alone is the stricter of the two.
+ */
 export function canPlaceStructureSite(
   state: WorldState,
   index: number,
-  reserved: ReadonlySet<number> = new Set(),
+  reserved: ReadonlySet<number> = NO_RESERVATIONS,
 ): boolean {
   if (reserved.has(index)) return false;
-  const cell = state.cells[index];
+  const cells = state.cells;
+  const cell = cells[index];
   if (!cell || cell.terrain === "water" || cell.structure) return false;
-  const searchRadius = STRUCTURE_MIN_SPACING / normalizedCellLength(state.config);
-  for (const candidate of cellsWithin(state, index, searchRadius)) {
-    if (!state.cells[candidate]!.structure && !reserved.has(candidate)) continue;
-    if (distanceBetween(state, index, candidate) < STRUCTURE_MIN_SPACING) return false;
+  const { width, height } = state.config;
+  const lengthScale = normalizedCellLength(state.config);
+  const searchRadius = STRUCTURE_MIN_SPACING / lengthScale;
+  const cx = index % width;
+  const cy = (index - cx) / width;
+  const minY = Math.max(0, Math.ceil(cy - searchRadius));
+  const maxY = Math.min(height - 1, Math.floor(cy + searchRadius));
+  const minX = Math.max(0, Math.ceil(cx - searchRadius));
+  const maxX = Math.min(width - 1, Math.floor(cx + searchRadius));
+  // Compared squared, so the spacing test needs no square root.
+  const limitSquared = searchRadius * searchRadius;
+
+  for (let y = minY; y <= maxY; y += 1) {
+    const dy = y - cy;
+    const row = y * width;
+    for (let x = minX; x <= maxX; x += 1) {
+      const candidate = row + x;
+      if (!cells[candidate]!.structure && !reserved.has(candidate)) continue;
+      const dx = x - cx;
+      if (dx * dx + dy * dy < limitSquared) return false;
+    }
   }
   return true;
 }
 
-export function coastalCells(state: WorldState, owner: PlayerId): number[] {
-  const result: number[] = [];
-  for (let index = 0; index < state.cells.length; index += 1) {
-    const cell = state.cells[index]!;
-    if (cell.owner === owner && cell.coastal) result.push(index);
-  }
-  return result;
+export function coastalCells(state: WorldState, owner: PlayerId): readonly number[] {
+  return coastalOf(state, owner);
 }

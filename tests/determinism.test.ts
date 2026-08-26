@@ -15,6 +15,14 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
+ * This baseline was re-recorded when the frontier and border indexes began
+ * holding their answers for the length of a tick rather than recomputing per
+ * query. That is a gameplay change and it was the point: it also stops the
+ * roster order from deciding who is scored against the freshest map. It was
+ * verified in isolation -- with both snapshots forced to recompute per query
+ * the engine reproduced the previous baseline exactly, which is what proves
+ * the rest of the optimisation pass changed nothing.
+ *
  * Checkpoints are shallower than the world's age would suggest. Fifty players
  * make a tick roughly forty times more expensive than five did, so the routine
  * gate stops at 200 ticks and the 600-tick checkpoints are opt-in:
@@ -32,25 +40,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "14cc1c988c9ef1a5ac6fa63711d56e9b", cells: "85594ff96c770cd1" },
-      { tick: 200, world: "7ebde767f1aea959c890185666f0fc7b", cells: "9df5ca4bfefe522e" },
-      { tick: 600, world: "700e82d44032808ab65c2a0bf00c4a1c", cells: "c5f28b9d507d9059", deep: true },
+      { tick: 60, world: "0e590c4951ab96465a06816c17629b1e", cells: "8f55e109778275e7" },
+      { tick: 200, world: "0addcd8dc13b52ec4f7223a75348e8e3", cells: "126f02ad471368cc" },
+      { tick: 600, world: "c5d8ed5a22acfda3cfb38471bd62a4de", cells: "4d35843e1b378e18", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "c302f8895dbd9ad8d4d1c2c30c83eb30", cells: "34a92cb8b0543897" },
-      { tick: 200, world: "44d57d4e25801056adad85a8bd2172e8", cells: "b72cf12b1d86b91b" },
-      { tick: 600, world: "0ba1b3ee423f36e9c9fca03b7b773a8a", cells: "58c55ae3aaa3f230", deep: true },
+      { tick: 60, world: "0b5614c58570f3adca30c8b29e891251", cells: "4fdf45291be7c9c6" },
+      { tick: 200, world: "d48401af64dd1a5b2175f8bfb622c21d", cells: "36d7975d48445d88" },
+      { tick: 600, world: "4e3fb75293f8bb848de6491f7e25857e", cells: "c749b3a9532f04a7", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "0b93e0af626b97b5a771786355bb40fd", cells: "743513b6ce50bac2" },
-      { tick: 200, world: "f58c3a4641b3361a4de25674421dcb4b", cells: "7f8d072e6e67a7b5" },
-      { tick: 600, world: "a31b800517aec54c2b2dcbad3f49fb8a", cells: "0e2d1ae4801dc272", deep: true },
+      { tick: 60, world: "8776fa7a48a3176a3f30a3580d0cc121", cells: "bc417f8350aebd1c" },
+      { tick: 200, world: "99001151b14904b48d269c53f33df43d", cells: "a476c1fd61d76449" },
+      { tick: 600, world: "83698d679e05b59e462083e9fd02f08c", cells: "68e7eeed43fd183a", deep: true },
     ],
   },
 ];

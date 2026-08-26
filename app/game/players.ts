@@ -12,10 +12,27 @@ import type { ElementDefinition, ElementId, PlayerId } from "./types";
  * The roster is fixed at module load, exactly as ELEMENT_ORDER was, so
  * iteration order is stable and the simulation stays deterministic.
  */
-export const PLAYERS_PER_ELEMENT = 10;
+/**
+ * Players per element, ten by default.
+ *
+ * Overridable through ELEMENTAL_PLAYERS_PER_ELEMENT so performance work can
+ * sweep the roster size and see how each system scales. The roster is still
+ * fixed once the module loads, so a run stays deterministic.
+ */
+export const PLAYERS_PER_ELEMENT = (() => {
+  const raw = typeof process === "undefined"
+    ? undefined
+    : process.env?.ELEMENTAL_PLAYERS_PER_ELEMENT;
+  const parsed = raw === undefined ? Number.NaN : Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+})();
 
-/** Roman numerals read better than digits on a map label. */
+/** Roman numerals read better than digits on a map label; beyond them, digits. */
 const ORDINALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"] as const;
+
+function ordinalLabel(ordinal: number): string {
+  return ORDINALS[ordinal] ?? String(ordinal + 1);
+}
 
 function buildRoster(): PlayerId[] {
   const roster: PlayerId[] = [];
@@ -82,8 +99,8 @@ function buildDefinitions(): Record<PlayerId, PlayerDefinition> {
         id,
         element,
         ordinal,
-        name: `${ELEMENTS[element].name} ${ORDINALS[ordinal] ?? ordinal + 1}`,
-        realmName: `${ELEMENTS[element].realmName} ${ORDINALS[ordinal] ?? ordinal + 1}`,
+        name: `${ELEMENTS[element].name} ${ordinalLabel(ordinal)}`,
+        realmName: `${ELEMENTS[element].realmName} ${ordinalLabel(ordinal)}`,
         color: shadeFor(element, ordinal),
       };
     }

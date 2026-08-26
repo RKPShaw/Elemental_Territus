@@ -4,6 +4,7 @@ import {
   neighborIndices,
   ownedNeighborCount,
 } from "../grid";
+import { frontierTargets } from "../frontier";
 import { smoothCellNoise } from "../random";
 import {
   CAMPAIGN_RULES,
@@ -55,20 +56,16 @@ function targetOwnsCell(state: WorldState, index: number, target: CampaignTarget
   return target === "wilderness" ? cell.owner === null : cell.owner === target;
 }
 
+/**
+ * Cells the attacker can push into. Served from the per-tick frontier index,
+ * which computes every player's frontier in a single pass over the map.
+ */
 export function campaignBoundaryTargets(
   state: WorldState,
   attacker: Campaign["attacker"],
   target: CampaignTarget,
-): number[] {
-  const boundary: number[] = [];
-  for (let index = 0; index < state.cells.length; index += 1) {
-    if (!targetOwnsCell(state, index, target)) continue;
-    if (
-      neighborIndices(index, state.config.width, state.config.height)
-        .some((neighbor) => state.cells[neighbor]!.owner === attacker)
-    ) boundary.push(index);
-  }
-  return boundary;
+): readonly number[] {
+  return frontierTargets(state, attacker, target);
 }
 
 function isFortProtected(state: WorldState, index: number, target: CampaignTarget): boolean {
@@ -118,10 +115,47 @@ function distanceInCells(state: WorldState, first: number, second: number): numb
   return Math.hypot(ax - bx, ay - by);
 }
 
+/**
+ * Coordinates are derived inline rather than through cellCoordinates: this runs
+ * once per region cell per boundary cell while drafting a theater, so a
+ * returned tuple per endpoint dominated it.
+ */
 function nearestDistanceInCells(state: WorldState, index: number, candidates: readonly number[]): number {
+  const width = state.config.width;
+  const ax = index % width;
+  const ay = (index - ax) / width;
   let best = Number.POSITIVE_INFINITY;
-  for (const candidate of candidates) best = Math.min(best, distanceInCells(state, index, candidate));
+  for (const candidate of candidates) {
+    const bx = candidate % width;
+    const by = (candidate - bx) / width;
+    const distance = Math.hypot(ax - bx, ay - by);
+    if (distance < best) best = distance;
+  }
   return best;
+}
+
+/**
+ * Which cells carry rail, as a set.
+ *
+ * Every theater draft asked this, and each answer walked every trade route and
+ * flattened every path -- thousands of cells copied per region per campaign. A
+ * hundred players run a hundred campaigns across several regions each, so the
+ * same set was rebuilt hundreds of times a tick from data that only the trade
+ * system changes, and that system has already finished by the time theaters
+ * refresh. Built once per tick and reused.
+ */
+const RAIL_CELLS = new WeakMap<object, { tick: number; cells: Set<number> }>();
+
+function railCellsFor(state: WorldState): ReadonlySet<number> {
+  const cached = RAIL_CELLS.get(state);
+  if (cached && cached.tick === state.tick) return cached.cells;
+  const cells = new Set<number>();
+  for (const route of state.tradeRoutes) {
+    if (route.kind !== "rail") continue;
+    for (const index of route.pathIndices) cells.add(index);
+  }
+  RAIL_CELLS.set(state, { tick: state.tick, cells });
+  return cells;
 }
 
 function theaterDraft(
@@ -131,28 +165,36 @@ function theaterDraft(
   boundaryCells: number[],
 ): TheaterDraft {
   const region = state.strategicRegions[regionId]!;
-  const targetCells = region.cells.filter((index) => targetOwnsCell(state, index, campaign.target));
+  // Distance to the front is asked of every region cell twice -- once to pick
+  // the corridor, once to score objectives -- and the objective score used to
+  // be recomputed inside the sort comparator, so a region of a few hundred
+  // cells paid for it O(n log n) times over. It is measured once here instead.
+  const targetCells: number[] = [];
+  const frontDistance = new Map<number, number>();
+  for (const index of region.cells) {
+    if (!targetOwnsCell(state, index, campaign.target)) continue;
+    targetCells.push(index);
+    frontDistance.set(index, nearestDistanceInCells(state, index, boundaryCells));
+  }
   const corridor = targetCells.filter(
-    (index) => nearestDistanceInCells(state, index, boundaryCells) <= STRATEGIC_REGION_RULES.objectiveLookaheadCells,
+    (index) => frontDistance.get(index)! <= STRATEGIC_REGION_RULES.objectiveLookaheadCells,
   );
   const opportunityCells = corridor.length > 0 ? corridor : targetCells;
-  const railCells = new Set(
-    state.tradeRoutes
-      .filter((route) => route.kind === "rail")
-      .flatMap((route) => route.pathIndices),
-  );
+  const railCells = railCellsFor(state);
   const objectiveScore = (index: number): number => {
     const cell = state.cells[index]!;
     const rail = railCells.has(index) ? 10 : 0;
     const depth = Math.min(
       STRATEGIC_REGION_RULES.objectiveLookaheadCells,
-      nearestDistanceInCells(state, index, boundaryCells),
+      frontDistance.get(index)!,
     );
     return infrastructureValue(state, index) + terrainOpportunity(cell.terrain as LandTerrainId) * 2 + rail + depth * 0.18;
   };
-  const objectiveCells = [...opportunityCells]
-    .sort((first, second) => objectiveScore(second) - objectiveScore(first))
-    .slice(0, STRATEGIC_REGION_RULES.maximumObjectives);
+  const ranked = opportunityCells.map((index) => ({ index, score: objectiveScore(index) }));
+  ranked.sort((first, second) => second.score - first.score);
+  const objectiveCells = ranked
+    .slice(0, STRATEGIC_REGION_RULES.maximumObjectives)
+    .map((entry) => entry.index);
 
   const terrainProfile = emptyTerrainProfile();
   let xTotal = 0;
