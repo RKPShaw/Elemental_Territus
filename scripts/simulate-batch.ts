@@ -93,25 +93,25 @@ const checkpointSummary = checkpointTicks.map((tick) => {
     const exact = result.checkpoints.find((checkpoint) => checkpoint.requestedTick === tick);
     return exact ? [exact.snapshot] : [];
   });
-  const nations = samples.flatMap((sample) => ELEMENT_ORDER.map((id) => sample.nations[id]));
+  const players = samples.flatMap((sample) => ELEMENT_ORDER.map((id) => sample.players[id]));
   const structureSpend = mean(samples.map((sample) => sample.structureSpend));
   const tradeIncome = mean(samples.map((sample) => sample.trainIncome + sample.shipIncome));
   const ratioOfLifetime = (
-    numerator: (nation: (typeof nations)[number]) => number,
+    numerator: (player: (typeof players)[number]) => number,
   ) => {
-    const lived = nations.reduce((sum, nation) => sum + nation.cumulative.ticksAlive, 0);
+    const lived = players.reduce((sum, player) => sum + player.cumulative.ticksAlive, 0);
     return lived > 0
-      ? nations.reduce((sum, nation) => sum + numerator(nation), 0) / lived
+      ? players.reduce((sum, player) => sum + numerator(player), 0) / lived
       : 0;
   };
   const cityCaptures = mean(samples.map((sample) => sample.citiesCaptured));
   const cityBuilds = mean(samples.map((sample) => sample.citiesBuilt));
   const domesticStops = mean(samples.map((sample) => ELEMENT_ORDER.reduce(
-    (sum, id) => sum + sample.nations[id].cumulative.domesticStopsServed,
+    (sum, id) => sum + sample.players[id].cumulative.domesticStopsServed,
     0,
   )));
   const foreignStops = mean(samples.map((sample) => ELEMENT_ORDER.reduce(
-    (sum, id) => sum + sample.nations[id].cumulative.foreignStopsServed,
+    (sum, id) => sum + sample.players[id].cumulative.foreignStopsServed,
     0,
   )));
   return {
@@ -125,16 +125,16 @@ const checkpointSummary = checkpointTicks.map((tick) => {
     leaderLandSharePct: rounded(mean(samples.map((sample) => sample.leaderLandShare)) * 100),
     landConcentrationHhi: rounded(mean(samples.map((sample) => sample.landConcentrationHhi)), 3),
     treasuryGini: rounded(mean(samples.map((sample) => sample.treasuryGini)), 3),
-    homePopulationPerRealm: rounded(mean(nations.map((nation) => nation.homePopulation))),
-    committedPopulationPerRealm: rounded(mean(nations.map((nation) => nation.committedPopulation))),
-    populationCapPerRealm: rounded(mean(nations.map((nation) => nation.populationCap))),
-    homeRatioPct: rounded(mean(nations.map((nation) => nation.homeRatio)) * 100),
-    growthEfficiencyPct: rounded(mean(nations.map((nation) => nation.growthEfficiency)) * 100),
-    lifetimeBelow20Pct: rounded(ratioOfLifetime((nation) => nation.cumulative.ticksPopulationBelow20) * 100),
-    lifetimeNearPeakPct: rounded(ratioOfLifetime((nation) => nation.cumulative.ticksPopulationNearPeak) * 100),
-    lifetimeOver82Pct: rounded(ratioOfLifetime((nation) => nation.cumulative.ticksPopulationOver82) * 100),
+    homePopulationPerRealm: rounded(mean(players.map((player) => player.homePopulation))),
+    committedPopulationPerRealm: rounded(mean(players.map((player) => player.committedPopulation))),
+    populationCapPerRealm: rounded(mean(players.map((player) => player.populationCap))),
+    homeRatioPct: rounded(mean(players.map((player) => player.homeRatio)) * 100),
+    growthEfficiencyPct: rounded(mean(players.map((player) => player.growthEfficiency)) * 100),
+    lifetimeBelow20Pct: rounded(ratioOfLifetime((player) => player.cumulative.ticksPopulationBelow20) * 100),
+    lifetimeNearPeakPct: rounded(ratioOfLifetime((player) => player.cumulative.ticksPopulationNearPeak) * 100),
+    lifetimeOver82Pct: rounded(ratioOfLifetime((player) => player.cumulative.ticksPopulationOver82) * 100),
     lifetimeCommittedCapPct: rounded(
-      ratioOfLifetime((nation) => nation.cumulative.committedRatioTotal) * 100,
+      ratioOfLifetime((player) => player.cumulative.committedRatioTotal) * 100,
     ),
     citiesOwnedPerRealm: rounded(mean(samples.map((sample) => sample.structuresOwned.city)) / ELEMENT_ORDER.length),
     citySitesOwnedPerRealm: rounded(mean(samples.map((sample) => sample.citySitesOwned)) / ELEMENT_ORDER.length),
@@ -161,25 +161,25 @@ const checkpointSummary = checkpointTicks.map((tick) => {
       ? rounded(foreignStops / (domesticStops + foreignStops) * 100)
       : 0,
     treasuryCappedLifetimePct: rounded(
-      ratioOfLifetime((nation) => nation.cumulative.ticksTreasuryCapped) * 100,
+      ratioOfLifetime((player) => player.cumulative.ticksTreasuryCapped) * 100,
     ),
-    casualtiesPerRealm: rounded(mean(nations.map((nation) => nation.casualties))),
+    casualtiesPerRealm: rounded(mean(players.map((player) => player.casualties))),
     attackingTroopsCommittedPerRealm: rounded(mean(
-      nations.map((nation) => nation.cumulative.attackingTroopsCommitted),
+      players.map((player) => player.cumulative.attackingTroopsCommitted),
     )),
     defendingTroopsCommittedPerRealm: rounded(mean(
-      nations.map((nation) => nation.cumulative.defendingTroopsCommitted),
+      players.map((player) => player.cumulative.defendingTroopsCommitted),
     )),
-    lifetimeAtWarPct: rounded(ratioOfLifetime((nation) => nation.cumulative.ticksAtWar) * 100),
-    lifetimeAlliedPct: rounded(ratioOfLifetime((nation) => nation.cumulative.ticksAllied) * 100),
+    lifetimeAtWarPct: rounded(ratioOfLifetime((player) => player.cumulative.ticksAtWar) * 100),
+    lifetimeAlliedPct: rounded(ratioOfLifetime((player) => player.cumulative.ticksAllied) * 100),
     warsDeclaredPerWorld: rounded(mean(samples.map((sample) =>
-      ELEMENT_ORDER.reduce((sum, id) => sum + sample.nations[id].cumulative.warsDeclared, 0)
+      ELEMENT_ORDER.reduce((sum, id) => sum + sample.players[id].cumulative.warsDeclared, 0)
     ))),
     alliancesFormedPerWorld: rounded(mean(samples.map((sample) =>
-      ELEMENT_ORDER.reduce((sum, id) => sum + sample.nations[id].cumulative.alliancesFormed, 0)
+      ELEMENT_ORDER.reduce((sum, id) => sum + sample.players[id].cumulative.alliancesFormed, 0)
     ))),
     betrayalsPerWorld: rounded(mean(samples.map((sample) =>
-      ELEMENT_ORDER.reduce((sum, id) => sum + sample.nations[id].cumulative.alliancesBetrayed, 0)
+      ELEMENT_ORDER.reduce((sum, id) => sum + sample.players[id].cumulative.alliancesBetrayed, 0)
     ))),
     activeWars: rounded(mean(samples.map((sample) => sample.activeWars)), 2),
     activeAlliances: rounded(mean(samples.map((sample) => sample.activeAlliances)), 2),

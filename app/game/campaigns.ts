@@ -1,7 +1,7 @@
-import type { NationId, WorldState } from "./types";
+import type { PlayerId, WorldState } from "./types";
 
 /** Troops currently reserved into active attacks and absent from home growth. */
-export function committedTroopsFor(state: WorldState, faction: NationId): number {
+export function committedTroopsFor(state: WorldState, faction: PlayerId): number {
   return state.campaigns.reduce(
     (total, campaign) =>
       total +
@@ -12,6 +12,6 @@ export function committedTroopsFor(state: WorldState, faction: NationId): number
 }
 
 /** All living troops, whether at home or currently committed to a campaign. */
-export function livingTroopsFor(state: WorldState, faction: NationId): number {
+export function livingTroopsFor(state: WorldState, faction: PlayerId): number {
   return state.factions[faction].troops + committedTroopsFor(state, faction);
 }

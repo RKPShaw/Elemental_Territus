@@ -509,7 +509,7 @@ export function Simulator() {
                   <div><span>Losses</span><strong><SmoothNumber value={chosen.casualties} /></strong></div>
                 </div>
 
-                <div className="absorbed-elements" aria-label="Elements held by this nation">
+                <div className="absorbed-elements" aria-label="Elements held by this player">
                   <span>Elements</span>
                   <div>
                     {chosen.absorbedElements.map((elementId) => (
@@ -724,7 +724,7 @@ export function Simulator() {
               ))}
             </div>
             <p className="terrain-invariant">
-              New sites stay {STRUCTURE_MIN_SPACING.toFixed(1)} world units apart. Train stops pay {compactNumber(TRADE_RULES.domesticTrainStopPayout)} at home or {compactNumber(TRADE_RULES.foreignTrainStopPayout)} to each nation abroad; ships earn {compactNumber(TRADE_RULES.shipPayoutPerTravelTick)} per travel second.
+              New sites stay {STRUCTURE_MIN_SPACING.toFixed(1)} world units apart. Train stops pay {compactNumber(TRADE_RULES.domesticTrainStopPayout)} at home or {compactNumber(TRADE_RULES.foreignTrainStopPayout)} to each player abroad; ships earn {compactNumber(TRADE_RULES.shipPayoutPerTravelTick)} per travel second.
             </p>
           </section>
         </div>

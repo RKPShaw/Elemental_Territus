@@ -1,9 +1,9 @@
 import { warsFor } from "../../app/game/diplomacy";
 import { committedTroopsFor } from "../../app/game/campaigns";
 import { ELEMENTS } from "../../app/game/elements";
-import { NATIONS, NATION_ORDER } from "../../app/game/nations";
+import { PLAYERS, PLAYER_ORDER } from "../../app/game/players";
 import { compactNumber } from "../../app/game/rules";
-import type { NationId, WorldReportEvent, WorldState } from "../../app/game/types";
+import type { PlayerId, WorldReportEvent, WorldState } from "../../app/game/types";
 
 const IMPORTANCE_MARK = {
   routine: " ",
@@ -44,7 +44,7 @@ export function renderHeader(state: WorldState, color: boolean): string {
   const head = `${bold(state.worldName, color)}  ${seasonFor(state.tick)} · Age ${state.age}`;
   const clock = dim(`tick ${state.tick} · seed ${seed}`, color);
   const champion = state.champion
-    ? `  ${paint(`♛ ${NATIONS[state.champion]!.realmName} has united the world`, NATIONS[state.champion]!.color, color)}`
+    ? `  ${paint(`♛ ${PLAYERS[state.champion]!.realmName} has united the world`, PLAYERS[state.champion]!.color, color)}`
     : "";
   return `${head}  ${clock}${champion}`;
 }
@@ -53,17 +53,17 @@ export function renderHeader(state: WorldState, color: boolean): string {
  * The leaderboard: the strongest realms by land, plus what became of the rest.
  *
  * Fifty rows is not a standings table, so only the leaders are listed and the
- * remainder is summarised. Elements are reported alongside, since ten nations
+ * remainder is summarised. Elements are reported alongside, since ten players
  * share each one and the family totals are what a player reads the board for.
  */
 export function renderStandings(state: WorldState, color: boolean, limit = 12): string {
-  const living = NATION_ORDER
+  const living = PLAYER_ORDER
     .map((id) => state.factions[id]!)
     .filter((faction) => faction.alive)
     .sort((first, second) => second.territory - first.territory);
 
   const rows = living.slice(0, limit).map((faction) => {
-    const definition = NATIONS[faction.id]!;
+    const definition = PLAYERS[faction.id]!;
     const share = (faction.territory / state.landTiles) * 100;
     const committed = committedTroopsFor(state, faction.id);
     const wars = warsFor(state, faction.id).length;
@@ -84,7 +84,7 @@ export function renderStandings(state: WorldState, color: boolean, limit = 12): 
     `${padVisible("realm", 12)} ${padVisible("land", 6)} ${padVisible("home", 7)} ${padVisible("away", 7)} ${padVisible("gold", 8)} ${padVisible("structures", 16)} ${padVisible("wars", 6)} doing`,
     color,
   );
-  const fallen = NATION_ORDER.length - living.length;
+  const fallen = PLAYER_ORDER.length - living.length;
   const footer = dim(
     `${living.length} realms standing, ${fallen} fallen` +
     (living.length > limit ? ` · ${living.length - limit} more not shown` : ""),
@@ -113,8 +113,8 @@ export function renderElementSummary(state: WorldState, color: boolean): string 
 }
 
 export function formatEvent(event: WorldReportEvent, color: boolean): string {
-  const realm = event.initiator?.realmId as NationId | undefined;
-  const tint = realm ? (NATIONS[realm]?.color ?? "#f1c46d") : "#f1c46d";
+  const realm = event.initiator?.realmId as PlayerId | undefined;
+  const tint = realm ? (PLAYERS[realm]?.color ?? "#f1c46d") : "#f1c46d";
   return [
     dim(String(event.tick).padStart(5), color),
     IMPORTANCE_MARK[event.importance],

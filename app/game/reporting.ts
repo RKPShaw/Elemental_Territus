@@ -1,10 +1,10 @@
 
-import { NATIONS } from "./nations";
+import { PLAYERS } from "./players";
 import { STRUCTURE_RULES } from "./rules";
 import type {
   Campaign,
   CampaignTarget,
-  NationId,
+  PlayerId,
   ReportImportance,
   ReportEventKind,
   ReportSubject,
@@ -26,11 +26,11 @@ export const ACTION_REPORT_KINDS = {
   "build-warship": ["military.warship-built"],
 } as const satisfies Record<WorldCommand["type"], readonly ReportEventKind[]>;
 
-export function realmSubject(id: NationId): ReportSubject {
+export function realmSubject(id: PlayerId): ReportSubject {
   return {
     type: "realm",
     id,
-    label: NATIONS[id].realmName,
+    label: PLAYERS[id].realmName,
     realmId: id,
   };
 }
@@ -46,21 +46,21 @@ export function campaignSubject(campaign: Campaign): ReportSubject {
     type: "campaign",
     id: campaign.id,
     label: campaign.target === "wilderness"
-      ? `${NATIONS[campaign.attacker].name} settlement campaign`
-      : `${NATIONS[campaign.attacker].name}–${NATIONS[campaign.target].name} campaign`,
+      ? `${PLAYERS[campaign.attacker].name} settlement campaign`
+      : `${PLAYERS[campaign.attacker].name}–${PLAYERS[campaign.target].name} campaign`,
     realmId: campaign.attacker,
   };
 }
 
 export function theaterSubject(
   id: string,
-  attacker: NationId,
+  attacker: PlayerId,
   ordinal?: number,
 ): ReportSubject {
   return {
     type: "theater",
     id,
-    label: `${NATIONS[attacker].name} theater${ordinal === undefined ? "" : ` ${ordinal + 1}`}`,
+    label: `${PLAYERS[attacker].name} theater${ordinal === undefined ? "" : ` ${ordinal + 1}`}`,
     realmId: attacker,
   };
 }
@@ -68,12 +68,12 @@ export function theaterSubject(
 export function structureSubject(
   type: StructureType,
   tileIndex: number,
-  owner: NationId,
+  owner: PlayerId,
 ): ReportSubject {
   return {
     type: "structure",
     id: `${type}:${tileIndex}`,
-    label: `${NATIONS[owner].name} ${STRUCTURE_RULES[type].name.toLowerCase()}`,
+    label: `${PLAYERS[owner].name} ${STRUCTURE_RULES[type].name.toLowerCase()}`,
     realmId: owner,
   };
 }

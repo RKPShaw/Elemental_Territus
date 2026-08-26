@@ -1,4 +1,4 @@
-import { NATION_ORDER } from "../nations";
+import { PLAYER_ORDER } from "../players";
 import { getRelation } from "../diplomacy";
 
 import {
@@ -16,7 +16,7 @@ import {
   normalizedCellLength,
 } from "../rules";
 import type {
-  NationId,
+  PlayerId,
   LandTerrainId,
   SimulationContext,
   SimulationSystem,
@@ -29,7 +29,7 @@ import { isValidWaterPath, waterPathBetweenLandCells } from "../water-navigation
 
 interface RailNode {
   index: number;
-  owner: NationId;
+  owner: PlayerId;
   kind: "city" | "factory";
 }
 
@@ -84,18 +84,18 @@ function dispatchReady(
   return dispatch.activeVehicleId === null && state.tick >= dispatch.readyAt;
 }
 
-function tradeStoryKey(first: NationId, second: NationId, tick: number): string {
+function tradeStoryKey(first: PlayerId, second: PlayerId, tick: number): string {
   const parties = [first, second].sort();
   return `trade:${parties[0]}:${parties[1]}:${Math.floor(tick / 240)}`;
 }
 
-function canTrade(state: WorldState, first: NationId, second: NationId): boolean {
+function canTrade(state: WorldState, first: PlayerId, second: PlayerId): boolean {
   if (first === second) return true;
   const relation = getRelation(state, first, second);
   return relation.status !== "war" && relation.tradeActive;
 }
 
-function stationOwner(state: WorldState, index: number): NationId | null {
+function stationOwner(state: WorldState, index: number): PlayerId | null {
   const cell = state.cells[index]!;
   return cell.structure === "city" || cell.structure === "factory" ? cell.owner : null;
 }
@@ -110,7 +110,7 @@ function routeDistance(state: WorldState, path: number[]): number {
 
 function railNodes(state: WorldState): RailNode[] {
   const nodes: RailNode[] = [];
-  for (const owner of NATION_ORDER) {
+  for (const owner of PLAYER_ORDER) {
     if (!state.factions[owner].alive) continue;
     for (const index of structureCells(state, owner, "city")) nodes.push({ index, owner, kind: "city" });
     for (const index of structureCells(state, owner, "factory")) nodes.push({ index, owner, kind: "factory" });
@@ -373,7 +373,7 @@ function buildRailNetwork(state: WorldState): TradeRoute[] {
 
     // Tradeability is a property of the pair, but the sweep hands `accept` both
     // ends, so one sweep answers for every owner at once. That matters: with
-    // fifty nations, one sweep per owner meant fifty full-grid searches per link.
+    // fifty players, one sweep per owner meant fifty full-grid searches per link.
     if (connected.size === 0) {
       // The first link of a network grows out of a factory and may not exceed
       // the train radius.
@@ -444,11 +444,11 @@ function buildRailNetwork(state: WorldState): TradeRoute[] {
   return routes;
 }
 
-function routeAllowedForTrain(state: WorldState, route: TradeRoute, trainOwner: NationId): boolean {
+function routeAllowedForTrain(state: WorldState, route: TradeRoute, trainOwner: PlayerId): boolean {
   const owners = new Set(
     route.pathIndices
       .map((index) => state.cells[index]!.owner)
-      .filter((owner): owner is NationId => owner !== null),
+      .filter((owner): owner is PlayerId => owner !== null),
   );
   return [...owners].every((owner) => canTrade(state, trainOwner, owner));
 }
@@ -458,7 +458,7 @@ function shortestRailPath(
   routes: TradeRoute[],
   source: number,
   destination: number,
-  trainOwner: NationId,
+  trainOwner: PlayerId,
 ): RailJourney | null {
   const adjacency = new Map<number, Array<{ index: number; route: TradeRoute }>>();
   for (const route of routes) {
@@ -518,7 +518,7 @@ function shortestRailPath(
   };
 }
 
-function addIncome(state: WorldState, owner: NationId, amount: number): void {
+function addIncome(state: WorldState, owner: PlayerId, amount: number): void {
   const faction = state.factions[owner];
   faction.gold = clamp(faction.gold + amount, 0, ECONOMY_RULES.maximumTreasury);
   faction.goldRate += amount;
@@ -580,7 +580,7 @@ function journeyAllowed(state: WorldState, vehicle: TradeVehicle): boolean {
   const owners = new Set(
     vehicle.pathIndices
       .map((index) => state.cells[index]!.owner)
-      .filter((owner): owner is NationId => owner !== null),
+      .filter((owner): owner is PlayerId => owner !== null),
   );
   return [...owners].every((owner) => canTrade(state, vehicle.owner, owner));
 }
@@ -724,7 +724,7 @@ function spawnTrains(context: SimulationContext): void {
   const trains = state.tradeVehicles.filter((vehicle) => vehicle.kind === "train");
   if (trains.length >= TRADE_RULES.trainLimit) return;
   const stations = new Set(state.tradeRoutes.flatMap((route) => [route.startIndex, route.endIndex]));
-  const factories = NATION_ORDER.flatMap((owner) => structureCells(state, owner, "factory"))
+  const factories = PLAYER_ORDER.flatMap((owner) => structureCells(state, owner, "factory"))
     .filter((factory) => stations.has(factory) && dispatchReady(state, "train", factory));
   for (const source of factories) {
     if (state.tradeVehicles.filter((vehicle) => vehicle.kind === "train").length >= TRADE_RULES.trainLimit) break;
@@ -799,7 +799,7 @@ function spawnShips(context: SimulationContext): void {
   const { state, random } = context;
   let shipCount = state.tradeVehicles.filter((vehicle) => vehicle.kind === "ship").length;
   if (shipCount >= TRADE_RULES.shipLimit) return;
-  const harbors = NATION_ORDER.flatMap((owner) => structureCells(state, owner, "harbor"));
+  const harbors = PLAYER_ORDER.flatMap((owner) => structureCells(state, owner, "harbor"));
   for (const source of harbors) {
     if (shipCount >= TRADE_RULES.shipLimit) break;
     if (!dispatchReady(state, "ship", source)) continue;

@@ -1,22 +1,22 @@
-import type { NationId, RelationState, WorldState } from "./types";
+import type { PlayerId, RelationState, WorldState } from "./types";
 
-export function relationKey(first: NationId, second: NationId): string {
+export function relationKey(first: PlayerId, second: PlayerId): string {
   return [first, second].sort().join(":");
 }
 
 export function getRelation(
   state: WorldState,
-  first: NationId,
-  second: NationId,
+  first: PlayerId,
+  second: PlayerId,
 ): RelationState {
   return state.relations[relationKey(first, second)]!;
 }
 
-export function isAtWar(state: WorldState, first: NationId, second: NationId): boolean {
+export function isAtWar(state: WorldState, first: PlayerId, second: PlayerId): boolean {
   return getRelation(state, first, second).status === "war";
 }
 
-export function warsFor(state: WorldState, faction: NationId): RelationState[] {
+export function warsFor(state: WorldState, faction: PlayerId): RelationState[] {
   return Object.values(state.relations).filter(
     (relation) =>
       relation.status === "war" &&
@@ -27,7 +27,7 @@ export function warsFor(state: WorldState, faction: NationId): RelationState[] {
 
 export function peacefulRelationsFor(
   state: WorldState,
-  faction: NationId,
+  faction: PlayerId,
 ): RelationState[] {
   return Object.values(state.relations).filter(
     (relation) =>
@@ -37,7 +37,7 @@ export function peacefulRelationsFor(
   );
 }
 
-export function trucesFor(state: WorldState, faction: NationId): RelationState[] {
+export function trucesFor(state: WorldState, faction: PlayerId): RelationState[] {
   return Object.values(state.relations).filter(
     (relation) =>
       relation.status === "truce" &&
@@ -46,6 +46,6 @@ export function trucesFor(state: WorldState, faction: NationId): RelationState[]
   );
 }
 
-export function otherParty(relation: RelationState, faction: NationId): NationId {
+export function otherParty(relation: RelationState, faction: PlayerId): PlayerId {
   return relation.parties[0] === faction ? relation.parties[1] : relation.parties[0];
 }

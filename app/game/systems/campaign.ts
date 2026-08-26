@@ -1,4 +1,4 @@
-import { NATIONS } from "../nations";
+import { PLAYERS } from "../players";
 import { getRelation, isAtWar } from "../diplomacy";
 import { realmMatchup } from "../elements";
 import { ownedNeighborCount } from "../grid";
@@ -78,7 +78,7 @@ function captureEnemyTile(
         structureLevel: capturedStructureLevel,
         campaignCaptures: campaign.captures,
       },
-      summary: `${NATIONS[campaign.attacker].realmName} captured a ${capturedStructure} belonging to ${NATIONS[defender].realmName}.`,
+      summary: `${PLAYERS[campaign.attacker].realmName} captured a ${capturedStructure} belonging to ${PLAYERS[defender].realmName}.`,
     });
   }
 
@@ -96,25 +96,25 @@ function captureEnemyTile(
         ...(theater ? { theater: theater.id } : {}),
       },
       facts: { tileIndex, campaignCaptures: campaign.captures },
-      summary: `${NATIONS[campaign.attacker].realmName} captured the capital of ${NATIONS[defender].realmName}.`,
+      summary: `${PLAYERS[campaign.attacker].realmName} captured the capital of ${PLAYERS[defender].realmName}.`,
     });
   }
 
   if (capturedCapital) {
     context.emit(
-      `${NATIONS[campaign.attacker].realmName} pushes through the capital of ${NATIONS[defender].realmName}!`,
+      `${PLAYERS[campaign.attacker].realmName} pushes through the capital of ${PLAYERS[defender].realmName}!`,
       "battle",
       campaign.attacker,
     );
   } else if (capturedStructure === "fort") {
     context.emit(
-      `${NATIONS[campaign.attacker].realmName} overruns a fortified sector after paying its doubled invasion cost.`,
+      `${PLAYERS[campaign.attacker].realmName} overruns a fortified sector after paying its doubled invasion cost.`,
       "battle",
       campaign.attacker,
     );
   } else if (campaign.captures % 70 === 0) {
     context.emit(
-      `${NATIONS[campaign.attacker].realmName} has pressed the border forward by ${campaign.captures} tiles in this campaign.`,
+      `${PLAYERS[campaign.attacker].realmName} has pressed the border forward by ${campaign.captures} tiles in this campaign.`,
       "rise",
       campaign.attacker,
     );
@@ -164,10 +164,10 @@ function settleWildernessTile(
         campaignCaptures: campaign.captures,
         terrain: tile.terrain,
       },
-      summary: `${NATIONS[campaign.attacker].realmName} reached ${faction.claimedTiles} settled wilderness sectors.`,
+      summary: `${PLAYERS[campaign.attacker].realmName} reached ${faction.claimedTiles} settled wilderness sectors.`,
     });
     context.emit(
-      `${NATIONS[campaign.attacker].realmName} settles its ${faction.claimedTiles}th piece of the unclaimed world.`,
+      `${PLAYERS[campaign.attacker].realmName} settles its ${faction.claimedTiles}th piece of the unclaimed world.`,
       "rise",
       campaign.attacker,
     );
@@ -232,8 +232,8 @@ function finishCampaign(
       duration: context.state.tick - campaign.launchedAt,
     },
     summary: campaign.target === "wilderness"
-      ? `${NATIONS[campaign.attacker].realmName}'s settlement campaign concluded after claiming ${campaign.captures} sectors.`
-      : `${NATIONS[campaign.attacker].realmName}'s campaign against ${NATIONS[campaign.target].realmName} concluded after taking ${campaign.captures} sectors.`,
+      ? `${PLAYERS[campaign.attacker].realmName}'s settlement campaign concluded after claiming ${campaign.captures} sectors.`
+      : `${PLAYERS[campaign.attacker].realmName}'s campaign against ${PLAYERS[campaign.target].realmName} concluded after taking ${campaign.captures} sectors.`,
   });
   context.state.factions[campaign.attacker].troops += survivors;
   if (campaign.target !== "wilderness") {
@@ -243,8 +243,8 @@ function finishCampaign(
   if (announce && campaign.captures > 0) {
     context.emit(
       campaign.target === "wilderness"
-        ? `${NATIONS[campaign.attacker].realmName} closes its settlement campaign after claiming ${campaign.captures} tiles; ${compactNumber(survivors)} settlers return home.`
-        : `${NATIONS[campaign.attacker].realmName} closes its campaign after taking ${campaign.captures} tiles; ${compactNumber(survivors)} troops return to the reserve.`,
+        ? `${PLAYERS[campaign.attacker].realmName} closes its settlement campaign after claiming ${campaign.captures} tiles; ${compactNumber(survivors)} settlers return home.`
+        : `${PLAYERS[campaign.attacker].realmName} closes its campaign after taking ${campaign.captures} tiles; ${compactNumber(survivors)} troops return to the reserve.`,
       campaign.target === "wilderness" ? "rise" : "battle",
       campaign.attacker,
     );
@@ -318,10 +318,10 @@ function processNavalCampaign(context: SimulationContext, campaign: Campaign): v
           warshipsAttacker: attacker.warships,
           warshipsDefender: defender.warships,
         },
-        summary: `${NATIONS[campaign.attacker].realmName}'s naval expedition was destroyed before making landfall.`,
+        summary: `${PLAYERS[campaign.attacker].realmName}'s naval expedition was destroyed before making landfall.`,
       });
       context.emit(
-        `${NATIONS[campaign.attacker].realmName}'s transport fleet is scattered before reaching shore.`,
+        `${PLAYERS[campaign.attacker].realmName}'s transport fleet is scattered before reaching shore.`,
         "battle",
         campaign.target,
       );
@@ -379,10 +379,10 @@ function processNavalCampaign(context: SimulationContext, campaign: Campaign): v
       participants: [campaignSubject(campaign)],
       links: { campaign: campaign.id },
       facts: { tileIndex: targetIndex, troopsRemaining: campaign.remaining },
-      summary: `${NATIONS[campaign.attacker].realmName} established a beachhead in ${NATIONS[campaign.target].realmName}.`,
+      summary: `${PLAYERS[campaign.attacker].realmName} established a beachhead in ${PLAYERS[campaign.target].realmName}.`,
     });
     context.emit(
-      `${NATIONS[campaign.attacker].realmName} establishes a beachhead with ${compactNumber(campaign.remaining)} troops still ashore.`,
+      `${PLAYERS[campaign.attacker].realmName} establishes a beachhead with ${compactNumber(campaign.remaining)} troops still ashore.`,
       "battle",
       campaign.attacker,
     );

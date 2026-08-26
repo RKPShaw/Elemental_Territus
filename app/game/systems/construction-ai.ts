@@ -1,4 +1,4 @@
-import { NATION_ORDER } from "../nations";
+import { PLAYER_ORDER } from "../players";
 import { getRelation, warsFor } from "../diplomacy";
 
 import {
@@ -18,7 +18,7 @@ import {
   normalizedCellLength,
 } from "../rules";
 import type {
-  NationId,
+  PlayerId,
   SimulationContext,
   SimulationSystem,
   StructureCounts,
@@ -44,22 +44,22 @@ function nearestDistance(
 }
 
 interface BuildIndex {
-  /** Land cells each nation owns, ascending, so scans stay in map order. */
-  cellsByOwner: Map<NationId, number[]>;
-  /** Structure sites each nation owns, by type. */
-  structuresByOwner: Map<NationId, Record<StructureType, number[]>>;
+  /** Land cells each player owns, ascending, so scans stay in map order. */
+  cellsByOwner: Map<PlayerId, number[]>;
+  /** Structure sites each player owns, by type. */
+  structuresByOwner: Map<PlayerId, Record<StructureType, number[]>>;
 }
 
 /**
- * One pass over the map, shared by every nation's planning this tick.
+ * One pass over the map, shared by every player's planning this tick.
  *
- * The planner used to re-scan all seventeen thousand cells for each nation, for
+ * The planner used to re-scan all seventeen thousand cells for each player, for
  * each candidate project, and again for each rival whose trade hubs it wanted
- * to sit near. That is affordable with five nations and ruinous with fifty.
+ * to sit near. That is affordable with five players and ruinous with fifty.
  */
 function buildIndex(state: SimulationContext["state"]): BuildIndex {
-  const cellsByOwner = new Map<NationId, number[]>();
-  const structuresByOwner = new Map<NationId, Record<StructureType, number[]>>();
+  const cellsByOwner = new Map<PlayerId, number[]>();
+  const structuresByOwner = new Map<PlayerId, Record<StructureType, number[]>>();
   for (let index = 0; index < state.cells.length; index += 1) {
     const cell = state.cells[index]!;
     const owner = cell.owner;
@@ -80,7 +80,7 @@ const NO_STRUCTURES: Record<StructureType, number[]> = {
   city: [], fort: [], factory: [], harbor: [],
 };
 
-function vulnerableBoundaryCells(context: SimulationContext, owner: NationId): number[] {
+function vulnerableBoundaryCells(context: SimulationContext, owner: PlayerId): number[] {
   const campaignIds = new Set(
     context.state.campaigns
       .filter((campaign) => campaign.target === owner && campaign.remaining > 0)
@@ -94,7 +94,7 @@ function vulnerableBoundaryCells(context: SimulationContext, owner: NationId): n
 
 function bestBuildTile(
   context: SimulationContext,
-  owner: NationId,
+  owner: PlayerId,
   structure: StructureType,
   reserved: ReadonlySet<number>,
   sites: BuildIndex,
@@ -108,11 +108,11 @@ function bestBuildTile(
   const ownFactories = ownSites.factory;
   const ownCities = ownSites.city;
   const vulnerable = vulnerableBoundaryCells(context, owner);
-  const peacefulForeignHubs = NATION_ORDER
+  const peacefulForeignHubs = PLAYER_ORDER
     .filter((id) => {
       if (id === owner) return false;
-      // A keyed lookup, not a scan: fifty nations means 1,225 relations, and
-      // this runs for every rival of every nation planning this tick.
+      // A keyed lookup, not a scan: fifty players means 1,225 relations, and
+      // this runs for every rival of every player planning this tick.
       const relation = getRelation(state, owner, id);
       return relation.status !== "war" && relation.tradeActive;
     })
@@ -202,7 +202,7 @@ function bestBuildTile(
 
 function desiredInfrastructure(
   context: SimulationContext,
-  owner: NationId,
+  owner: PlayerId,
   counts: StructureCounts,
   allowFort = true,
 ): StructureType | null {
@@ -242,7 +242,7 @@ export class ConstructionAiSystem implements SimulationSystem {
 
     const sites = buildIndex(state);
     const railNodes = [...new Set(state.tradeRoutes.flatMap((route) => route.pathIndices))];
-    for (const id of NATION_ORDER) {
+    for (const id of PLAYER_ORDER) {
       const faction = state.factions[id];
       if (!faction.alive) continue;
       const shadowCounts = { ...faction.structures };

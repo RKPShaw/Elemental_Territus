@@ -1,4 +1,4 @@
-import { NATION_ORDER } from "../nations";
+import { PLAYER_ORDER } from "../players";
 import { warsFor } from "../diplomacy";
 import { committedTroopsFor } from "../campaigns";
 
@@ -10,16 +10,16 @@ import {
   normalizedCellArea,
   populationGrowthEfficiency,
 } from "../rules";
-import type { NationId, SimulationContext, SimulationSystem } from "../types";
+import type { PlayerId, SimulationContext, SimulationSystem } from "../types";
 
 export class EconomySystem implements SimulationSystem {
   readonly id = "troop-and-gold-economy";
 
   update({ state }: SimulationContext): void {
     const cellArea = normalizedCellArea(state.config);
-    // Keyed by nation, not by element: ten nations share each element, so a
+    // Keyed by player, not by element: ten players share each element, so a
     // fixed five-key tally would silently drop every owner's income.
-    const landIncome = new Map<NationId, number>();
+    const landIncome = new Map<PlayerId, number>();
     for (const cell of state.cells) {
       if (!cell.owner) continue;
       landIncome.set(
@@ -27,7 +27,7 @@ export class EconomySystem implements SimulationSystem {
         (landIncome.get(cell.owner) ?? 0) + TERRAIN_RULES[cell.terrain].goldYield * cellArea,
       );
     }
-    for (const id of NATION_ORDER) {
+    for (const id of PLAYER_ORDER) {
       const faction = state.factions[id];
       if (!faction.alive) continue;
       faction.goldRate =

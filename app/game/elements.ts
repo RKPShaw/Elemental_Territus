@@ -1,4 +1,4 @@
-import type { ElementDefinition, ElementId, NationId, WorldState } from "./types";
+import type { ElementDefinition, ElementId, PlayerId, WorldState } from "./types";
 
 export const ELEMENT_ORDER: readonly ElementId[] = [
   "ember",
@@ -95,14 +95,14 @@ export function matchupLabel(attacker: ElementId, defender: ElementId): string {
 }
 
 /**
- * Matchup between two nations, resolved through the elements each has absorbed.
- * Nations rather than elements, because ten nations share every element and a
+ * Matchup between two players, resolved through the elements each has absorbed.
+ * Players rather than elements, because ten players share every element and a
  * conqueror carries whatever it has taken.
  */
 export function realmMatchup(
   state: WorldState,
-  attacker: NationId,
-  defender: NationId,
+  attacker: PlayerId,
+  defender: PlayerId,
 ): number {
   const attackElements = state.factions[attacker].absorbedElements;
   const defenseElements = state.factions[defender].absorbedElements;
@@ -113,8 +113,8 @@ export function realmMatchup(
 
 export function realmMatchupLabel(
   state: WorldState,
-  attacker: NationId,
-  defender: NationId,
+  attacker: PlayerId,
+  defender: PlayerId,
 ): string {
   const value = realmMatchup(state, attacker, defender);
   if (value > 1) {

@@ -1,4 +1,4 @@
-import { NATION_ORDER } from "./nations";
+import { PLAYER_ORDER } from "./players";
 import { committedTroopsFor, livingTroopsFor } from "./campaigns";
 import { getRelation } from "./diplomacy";
 
@@ -8,14 +8,14 @@ import {
   populationGrowthEfficiency,
 } from "./rules";
 import type {
-  NationId,
+  PlayerId,
   StructureCounts,
   StructureType,
   WorldReportEvent,
   WorldState,
 } from "./types";
 
-export interface NationCumulativeMetrics {
+export interface PlayerCumulativeMetrics {
   structuresBuilt: StructureCounts;
   citySitesBuilt: number;
   structuresCaptured: StructureCounts;
@@ -62,8 +62,8 @@ export interface NationCumulativeMetrics {
   growthEfficiencyTotal: number;
 }
 
-export interface NationBalanceSnapshot {
-  id: NationId;
+export interface PlayerBalanceSnapshot {
+  id: PlayerId;
   alive: boolean;
   landShare: number;
   territory: number;
@@ -93,16 +93,16 @@ export interface NationBalanceSnapshot {
   activeShips: number;
   activeWars: number;
   activeAlliances: number;
-  cumulative: NationCumulativeMetrics;
+  cumulative: PlayerCumulativeMetrics;
 }
 
 export interface WorldBalanceSnapshot {
   tick: number;
   minute: number;
-  champion: NationId | null;
+  champion: PlayerId | null;
   aliveRealms: number;
   settledShare: number;
-  leader: NationId | null;
+  leader: PlayerId | null;
   leaderLandShare: number;
   landConcentrationHhi: number;
   treasuryGini: number;
@@ -135,14 +135,14 @@ export interface WorldBalanceSnapshot {
   eventCounts: Record<string, number>;
   firstEventTicks: Record<string, number>;
   milestones: Record<string, number>;
-  nations: Record<NationId, NationBalanceSnapshot>;
+  players: Record<PlayerId, PlayerBalanceSnapshot>;
 }
 
 function emptyStructures(): StructureCounts {
   return { city: 0, fort: 0, factory: 0, harbor: 0 };
 }
 
-function emptyNationMetrics(): NationCumulativeMetrics {
+function emptyPlayerMetrics(): PlayerCumulativeMetrics {
   return {
     structuresBuilt: emptyStructures(),
     citySitesBuilt: 0,
@@ -191,7 +191,7 @@ function emptyNationMetrics(): NationCumulativeMetrics {
   };
 }
 
-function realmFromTarget(event: WorldReportEvent): NationId | null {
+function realmFromTarget(event: WorldReportEvent): PlayerId | null {
   return event.targets.find((target) => target.type === "realm")?.realmId ?? null;
 }
 
@@ -202,7 +202,7 @@ function structureFrom(event: WorldReportEvent): StructureType | null {
     : null;
 }
 
-function cloneCumulative(metrics: NationCumulativeMetrics): NationCumulativeMetrics {
+function cloneCumulative(metrics: PlayerCumulativeMetrics): PlayerCumulativeMetrics {
   return {
     ...metrics,
     structuresBuilt: { ...metrics.structuresBuilt },
@@ -230,12 +230,12 @@ function addStructure(target: StructureCounts, structure: StructureType, levels 
 }
 
 export class BatchMetricsCollector {
-  private readonly nations = Object.fromEntries(
-    NATION_ORDER.map((id) => [id, emptyNationMetrics()]),
-  ) as Record<NationId, NationCumulativeMetrics>;
+  private readonly players = Object.fromEntries(
+    PLAYER_ORDER.map((id) => [id, emptyPlayerMetrics()]),
+  ) as Record<PlayerId, PlayerCumulativeMetrics>;
   private readonly tradeIncomeThisTick = Object.fromEntries(
-    NATION_ORDER.map((id) => [id, 0]),
-  ) as Record<NationId, number>;
+    PLAYER_ORDER.map((id) => [id, 0]),
+  ) as Record<PlayerId, number>;
   private readonly eventCounts: Record<string, number> = {};
   private readonly firstEventTicks: Record<string, number> = {};
   private readonly milestones: Record<string, number> = {};
@@ -249,68 +249,68 @@ export class BatchMetricsCollector {
     if (event.kind === "infrastructure.structure-built" && actor) {
       const structure = structureFrom(event);
       if (structure) {
-        addStructure(this.nations[actor].structuresBuilt, structure);
-        this.nations[actor].structureSpend += Number(event.facts.cost ?? 0);
-        if (structure === "city" && event.facts.stacked !== true) this.nations[actor].citySitesBuilt += 1;
+        addStructure(this.players[actor].structuresBuilt, structure);
+        this.players[actor].structureSpend += Number(event.facts.cost ?? 0);
+        if (structure === "city" && event.facts.stacked !== true) this.players[actor].citySitesBuilt += 1;
       }
     }
     if (event.kind === "territory.structure-captured" && actor && target) {
       const structure = structureFrom(event);
       if (structure) {
         const levels = structure === "city" ? Math.max(1, Number(event.facts.structureLevel ?? 1)) : 1;
-        addStructure(this.nations[actor].structuresCaptured, structure, levels);
-        addStructure(this.nations[target].structuresLost, structure, levels);
+        addStructure(this.players[actor].structuresCaptured, structure, levels);
+        addStructure(this.players[target].structuresLost, structure, levels);
         if (structure === "city") {
-          this.nations[actor].citySitesCaptured += 1;
-          this.nations[target].citySitesLost += 1;
+          this.players[actor].citySitesCaptured += 1;
+          this.players[target].citySitesLost += 1;
         }
       }
     }
     if (event.kind === "military.warship-built" && actor) {
-      this.nations[actor].warshipSpend += Number(event.facts.cost ?? 0);
+      this.players[actor].warshipSpend += Number(event.facts.cost ?? 0);
     }
     if ((event.kind === "military.campaign-launched" || event.kind === "military.campaign-reinforced") && actor) {
-      this.nations[actor].navalSpend += Number(event.facts.goldCost ?? 0);
-      this.nations[actor].attackingTroopsCommitted += Number(event.facts.troops ?? 0);
-      if (event.kind === "military.campaign-launched") this.nations[actor].campaignsLaunched += 1;
-      else this.nations[actor].campaignsReinforced += 1;
+      this.players[actor].navalSpend += Number(event.facts.goldCost ?? 0);
+      this.players[actor].attackingTroopsCommitted += Number(event.facts.troops ?? 0);
+      if (event.kind === "military.campaign-launched") this.players[actor].campaignsLaunched += 1;
+      else this.players[actor].campaignsReinforced += 1;
     }
     if (event.kind === "military.defense-committed" && actor) {
-      this.nations[actor].defendingTroopsCommitted += Number(event.facts.troops ?? 0);
+      this.players[actor].defendingTroopsCommitted += Number(event.facts.troops ?? 0);
     }
-    if (event.kind === "military.theater-formed" && actor) this.nations[actor].theatersFormed += 1;
-    if (event.kind === "military.theater-victory" && actor) this.nations[actor].theatersWon += 1;
-    if (event.kind === "territory.capital-captured" && actor) this.nations[actor].capitalsCaptured += 1;
-    if (event.kind === "territory.realm-conquered" && actor) this.nations[actor].realmsConquered += 1;
-    if (event.kind === "diplomacy.war-declared" && actor) this.nations[actor].warsDeclared += 1;
-    if (event.kind === "diplomacy.peace-made" && actor) this.nations[actor].peaceTreaties += 1;
-    if (event.kind === "diplomacy.alliance-offered" && actor) this.nations[actor].alliancesOffered += 1;
-    if (event.kind === "diplomacy.alliance-formed" && actor) this.nations[actor].alliancesFormed += 1;
-    if (event.kind === "diplomacy.alliance-betrayed" && actor) this.nations[actor].alliancesBetrayed += 1;
+    if (event.kind === "military.theater-formed" && actor) this.players[actor].theatersFormed += 1;
+    if (event.kind === "military.theater-victory" && actor) this.players[actor].theatersWon += 1;
+    if (event.kind === "territory.capital-captured" && actor) this.players[actor].capitalsCaptured += 1;
+    if (event.kind === "territory.realm-conquered" && actor) this.players[actor].realmsConquered += 1;
+    if (event.kind === "diplomacy.war-declared" && actor) this.players[actor].warsDeclared += 1;
+    if (event.kind === "diplomacy.peace-made" && actor) this.players[actor].peaceTreaties += 1;
+    if (event.kind === "diplomacy.alliance-offered" && actor) this.players[actor].alliancesOffered += 1;
+    if (event.kind === "diplomacy.alliance-formed" && actor) this.players[actor].alliancesFormed += 1;
+    if (event.kind === "diplomacy.alliance-betrayed" && actor) this.players[actor].alliancesBetrayed += 1;
 
     if (event.kind === "trade.train-stop-served" && actor) {
       const ownerIncome = Number(event.facts.ownerIncome ?? 0);
-      this.nations[actor].trainIncomeEarned += ownerIncome;
+      this.players[actor].trainIncomeEarned += ownerIncome;
       this.tradeIncomeThisTick[actor] += ownerIncome;
-      if (event.facts.foreign === true) this.nations[actor].foreignStopsServed += 1;
-      else this.nations[actor].domesticStopsServed += 1;
+      if (event.facts.foreign === true) this.players[actor].foreignStopsServed += 1;
+      else this.players[actor].domesticStopsServed += 1;
       if (target && target !== actor) {
         const hostIncome = Number(event.facts.hostIncome ?? 0);
-        this.nations[target].trainIncomeHosted += hostIncome;
-        this.nations[target].foreignStopsHosted += 1;
+        this.players[target].trainIncomeHosted += hostIncome;
+        this.players[target].foreignStopsHosted += 1;
         this.tradeIncomeThisTick[target] += hostIncome;
       }
     }
     if (event.kind === "trade.journey-completed" && actor) {
-      if (event.facts.vehicleKind === "train") this.nations[actor].trainsCompleted += 1;
+      if (event.facts.vehicleKind === "train") this.players[actor].trainsCompleted += 1;
       if (event.facts.vehicleKind === "ship") {
         const ownerIncome = Number(event.facts.income ?? 0);
-        this.nations[actor].shipsCompleted += 1;
-        this.nations[actor].shipIncomeEarned += ownerIncome;
+        this.players[actor].shipsCompleted += 1;
+        this.players[actor].shipIncomeEarned += ownerIncome;
         this.tradeIncomeThisTick[actor] += ownerIncome;
         if (target && target !== actor) {
           const hostIncome = Number(event.facts.hostIncome ?? 0);
-          this.nations[target].shipIncomeHosted += hostIncome;
+          this.players[target].shipIncomeHosted += hostIncome;
           this.tradeIncomeThisTick[target] += hostIncome;
         }
       }
@@ -328,9 +328,9 @@ export class BatchMetricsCollector {
     if (activeWarPairs > 0) this.milestones.firstWarTick ??= state.tick;
     if (activeAlliancePairs > 0) this.milestones.firstAllianceTick ??= state.tick;
 
-    for (const id of NATION_ORDER) {
+    for (const id of PLAYER_ORDER) {
       const faction = state.factions[id];
-      const metrics = this.nations[id];
+      const metrics = this.players[id];
       if (!faction.alive) {
         this.tradeIncomeThisTick[id] = 0;
         continue;
@@ -384,8 +384,8 @@ export class BatchMetricsCollector {
   };
 
   snapshot(state: WorldState): WorldBalanceSnapshot {
-    const citySites = Object.fromEntries(NATION_ORDER.map((id) => [id, 0])) as Record<NationId, number>;
-    const frontierCells = Object.fromEntries(NATION_ORDER.map((id) => [id, 0])) as Record<NationId, number>;
+    const citySites = Object.fromEntries(PLAYER_ORDER.map((id) => [id, 0])) as Record<PlayerId, number>;
+    const frontierCells = Object.fromEntries(PLAYER_ORDER.map((id) => [id, 0])) as Record<PlayerId, number>;
     let unclaimed = 0;
     for (let index = 0; index < state.cells.length; index += 1) {
       const cell = state.cells[index]!;
@@ -394,14 +394,14 @@ export class BatchMetricsCollector {
       if (cell.structure === "city") citySites[cell.owner] += 1;
       if (isFrontierCell(state, index)) frontierCells[cell.owner] += 1;
     }
-    const livingByNation = NATION_ORDER.map((id) => livingTroopsFor(state, id));
+    const livingByNation = PLAYER_ORDER.map((id) => livingTroopsFor(state, id));
     const totalLiving = livingByNation.reduce((sum, value) => sum + value, 0);
-    const nationSnapshots = {} as Record<NationId, NationBalanceSnapshot>;
-    for (const [position, id] of NATION_ORDER.entries()) {
+    const playerSnapshots = {} as Record<PlayerId, PlayerBalanceSnapshot>;
+    for (const [position, id] of PLAYER_ORDER.entries()) {
       const faction = state.factions[id];
       const committed = committedTroopsFor(state, id);
       const homeRatio = faction.troops / Math.max(1, faction.troopCap);
-      nationSnapshots[id] = {
+      playerSnapshots[id] = {
         id,
         alive: faction.alive,
         landShare: faction.territory / state.landTiles,
@@ -430,28 +430,28 @@ export class BatchMetricsCollector {
         activeTheaters: state.theaters.filter((theater) => theater.attacker === id && theater.staleRefreshes === 0).length,
         activeTrains: state.tradeVehicles.filter((vehicle) => vehicle.owner === id && vehicle.kind === "train").length,
         activeShips: state.tradeVehicles.filter((vehicle) => vehicle.owner === id && vehicle.kind === "ship").length,
-        activeWars: NATION_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "war").length,
-        activeAlliances: NATION_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "truce").length,
-        cumulative: cloneCumulative(this.nations[id]),
+        activeWars: PLAYER_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "war").length,
+        activeAlliances: PLAYER_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "truce").length,
+        cumulative: cloneCumulative(this.players[id]),
       };
     }
 
-    const alive = NATION_ORDER.filter((id) => state.factions[id].alive);
+    const alive = PLAYER_ORDER.filter((id) => state.factions[id].alive);
     const leader = [...alive].sort(
       (first, second) => state.factions[second].territory - state.factions[first].territory,
     )[0] ?? null;
     const structuresOwned = emptyStructures();
-    for (const id of NATION_ORDER) {
+    for (const id of PLAYER_ORDER) {
       for (const structure of Object.keys(structuresOwned) as StructureType[]) {
         structuresOwned[structure] += state.factions[id].structures[structure];
       }
     }
-    const cumulative = NATION_ORDER.map((id) => this.nations[id]);
-    const total = (selector: (metrics: NationCumulativeMetrics) => number) =>
+    const cumulative = PLAYER_ORDER.map((id) => this.players[id]);
+    const total = (selector: (metrics: PlayerCumulativeMetrics) => number) =>
       cumulative.reduce((sum, metrics) => sum + selector(metrics), 0);
-    const totalHome = NATION_ORDER.reduce((sum, id) => sum + state.factions[id].troops, 0);
-    const totalCommitted = NATION_ORDER.reduce((sum, id) => sum + committedTroopsFor(state, id), 0);
-    const totalCap = NATION_ORDER.reduce((sum, id) => sum + state.factions[id].troopCap, 0);
+    const totalHome = PLAYER_ORDER.reduce((sum, id) => sum + state.factions[id].troops, 0);
+    const totalCommitted = PLAYER_ORDER.reduce((sum, id) => sum + committedTroopsFor(state, id), 0);
+    const totalCap = PLAYER_ORDER.reduce((sum, id) => sum + state.factions[id].troopCap, 0);
 
     return {
       tick: state.tick,
@@ -461,19 +461,19 @@ export class BatchMetricsCollector {
       settledShare: 1 - unclaimed / state.landTiles,
       leader,
       leaderLandShare: leader ? state.factions[leader].territory / state.landTiles : 0,
-      landConcentrationHhi: concentration(NATION_ORDER.map((id) => state.factions[id].territory)),
+      landConcentrationHhi: concentration(PLAYER_ORDER.map((id) => state.factions[id].territory)),
       treasuryGini: gini(alive.map((id) => state.factions[id].gold)),
       populationConcentrationHhi: concentration(livingByNation),
       totalHomePopulation: totalHome,
       totalCommittedPopulation: totalCommitted,
       totalPopulationCap: totalCap,
       averageHomeRatio: alive.length > 0
-        ? alive.reduce((sum, id) => sum + nationSnapshots[id].homeRatio, 0) / alive.length
+        ? alive.reduce((sum, id) => sum + playerSnapshots[id].homeRatio, 0) / alive.length
         : 0,
       averageGrowthEfficiency: alive.length > 0
-        ? alive.reduce((sum, id) => sum + nationSnapshots[id].growthEfficiency, 0) / alive.length
+        ? alive.reduce((sum, id) => sum + playerSnapshots[id].growthEfficiency, 0) / alive.length
         : 0,
-      totalTreasury: NATION_ORDER.reduce((sum, id) => sum + state.factions[id].gold, 0),
+      totalTreasury: PLAYER_ORDER.reduce((sum, id) => sum + state.factions[id].gold, 0),
       structuresOwned,
       citySitesOwned: Object.values(citySites).reduce((sum, value) => sum + value, 0),
       stackedCityLevelsOwned: Math.max(0, structuresOwned.city - Object.values(citySites).reduce((sum, value) => sum + value, 0)),
@@ -500,7 +500,7 @@ export class BatchMetricsCollector {
       eventCounts: { ...this.eventCounts },
       firstEventTicks: { ...this.firstEventTicks },
       milestones: { ...this.milestones },
-      nations: nationSnapshots,
+      players: playerSnapshots,
     };
   }
 }

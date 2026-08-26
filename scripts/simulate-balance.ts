@@ -8,10 +8,10 @@ import type { ElementId, WorldState } from "../app/game/types";
 const SEEDS = [0x240823, 7, 42, 12_345, 8_675_309, 20_260_824];
 const CHECKPOINTS = [300, 900, 1_800] as const;
 
-interface NationSample {
+interface PlayerSample {
   checkpoint: number;
   seed: number;
-  nation: ElementId;
+  player: ElementId;
   alive: number;
   homePopulation: number;
   committedPopulation: number;
@@ -64,7 +64,7 @@ interface WorldSample {
   foreignStops: number;
 }
 
-function economyLedger(state: WorldState, nation: ElementId) {
+function economyLedger(state: WorldState, player: ElementId) {
   let structureSpend = 0;
   let trainIncome = 0;
   let shipIncome = 0;
@@ -73,8 +73,8 @@ function economyLedger(state: WorldState, nation: ElementId) {
   let completedTrains = 0;
   let completedShips = 0;
   for (const event of state.reports) {
-    const initiated = event.initiator?.realmId === nation;
-    const hosted = event.targets.some((target) => target.realmId === nation) && !initiated;
+    const initiated = event.initiator?.realmId === player;
+    const hosted = event.targets.some((target) => target.realmId === player) && !initiated;
     if (event.kind === "infrastructure.structure-built" && initiated) {
       structureSpend += Number(event.facts.cost ?? 0);
     }
@@ -108,12 +108,12 @@ function economyLedger(state: WorldState, nation: ElementId) {
   };
 }
 
-function diplomacyCounts(state: WorldState, nation: ElementId): [number, number] {
+function diplomacyCounts(state: WorldState, player: ElementId): [number, number] {
   let allies = 0;
   let wars = 0;
   for (const other of ELEMENT_ORDER) {
-    if (other === nation || !state.factions[other].alive) continue;
-    const status = getRelation(state, nation, other).status;
+    if (other === player || !state.factions[other].alive) continue;
+    const status = getRelation(state, player, other).status;
     if (status === "truce") allies += 1;
     if (status === "war") wars += 1;
   }
@@ -124,20 +124,20 @@ function captureNation(
   state: WorldState,
   seed: number,
   checkpoint: number,
-  nation: ElementId,
-): NationSample {
-  const faction = state.factions[nation];
-  const committedPopulation = committedTroopsFor(state, nation);
-  const [allies, wars] = diplomacyCounts(state, nation);
+  player: ElementId,
+): PlayerSample {
+  const faction = state.factions[player];
+  const committedPopulation = committedTroopsFor(state, player);
+  const [allies, wars] = diplomacyCounts(state, player);
   const homeRatio = faction.troops / Math.max(1, faction.troopCap);
   const citySites = state.cells.filter(
-    (cell) => cell.owner === nation && cell.structure === "city",
+    (cell) => cell.owner === player && cell.structure === "city",
   ).length;
-  const economy = economyLedger(state, nation);
+  const economy = economyLedger(state, player);
   return {
     checkpoint,
     seed,
-    nation,
+    player,
     alive: faction.alive ? 1 : 0,
     homePopulation: faction.troops,
     committedPopulation,
@@ -158,16 +158,16 @@ function captureNation(
     casualties: faction.casualties,
     captures: faction.capturedTiles + faction.claimedTiles,
     activeTrains: state.tradeVehicles.filter(
-      (vehicle) => vehicle.kind === "train" && vehicle.owner === nation,
+      (vehicle) => vehicle.kind === "train" && vehicle.owner === player,
     ).length,
     activeShips: state.tradeVehicles.filter(
-      (vehicle) => vehicle.kind === "ship" && vehicle.owner === nation,
+      (vehicle) => vehicle.kind === "ship" && vehicle.owner === player,
     ).length,
     ...economy,
   };
 }
 
-function mean(samples: NationSample[], key: keyof NationSample): number {
+function mean(samples: PlayerSample[], key: keyof PlayerSample): number {
   return samples.reduce((total, sample) => total + Number(sample[key]), 0) / samples.length;
 }
 
@@ -176,7 +176,7 @@ function rounded(value: number, digits = 0): number {
   return Math.round(value * scale) / scale;
 }
 
-const nations: NationSample[] = [];
+const players: PlayerSample[] = [];
 const worlds: WorldSample[] = [];
 
 for (const seed of SEEDS) {
@@ -186,8 +186,8 @@ for (const seed of SEEDS) {
   for (const checkpoint of CHECKPOINTS) {
     state = engine.step(checkpoint - previousCheckpoint);
     previousCheckpoint = checkpoint;
-    for (const nation of ELEMENT_ORDER) {
-      nations.push(captureNation(state, seed, checkpoint, nation));
+    for (const player of ELEMENT_ORDER) {
+      players.push(captureNation(state, seed, checkpoint, player));
     }
     const unclaimed = state.cells.filter(
       (cell) => cell.terrain !== "water" && cell.owner === null,
@@ -197,7 +197,7 @@ for (const seed of SEEDS) {
       seed,
       actualTick: state.tick,
       settledShare: 1 - unclaimed / state.landTiles,
-      aliveRealms: ELEMENT_ORDER.filter((nation) => state.factions[nation].alive).length,
+      aliveRealms: ELEMENT_ORDER.filter((player) => state.factions[player].alive).length,
       champion: state.champion,
       reports: state.reports.length,
       stories: state.stories.length,
@@ -206,21 +206,21 @@ for (const seed of SEEDS) {
       ).length,
       activeTrains: state.tradeVehicles.filter((vehicle) => vehicle.kind === "train").length,
       activeShips: state.tradeVehicles.filter((vehicle) => vehicle.kind === "ship").length,
-      totalCities: ELEMENT_ORDER.reduce((total, nation) => total + state.factions[nation].structures.city, 0),
+      totalCities: ELEMENT_ORDER.reduce((total, player) => total + state.factions[player].structures.city, 0),
       totalTradeBuildings: ELEMENT_ORDER.reduce(
-        (total, nation) => total + state.factions[nation].structures.factory + state.factions[nation].structures.harbor,
+        (total, player) => total + state.factions[player].structures.factory + state.factions[player].structures.harbor,
         0,
       ),
-      stackedCityLevels: nations
+      stackedCityLevels: players
         .filter((sample) => sample.seed === seed && sample.checkpoint === checkpoint)
         .reduce((total, sample) => total + sample.stackedCityLevels, 0),
-      structureSpend: nations
+      structureSpend: players
         .filter((sample) => sample.seed === seed && sample.checkpoint === checkpoint)
         .reduce((total, sample) => total + sample.structureSpend, 0),
-      trainIncome: nations
+      trainIncome: players
         .filter((sample) => sample.seed === seed && sample.checkpoint === checkpoint)
         .reduce((total, sample) => total + sample.trainIncome, 0),
-      shipIncome: nations
+      shipIncome: players
         .filter((sample) => sample.seed === seed && sample.checkpoint === checkpoint)
         .reduce((total, sample) => total + sample.shipIncome, 0),
       domesticStops: state.reports.filter(
@@ -233,14 +233,14 @@ for (const seed of SEEDS) {
   }
 }
 
-const nationAverages = CHECKPOINTS.flatMap((checkpoint) =>
-  ELEMENT_ORDER.map((nation) => {
-    const samples = nations.filter(
-      (sample) => sample.checkpoint === checkpoint && sample.nation === nation,
+const playerAverages = CHECKPOINTS.flatMap((checkpoint) =>
+  ELEMENT_ORDER.map((player) => {
+    const samples = players.filter(
+      (sample) => sample.checkpoint === checkpoint && sample.player === player,
     );
     return {
       minute: checkpoint / 60,
-      nation: ELEMENTS[nation].name,
+      player: ELEMENTS[player].name,
       survivalPct: rounded(mean(samples, "alive") * 100),
       homePopulation: rounded(mean(samples, "homePopulation")),
       committedPopulation: rounded(mean(samples, "committedPopulation")),
@@ -299,10 +299,10 @@ const worldAverages = CHECKPOINTS.map((checkpoint) => {
 });
 
 const championCounts = Object.fromEntries(
-  ELEMENT_ORDER.map((nation) => [
-    ELEMENTS[nation].name,
+  ELEMENT_ORDER.map((player) => [
+    ELEMENTS[player].name,
     worlds.filter(
-      (sample) => sample.checkpoint === CHECKPOINTS.at(-1) && sample.champion === nation,
+      (sample) => sample.checkpoint === CHECKPOINTS.at(-1) && sample.champion === player,
     ).length,
   ]),
 );
@@ -312,7 +312,7 @@ process.stdout.write(`${JSON.stringify({
   seeds: SEEDS,
   temperament: "Strategic (1.0)",
   checkpoints: CHECKPOINTS,
-  nationAverages,
+  playerAverages,
   worldAverages,
   championCountsAt30Minutes: championCounts,
 }, null, 2)}\n`);

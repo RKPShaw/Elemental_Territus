@@ -6,7 +6,7 @@
  * from a terminal. See `sim.ts help` for the commands.
  */
 import { committedTroopsFor } from "../app/game/campaigns";
-import { NATIONS, NATION_ORDER } from "../app/game/nations";
+import { PLAYERS, PLAYER_ORDER } from "../app/game/players";
 import { ElementalWarEngine } from "../app/game/engine";
 import { latestStories } from "../app/game/reporting";
 import { compactNumber } from "../app/game/rules";
@@ -96,7 +96,7 @@ function commandWatch(): void {
       // The frame for this tick has already been drawn, so only the verdict is
       // left to print; drawing again would report an empty event feed.
       write(dim(
-        champion ? `${NATIONS[champion]!.realmName} united the world at tick ${engine.tick}` : `stopped at tick ${engine.tick}`,
+        champion ? `${PLAYERS[champion]!.realmName} united the world at tick ${engine.tick}` : `stopped at tick ${engine.tick}`,
         color,
       ));
       return;
@@ -172,11 +172,11 @@ function inspectDiplomacy(state: WorldState): void {
     const detail = relation.status === "truce"
       ? `expires tick ${relation.truceUntil}`
       : relation.truceOfferBy
-        ? `${NATIONS[relation.truceOfferBy]!.name} has offered a truce`
+        ? `${PLAYERS[relation.truceOfferBy]!.name} has offered a truce`
         : "";
     write(
-      `  ${paint(NATIONS[first]!.name.padEnd(6), NATIONS[first]!.color, color)} ` +
-      `${paint(NATIONS[second]!.name.padEnd(6), NATIONS[second]!.color, color)} ` +
+      `  ${paint(PLAYERS[first]!.name.padEnd(6), PLAYERS[first]!.color, color)} ` +
+      `${paint(PLAYERS[second]!.name.padEnd(6), PLAYERS[second]!.color, color)} ` +
       `${relation.status.padEnd(6)} trade ${relation.tradeActive ? "open  " : "closed"} ${dim(detail, color)}`,
     );
   }
@@ -194,7 +194,7 @@ function inspectTrade(state: WorldState): void {
   write(heading("longest rail routes"));
   for (const route of [...rail].sort((a, b) => b.value - a.value).slice(0, 10)) {
     write(
-      `  ${paint(NATIONS[route.owner]!.name.padEnd(6), NATIONS[route.owner]!.color, color)} ` +
+      `  ${paint(PLAYERS[route.owner]!.name.padEnd(6), PLAYERS[route.owner]!.color, color)} ` +
       `${String(route.startIndex).padStart(6)} → ${String(route.endIndex).padStart(6)} ` +
       `${route.pathIndices.length.toString().padStart(4)} cells  value ${route.value.toFixed(1)}` +
       `${route.foreign ? dim("  foreign", color) : ""}`,
@@ -206,10 +206,10 @@ function inspectCampaigns(state: WorldState): void {
   write(heading("campaigns"));
   if (state.campaigns.length === 0) write(dim("  none active", color));
   for (const campaign of state.campaigns) {
-    const target = campaign.target === "wilderness" ? "wilderness" : NATIONS[campaign.target]!.name;
+    const target = campaign.target === "wilderness" ? "wilderness" : PLAYERS[campaign.target]!.name;
     const theaters = state.theaters.filter((theater) => theater.campaignId === campaign.id);
     write(
-      `  ${paint(NATIONS[campaign.attacker]!.name.padEnd(6), NATIONS[campaign.attacker]!.color, color)} → ${target.padEnd(11)} ` +
+      `  ${paint(PLAYERS[campaign.attacker]!.name.padEnd(6), PLAYERS[campaign.attacker]!.color, color)} → ${target.padEnd(11)} ` +
       `${campaign.mode.padEnd(6)} committed ${compactNumber(campaign.remaining).padStart(7)} ` +
       `opposed ${compactNumber(campaign.defenderRemaining).padStart(7)} ${theaters.length} theaters`,
     );
@@ -240,10 +240,10 @@ function inspectRegions(state: WorldState): void {
 
 function inspectEconomy(state: WorldState): void {
   write(heading("economy"));
-  for (const id of NATION_ORDER) {
+  for (const id of PLAYER_ORDER) {
     const faction = state.factions[id];
     write(
-      `  ${paint(NATIONS[id]!.name.padEnd(6), NATIONS[id]!.color, color)} ` +
+      `  ${paint(PLAYERS[id]!.name.padEnd(6), PLAYERS[id]!.color, color)} ` +
       `gold ${compactNumber(faction.gold).padStart(8)} ` +
       `income ${compactNumber(faction.goldRate).padStart(7)}/tick ` +
       `population ${compactNumber(faction.troops).padStart(7)}/${compactNumber(faction.troopCap)} ` +
@@ -255,10 +255,10 @@ function inspectEconomy(state: WorldState): void {
 
 function inspectStructures(state: WorldState): void {
   write(heading("structures"));
-  for (const id of NATION_ORDER) {
+  for (const id of PLAYER_ORDER) {
     const faction = state.factions[id];
     write(
-      `  ${paint(NATIONS[id]!.name.padEnd(6), NATIONS[id]!.color, color)} ` +
+      `  ${paint(PLAYERS[id]!.name.padEnd(6), PLAYERS[id]!.color, color)} ` +
       `cities ${String(faction.structures.city).padStart(3)} ` +
       `factories ${String(faction.structures.factory).padStart(3)} ` +
       `harbors ${String(faction.structures.harbor).padStart(3)} ` +

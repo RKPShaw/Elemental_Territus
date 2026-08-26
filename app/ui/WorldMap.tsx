@@ -1176,7 +1176,7 @@ export function WorldMap({
         onPointerLeave={() => setHoveredCell(null)}
         aria-label={mapMode === "theaters"
           ? `${ELEMENTS[selected].name} interpretation of the world's strategic theaters. Green is high value and red is low value.`
-          : `Live political and terrain map of ${state.worldName}. Select a colored nation to inspect it.`}
+          : `Live political and terrain map of ${state.worldName}. Select a colored player to inspect it.`}
       />
       {mapMode === "theaters" && hoveredValue !== null && hoveredBreakdown && tooltipPosition && (
         <div
@@ -1196,7 +1196,7 @@ export function WorldMap({
         <span className="live-pip" />
         {mapMode === "theaters"
           ? `${ELEMENTS[selected].name} · ${THEATER_LAYER_LABELS[theaterLayer]} · tick ${state.tick}`
-          : <>{wars === 0 ? "All nations at peace" : `${wars} active ${wars === 1 ? "war" : "wars"}`}
+          : <>{wars === 0 ? "All players at peace" : `${wars} active ${wars === 1 ? "war" : "wars"}`}
               {truces > 0 ? ` · ${truces} ${truces === 1 ? "alliance" : "alliances"}` : ""} · live tick {state.tick}</>}
       </div>
       {mapMode === "theaters" ? (
@@ -1214,7 +1214,7 @@ export function WorldMap({
         </div>
       )}
       <div className="map-hint" aria-hidden="true">
-        {mapMode === "theaters" ? "select a realm below to compare strategic values" : "tap a nation to inspect its treasury & diplomacy"}
+        {mapMode === "theaters" ? "select a realm below to compare strategic values" : "tap a player to inspect its treasury & diplomacy"}
       </div>
     </div>
   );

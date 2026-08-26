@@ -1,4 +1,4 @@
-import { NATIONS, NATION_ORDER } from "../nations";
+import { PLAYERS, PLAYER_ORDER } from "../players";
 import { ELEMENTS } from "../elements";
 import { getRelation } from "../diplomacy";
 import { realmSubject } from "../reporting";
@@ -11,7 +11,7 @@ export class RealmAccountingSystem implements SimulationSystem {
   update(context: SimulationContext): void {
     const { state } = context;
     const drafts = collectRealmAccounting(state);
-    for (const id of NATION_ORDER) {
+    for (const id of PLAYER_ORDER) {
       const wasAlive = state.factions[id].alive;
       applyRealmAccounting(state, id, drafts[id]);
       if (wasAlive && !state.factions[id].alive) {
@@ -42,13 +42,13 @@ export class RealmAccountingSystem implements SimulationSystem {
             finalTerritory: state.factions[id].territory,
           },
           summary: conquerorId && conqueror?.alive
-            ? `${NATIONS[conquerorId].realmName} conquered ${NATIONS[id].realmName} and absorbed its elemental powers.`
-            : `${NATIONS[id].realmName} lost its final territory without a surviving conqueror.`,
+            ? `${PLAYERS[conquerorId].realmName} conquered ${PLAYERS[id].realmName} and absorbed its elemental powers.`
+            : `${PLAYERS[id].realmName} lost its final territory without a surviving conqueror.`,
         });
         context.emit(
           conquerorId && conqueror?.alive
-            ? `${NATIONS[conquerorId].realmName} conquers ${NATIONS[id].realmName} and absorbs ${state.factions[id].absorbedElements.map((element) => ELEMENTS[element].name).join(" and ")}.`
-            : `${NATIONS[id].realmName} has lost its last piece of sustainable land.`,
+            ? `${PLAYERS[conquerorId].realmName} conquers ${PLAYERS[id].realmName} and absorbs ${state.factions[id].absorbedElements.map((element) => ELEMENTS[element].name).join(" and ")}.`
+            : `${PLAYERS[id].realmName} has lost its last piece of sustainable land.`,
           "fall",
           conquerorId ?? id,
         );

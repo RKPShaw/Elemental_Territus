@@ -1,8 +1,8 @@
 # Elemental Frontiers
 
-A deterministic, self-playing pressure-front strategy simulation. Five elemental
-realms begin at peace, grow troops and economies, declare wars, commit armies,
-and push continuous political borders across land and sea.
+A deterministic, self-playing pressure-front strategy simulation. Fifty players
+across five elemental families begin at peace, grow troops and economies, declare
+wars, commit armies, and push continuous political borders across land and sea.
 
 ## Run locally
 
@@ -66,17 +66,17 @@ The core is deterministic: the same seed, configuration and ordered system list
 produce the same world. This makes balance sweeps, replays, multiplayer lockstep,
 server-authoritative simulation and save migration natural future extensions.
 
-### Nations and elements
+### Players and elements
 
-A nation is not an element. Fifty nations compete, ten sharing each of the five
+A player is not an element. Fifty players compete, ten sharing each of the five
 elements, so siblings inherit an element's matchups, favoured terrain and
 temperament while playing as separate powers with their own territory, treasury
-and diplomacy. `app/game/nations.ts` holds the roster, the element behind each
-id, and a distinct colour per nation; `ElementId` still means the elemental
-character, and `NationId` means the power.
+and diplomacy. `app/game/players.ts` holds the roster, the element behind each
+id, and a distinct colour per player; `ElementId` still means the elemental
+character, and `PlayerId` means the power.
 
 Starts are drafted rather than fixed. Terrain is generated first, then each
-nation in turn takes the best site still available to it, scoring the shared
+player in turn takes the best site still available to it, scoring the shared
 strategic value field against how well the surrounding terrain suits its
 element, with a minimum separation between rivals. The pick order snakes across
 the elements, because picking sequentially is otherwise unfair to whoever picks
@@ -87,7 +87,7 @@ last. `app/game/spawn.ts` owns this; `SPAWN_RULES` in `rules.ts` tunes it.
 - `app/game/types.ts` is the shared domain contract.
 - `app/game/rules.ts` is the centralized balance surface: terrain, buildings,
   diplomacy, economy, troop capacity, spawn placement and campaign constants.
-- `app/game/nations.ts` is the nation roster and the nation-to-element mapping.
+- `app/game/players.ts` is the player roster and the player-to-element mapping.
 - `app/game/world.ts` generates seeded terrain and water, then drafts starts
   through `spawn.ts` and builds the all-peace diplomatic graph.
 - `app/game/engine.ts` owns deterministic stepping and immutable snapshots.
@@ -125,13 +125,13 @@ drive the same simulation safely.
 
 - Every diplomatic pair begins at peace; territory cannot be attacked until a
   formal declaration of war succeeds.
-- Every nation begins with a compact territory, roughly 12–16K home population,
+- Every player begins with a compact territory, roughly 12–16K home population,
   a 20K treasury, and no prebuilt city or factory. Settlement fronts spend
   population while later city development raises capacity toward the 1.5M cap.
-- Nations score, offer and accept ten-minute alliance truces from power parity,
+- Players score, offer and accept ten-minute alliance truces from power parity,
   trade potential, geography and shared threats. A truce can be betrayed only
   for a strong strategic opening.
-- A truce betrayer is exposed for 30 ticks and is 35% easier for every nation to
+- A truce betrayer is exposed for 30 ticks and is 35% easier for every player to
   attack. Betraying an already exposed traitor carries no new traitor penalty.
 - Every war has one directional offensive front owned by its declarer. A defender
   may reserve troops to stunt it; those troops cancel the attacker one-for-one
@@ -161,13 +161,13 @@ drive the same simulation safely.
 - Merchant ships select random destination harbors and use contiguous water-only
   paths. Their fixed velocity makes long voyages last several world minutes;
   payout is 4K per planned travel second and the world supports up to 1,000 ships.
-- Foreign destination nations receive a host share. Either peaceful party may
+- Foreign destination players receive a host share. Either peaceful party may
   close or reopen trade, while war always cancels it.
 - Cities use a separate 25K / 50K / 100K / 250K+ construction ladder; factories
   and harbors share another. Every city level adds exactly 10,000 troop capacity on top of sustainable-land
   capacity, with the realm total hard-capped at 1.5 million.
 - Fallen realms do not remain in active diplomacy or consume war planning.
-- The nation taking a realm's final territory absorbs every element that realm
+- The player taking a realm's final territory absorbs every element that realm
   held. Absorbed elements expand its combat options through a best-attack versus
   best-counter matchup rather than a permanent flat strength bonus.
 

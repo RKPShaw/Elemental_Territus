@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ElementalWarEngine } from "../app/game/engine";
 import { runBatchGame } from "../app/game/batch";
-import { NATION_ORDER } from "../app/game/nations";
+import { PLAYER_ORDER } from "../app/game/players";
 import {
   ENEMY_TERRAIN_COST,
   STRUCTURE_MIN_SPACING,
@@ -132,7 +132,7 @@ test("target campaigns discover theaters and conserve their commitment", () => {
 
   assert.equal(
     state.campaigns.filter((campaign) => campaign.target === "wilderness").length,
-    NATION_ORDER.length,
+    PLAYER_ORDER.length,
   );
   assert.ok(state.theaters.some((theater) => theater.target === "wilderness"));
 
@@ -224,7 +224,7 @@ test("the factual report is complete enough to drive consolidated stories", () =
 
 test("each realm evaluates every strategic theater through its own priorities", () => {
   const state = new ElementalWarEngine(0x240823).step(90);
-  const byRealm = NATION_ORDER.map((realm) => evaluateTheaterMap(state, realm));
+  const byRealm = PLAYER_ORDER.map((realm) => evaluateTheaterMap(state, realm));
   for (const evaluations of byRealm) {
     assert.equal(evaluations.length, state.strategicRegions.length);
     assert.ok(evaluations.every((evaluation) => evaluation.score >= 0 && evaluation.score <= 100));

@@ -1,4 +1,4 @@
-import { NATIONS, NATION_ORDER } from "../nations";
+import { PLAYERS, PLAYER_ORDER } from "../players";
 
 import { realmSubject } from "../reporting";
 import type { SimulationContext, SimulationSystem } from "../types";
@@ -9,7 +9,7 @@ export class VictorySystem implements SimulationSystem {
   update(context: SimulationContext): void {
     const { state } = context;
     if (state.champion) return;
-    const alive = NATION_ORDER.filter((id) => state.factions[id].alive).sort(
+    const alive = PLAYER_ORDER.filter((id) => state.factions[id].alive).sort(
       (a, b) => state.factions[b].territory - state.factions[a].territory,
     );
     const leader = alive[0];
@@ -32,7 +32,7 @@ export class VictorySystem implements SimulationSystem {
         storyKey: `world:${state.seed}`,
         initiator: realmSubject(state.champion),
         targets: [],
-        participants: NATION_ORDER.map(realmSubject),
+        participants: PLAYER_ORDER.map(realmSubject),
         links: {},
         facts: {
           territory: state.factions[state.champion].territory,
@@ -40,10 +40,10 @@ export class VictorySystem implements SimulationSystem {
           absorbedElements: [...state.factions[state.champion].absorbedElements],
           survivingRealms: alive.length,
         },
-        summary: `${NATIONS[state.champion].realmName} united the sustainable world and won the age.`,
+        summary: `${PLAYERS[state.champion].realmName} united the sustainable world and won the age.`,
       });
       context.emit(
-        `${NATIONS[state.champion].realmName} controls the sustainable world and closes the age with one final banner.`,
+        `${PLAYERS[state.champion].realmName} controls the sustainable world and closes the age with one final banner.`,
         "world",
         state.champion,
       );

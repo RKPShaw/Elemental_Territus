@@ -1,8 +1,8 @@
-import { NATIONS, NATION_ORDER } from "./nations";
+import { PLAYERS, PLAYER_ORDER } from "./players";
 import { getRelation } from "./diplomacy";
 import { ELEMENTS, realmMatchup } from "./elements";
 import { cellCoordinates, distanceBetween, neighborIndices, surroundingIndices } from "./grid";
-import type { NationId, LandTerrainId, WorldState } from "./types";
+import type { PlayerId, LandTerrainId, WorldState } from "./types";
 
 export const THEATER_LAYERS = [
   "composite",
@@ -111,7 +111,7 @@ function smoothCellLayer(state: WorldState, source: Float32Array, passes = 2): F
  */
 export function evaluateTheaterCellMaps(
   state: WorldState,
-  viewer: NationId,
+  viewer: PlayerId,
 ): TheaterCellMaps {
   const size = state.cells.length;
   const productivity = state.strategicMeta.productivity.slice();
@@ -131,12 +131,12 @@ export function evaluateTheaterCellMaps(
     faction.absorbedElements.map((element) => ELEMENTS[element].favoredTerrain),
   );
   const [capitalX, capitalY] = cellCoordinates(faction.capitalIndex, state.config.width);
-  const foreignOpportunity = Object.fromEntries(NATION_ORDER.map((owner) => {
+  const foreignOpportunity = Object.fromEntries(PLAYER_ORDER.map((owner) => {
     if (owner === viewer) return [owner, 0.28];
     const relation = getRelation(state, viewer, owner);
     const diplomatic = relation.status === "war" ? 0.94 : relation.status === "peace" ? 0.48 : 0.16;
     return [owner, diplomatic * Math.max(0.72, Math.min(1.28, realmMatchup(state, viewer, owner)))];
-  })) as Record<NationId, number>;
+  })) as Record<PlayerId, number>;
 
   for (let index = 0; index < size; index += 1) {
     const cell = state.cells[index]!;
@@ -193,7 +193,7 @@ export function evaluateTheaterCellMaps(
  */
 export function evaluateTheaterMap(
   state: WorldState,
-  viewer: NationId,
+  viewer: PlayerId,
 ): TheaterIntelligence[] {
   const faction = state.factions[viewer];
   const favoredTerrains = new Set<LandTerrainId>(

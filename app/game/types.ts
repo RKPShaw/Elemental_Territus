@@ -1,11 +1,11 @@
 export type ElementId = "ember" | "tide" | "grove" | "stone" | "gale";
 
 /**
- * A competing power. Ten nations share each element, so a nation carries an
+ * A competing power. Ten players share each element, so a player carries an
  * element without being one. Ids look like "ember-4"; the roster and the
- * element behind each id live in nations.ts.
+ * element behind each id live in players.ts.
  */
-export type NationId = string;
+export type PlayerId = string;
 
 export type TerrainId =
   | "water"
@@ -24,7 +24,7 @@ export type RelationStatus = "peace" | "truce" | "war";
 export type CampaignMode = "settlement" | "land" | "naval";
 
 /** Campaigns are chosen by target, never by a coordinate or a direction. */
-export type CampaignTarget = NationId | "wilderness";
+export type CampaignTarget = PlayerId | "wilderness";
 
 export type RealmPosture =
   | "peaceful"
@@ -69,21 +69,21 @@ export interface StructureRule {
 }
 
 export interface Cell {
-  owner: NationId | null;
+  owner: PlayerId | null;
   terrain: TerrainId;
   structure: StructureType | null;
   /** Cities may vertically develop one site; other structures always remain level one. */
   structureLevel: number;
-  capitalOf: NationId | null;
+  capitalOf: PlayerId | null;
   coastal: boolean;
   pressure: number;
-  pressureBy: NationId | null;
+  pressureBy: PlayerId | null;
   pressureTracked: boolean;
   capturedAt: number;
 }
 
 export interface AiIntent {
-  target: NationId | null;
+  target: PlayerId | null;
   posture: RealmPosture;
   confidence: number;
   plannedCommitment: number;
@@ -98,8 +98,8 @@ export interface StructureCounts {
 }
 
 export interface FactionState {
-  id: NationId;
-  /** The elemental character this nation shares with its nine siblings. */
+  id: PlayerId;
+  /** The elemental character this player shares with its nine siblings. */
   element: ElementId;
   alive: boolean;
   territory: number;
@@ -120,28 +120,28 @@ export interface FactionState {
   structures: StructureCounts;
   capitalIndex: number;
   absorbedElements: ElementId[];
-  lastConqueror: NationId | null;
+  lastConqueror: PlayerId | null;
   intent: AiIntent;
 }
 
 export interface RelationState {
   key: string;
-  parties: readonly [NationId, NationId];
+  parties: readonly [PlayerId, PlayerId];
   status: RelationStatus;
   since: number;
   cooldownUntil: number;
   truceUntil: number;
-  truceOfferBy: NationId | null;
+  truceOfferBy: PlayerId | null;
   truceOfferAt: number;
-  lastAggressor: NationId | null;
+  lastAggressor: PlayerId | null;
   tradeActive: boolean;
-  tradeDisabledBy: NationId[];
+  tradeDisabledBy: PlayerId[];
   storyKey: string | null;
 }
 
 export interface Campaign {
   id: string;
-  attacker: NationId;
+  attacker: PlayerId;
   target: CampaignTarget;
   mode: CampaignMode;
   initialCommitted: number;
@@ -209,7 +209,7 @@ export interface Theater {
   id: string;
   campaignId: string;
   regionId: number;
-  attacker: NationId;
+  attacker: PlayerId;
   target: CampaignTarget;
   boundaryCells: number[];
   objectiveCells: number[];
@@ -232,8 +232,8 @@ export interface Theater {
 
 export interface TradeRoute {
   id: string;
-  owner: NationId;
-  parties: readonly [NationId, NationId];
+  owner: PlayerId;
+  parties: readonly [PlayerId, PlayerId];
   kind: "rail" | "sea";
   startIndex: number;
   endIndex: number;
@@ -241,12 +241,12 @@ export interface TradeRoute {
   value: number;
   foreign: boolean;
   allied: boolean;
-  destinationOwner: NationId;
+  destinationOwner: PlayerId;
 }
 
 export interface TradeVehicle {
   id: string;
-  owner: NationId;
+  owner: PlayerId;
   kind: "train" | "ship";
   startIndex: number;
   endIndex: number;
@@ -262,7 +262,7 @@ export interface TradeVehicle {
   payout: number;
   foreign: boolean;
   allied: boolean;
-  destinationOwner: NationId;
+  destinationOwner: PlayerId;
   storyKey: string;
   earnedIncome: number;
   hostIncome: number;
@@ -286,7 +286,7 @@ export interface ChronicleEvent {
   tick: number;
   tone: "battle" | "treaty" | "economy" | "rise" | "fall" | "world";
   text: string;
-  actor: NationId | null;
+  actor: PlayerId | null;
 }
 
 export type ReportDomain =
@@ -361,7 +361,7 @@ export interface ReportSubject {
   type: ReportSubjectType;
   id: string;
   label: string;
-  realmId?: NationId;
+  realmId?: PlayerId;
 }
 
 export type ReportFact = string | number | boolean | null | string[] | number[];
@@ -424,38 +424,38 @@ export interface StoryArc {
 
 export interface DeclareWarCommand {
   type: "declare-war";
-  actor: NationId;
-  target: NationId;
+  actor: PlayerId;
+  target: PlayerId;
 }
 
 export interface MakePeaceCommand {
   type: "make-peace";
-  actor: NationId;
-  target: NationId;
+  actor: PlayerId;
+  target: PlayerId;
 }
 
 export interface OfferTruceCommand {
   type: "offer-truce";
-  actor: NationId;
-  target: NationId;
+  actor: PlayerId;
+  target: PlayerId;
 }
 
 export interface AcceptTruceCommand {
   type: "accept-truce";
-  actor: NationId;
-  target: NationId;
+  actor: PlayerId;
+  target: PlayerId;
 }
 
 export interface SetTradeCommand {
   type: "set-trade";
-  actor: NationId;
-  target: NationId;
+  actor: PlayerId;
+  target: PlayerId;
   enabled: boolean;
 }
 
 export interface LaunchCampaignCommand {
   type: "launch-campaign";
-  actor: NationId;
+  actor: PlayerId;
   target: CampaignTarget;
   troops: number;
   mode: CampaignMode;
@@ -463,21 +463,21 @@ export interface LaunchCampaignCommand {
 
 export interface CommitDefenseCommand {
   type: "commit-defense";
-  actor: NationId;
-  target: NationId;
+  actor: PlayerId;
+  target: PlayerId;
   troops: number;
 }
 
 export interface BuildStructureCommand {
   type: "build-structure";
-  actor: NationId;
+  actor: PlayerId;
   structure: StructureType;
   tileIndex: number;
 }
 
 export interface BuildWarshipCommand {
   type: "build-warship";
-  actor: NationId;
+  actor: PlayerId;
 }
 
 export type WorldCommand =
@@ -510,7 +510,7 @@ export interface WorldState {
   age: number;
   landTiles: number;
   cells: Cell[];
-  factions: Record<NationId, FactionState>;
+  factions: Record<PlayerId, FactionState>;
   relations: Record<string, RelationState>;
   campaigns: Campaign[];
   strategicRegions: StrategicRegion[];
@@ -531,7 +531,7 @@ export interface WorldState {
   reports: WorldReportEvent[];
   stories: StoryArc[];
   storyCursor: number;
-  champion: NationId | null;
+  champion: PlayerId | null;
   dominantSince: number | null;
   config: SimulationConfig;
 }
@@ -542,7 +542,7 @@ export interface SimulationContext {
   emit: (
     text: string,
     tone: ChronicleEvent["tone"],
-    actor?: NationId | null,
+    actor?: PlayerId | null,
   ) => void;
   report: (draft: WorldReportDraft) => number;
 }

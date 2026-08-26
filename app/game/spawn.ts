@@ -1,9 +1,9 @@
 import { ELEMENTS } from "./elements";
 import { cellsWithin } from "./grid";
-import { draftOrder, nationElement } from "./nations";
+import { draftOrder, playerElement } from "./players";
 import { buildStrategicMetaMap } from "./regions";
 import { SPAWN_RULES, normalizedCellLength } from "./rules";
-import type { Cell, ElementId, NationId, SimulationConfig } from "./types";
+import type { Cell, ElementId, PlayerId, SimulationConfig } from "./types";
 
 interface SpawnWorld {
   cells: Cell[];
@@ -11,11 +11,11 @@ interface SpawnWorld {
 }
 
 export interface SpawnSite {
-  nation: NationId;
+  player: PlayerId;
   index: number;
   /** Shared strategic value of the site, 0..1. */
   value: number;
-  /** How well the surrounding terrain suits the nation's element, 0..1. */
+  /** How well the surrounding terrain suits the player's element, 0..1. */
   affinity: number;
   score: number;
   /** Separation actually achieved, in world units; Infinity for the first pick. */
@@ -61,20 +61,20 @@ function blockAround(
 }
 
 /**
- * Chooses a starting capital for every nation, one at a time.
+ * Chooses a starting capital for every player, one at a time.
  *
- * Each nation in turn takes the best site still available to it, scoring the
+ * Each player in turn takes the best site still available to it, scoring the
  * shared strategic value field against how well the surrounding terrain suits
  * its element. Sites already claimed block a radius around them, so realms open
  * apart rather than on top of each other.
  *
  * The pick order snakes across the elements (see `draftOrder`), which matters
  * because picking sequentially is inherently unfair to whoever picks last: a
- * snake gives that nation the first pick of the following round.
+ * snake gives that player the first pick of the following round.
  *
  * When no site satisfies the separation -- a fragmented world, or simply the
  * last few picks -- the requirement relaxes and the round is retried, so every
- * nation is always seated somewhere.
+ * player is always seated somewhere.
  */
 export function draftSpawnSites(world: SpawnWorld): SpawnSite[] {
   const meta = buildStrategicMetaMap(world);
@@ -84,8 +84,8 @@ export function draftSpawnSites(world: SpawnWorld): SpawnSite[] {
   const sites: SpawnSite[] = [];
   const cellLength = normalizedCellLength(world.config);
 
-  for (const nation of draftOrder()) {
-    const element = nationElement(nation);
+  for (const player of draftOrder()) {
+    const element = playerElement(player);
     affinity[element] ??= affinityField(world, element);
     const field = affinity[element]!;
 
@@ -126,7 +126,7 @@ export function draftSpawnSites(world: SpawnWorld): SpawnSite[] {
     }
 
     sites.push({
-      nation,
+      player,
       index: bestIndex,
       value: meta.value[bestIndex]!,
       affinity: field[bestIndex]!,
@@ -154,7 +154,7 @@ export function claimInitialTerritory(
     if (cell.terrain === "water") continue;
     const x = index % width;
     const y = (index - x) / width;
-    let owner: NationId | null = null;
+    let owner: PlayerId | null = null;
     let bestDistance = radius;
     for (const site of sites) {
       const sx = site.index % width;
@@ -162,7 +162,7 @@ export function claimInitialTerritory(
       const distance = Math.hypot(x - sx, y - sy);
       if (distance <= bestDistance) {
         bestDistance = distance;
-        owner = site.nation;
+        owner = site.player;
       }
     }
     cell.owner = owner;

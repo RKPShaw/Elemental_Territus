@@ -1,4 +1,4 @@
-import { NATION_ORDER } from "../../app/game/nations";
+import { PLAYER_ORDER } from "../../app/game/players";
 import { ElementalWarEngine } from "../../app/game/engine";
 import { ACTION_REPORT_KINDS } from "../../app/game/reporting";
 import type { ReportEventKind, WorldState } from "../../app/game/types";
@@ -71,7 +71,7 @@ function gather(seed: number, ticks: number, sampleEvery: number): Evidence {
   let commandsDrained = true;
 
   const initial = engine.snapshot();
-  const startingTroops = NATION_ORDER.reduce((sum, id) => sum + initial.factions[id].troops, 0);
+  const startingTroops = PLAYER_ORDER.reduce((sum, id) => sum + initial.factions[id].troops, 0);
   for (const relation of Object.values(initial.relations)) {
     previousStatuses.set(relation.key, relation.status);
   }
@@ -116,10 +116,10 @@ function gather(seed: number, ticks: number, sampleEvery: number): Evidence {
     kindCounts: countKinds(finalState),
     relationTransitions,
     truceExpiries,
-    earningIncome: NATION_ORDER.filter(
+    earningIncome: PLAYER_ORDER.filter(
       (id) => finalState.factions[id].alive && finalState.factions[id].goldRate > 0,
     ).length,
-    populationGrew: NATION_ORDER.reduce((sum, id) => sum + finalState.factions[id].troops, 0) > startingTroops,
+    populationGrew: PLAYER_ORDER.reduce((sum, id) => sum + finalState.factions[id].troops, 0) > startingTroops,
     regionsChanged,
     geographyUpdatedAt: finalState.strategicMeta.updatedAt,
     commandsDrained,
@@ -136,11 +136,11 @@ function accountingAgreesWithMap(state: WorldState): { ok: boolean; detail: stri
     if (!cell.owner) continue;
     owned.set(cell.owner, (owned.get(cell.owner) ?? 0) + 1);
   }
-  const mismatches = NATION_ORDER.filter(
+  const mismatches = PLAYER_ORDER.filter(
     (id) => (owned.get(id) ?? 0) !== state.factions[id].territory,
   );
   return mismatches.length === 0
-    ? { ok: true, detail: `territory matches owned cells for all ${NATION_ORDER.length} realms` }
+    ? { ok: true, detail: `territory matches owned cells for all ${PLAYER_ORDER.length} realms` }
     : { ok: false, detail: `territory disagrees with the map for ${mismatches.join(", ")}` };
 }
 
@@ -182,7 +182,7 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     "troop-and-gold-economy",
     "realms earn income and populations grow",
     evidence.earningIncome > 0 && evidence.populationGrew,
-    // Income rather than treasury: nations that invest heavily in
+    // Income rather than treasury: players that invest heavily in
     // infrastructure legitimately hold less gold than they started with.
     `${evidence.earningIncome} realms earning income, population ${evidence.populationGrew ? "grew" : "did not grow"}`,
   );

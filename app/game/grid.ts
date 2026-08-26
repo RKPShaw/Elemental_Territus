@@ -1,4 +1,4 @@
-import type { NationId, WorldState } from "./types";
+import type { PlayerId, WorldState } from "./types";
 import { STRUCTURE_MIN_SPACING, normalizedCellLength } from "./rules";
 
 const CARDINAL = [
@@ -63,8 +63,8 @@ export function isFrontierCell(state: WorldState, index: number): boolean {
 
 export function borderLength(
   state: WorldState,
-  first: NationId,
-  second: NationId,
+  first: PlayerId,
+  second: PlayerId,
 ): number {
   let edges = 0;
   for (let index = 0; index < state.cells.length; index += 1) {
@@ -78,8 +78,8 @@ export function borderLength(
 
 export function frontTargets(
   state: WorldState,
-  attacker: NationId,
-  defender: NationId,
+  attacker: PlayerId,
+  defender: PlayerId,
 ): number[] {
   const targets: number[] = [];
   for (let index = 0; index < state.cells.length; index += 1) {
@@ -98,7 +98,7 @@ export function frontTargets(
 export function ownedNeighborCount(
   state: WorldState,
   index: number,
-  owner: NationId,
+  owner: PlayerId,
 ): number {
   return neighborIndices(index, state.config.width, state.config.height).reduce(
     (total, neighbor) => total + (state.cells[neighbor]!.owner === owner ? 1 : 0),
@@ -139,7 +139,7 @@ export function distanceBetween(state: WorldState, first: number, second: number
 
 export function structureCells(
   state: WorldState,
-  owner: NationId,
+  owner: PlayerId,
   structure: WorldState["cells"][number]["structure"],
 ): number[] {
   const result: number[] = [];
@@ -167,7 +167,7 @@ export function canPlaceStructureSite(
   return true;
 }
 
-export function coastalCells(state: WorldState, owner: NationId): number[] {
+export function coastalCells(state: WorldState, owner: PlayerId): number[] {
   const result: number[] = [];
   for (let index = 0; index < state.cells.length; index += 1) {
     const cell = state.cells[index]!;

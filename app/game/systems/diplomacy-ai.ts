@@ -1,18 +1,18 @@
-import { NATION_ORDER } from "../nations";
+import { PLAYER_ORDER } from "../players";
 import { otherParty, trucesFor, warsFor } from "../diplomacy";
 import { realmMatchup } from "../elements";
 import { borderLength } from "../grid";
 import { DIPLOMACY_RULES, clamp } from "../rules";
-import type { NationId, RelationState, SimulationContext, SimulationSystem } from "../types";
+import type { PlayerId, RelationState, SimulationContext, SimulationSystem } from "../types";
 
-function hasRoute(context: SimulationContext, actor: NationId, target: NationId): boolean {
+function hasRoute(context: SimulationContext, actor: PlayerId, target: PlayerId): boolean {
   const self = context.state.factions[actor];
   const rival = context.state.factions[target];
   return borderLength(context.state, actor, target) > 0
     || (self.structures.harbor > 0 && rival.structures.harbor > 0);
 }
 
-function truceValue(context: SimulationContext, actor: NationId, target: NationId): number {
+function truceValue(context: SimulationContext, actor: PlayerId, target: PlayerId): number {
   const { state, random } = context;
   const self = state.factions[actor];
   const rival = state.factions[target];
@@ -24,7 +24,7 @@ function truceValue(context: SimulationContext, actor: NationId, target: NationI
     0,
     0.25,
   );
-  const largestThirdParty = NATION_ORDER
+  const largestThirdParty = PLAYER_ORDER
     .filter((id) => id !== actor && id !== target && state.factions[id].alive)
     .reduce((largest, id) => Math.max(largest, state.factions[id].territory / state.landTiles), 0);
   const commonThreat = largestThirdParty > 0.34 ? (largestThirdParty - 0.34) * 1.5 : 0;
@@ -36,8 +36,8 @@ function truceValue(context: SimulationContext, actor: NationId, target: NationI
 
 function warDesire(
   context: SimulationContext,
-  actor: NationId,
-  target: NationId,
+  actor: PlayerId,
+  target: PlayerId,
   relation: RelationState,
 ): number {
   const { state, random } = context;
@@ -62,8 +62,8 @@ function warDesire(
 
 function considerTradePolicy(
   context: SimulationContext,
-  actor: NationId,
-  target: NationId,
+  actor: PlayerId,
+  target: PlayerId,
   relation: RelationState,
 ) {
   const { state, random } = context;
@@ -85,7 +85,7 @@ export class DiplomacyAiSystem implements SimulationSystem {
     const { state, random } = context;
     if (state.tick % state.config.diplomacyInterval !== 0) return;
     const diplomaticallyEngaged = new Set(
-      NATION_ORDER.filter((id) => warsFor(state, id).length > 0),
+      PLAYER_ORDER.filter((id) => warsFor(state, id).length > 0),
     );
 
     for (const relation of Object.values(state.relations)) {

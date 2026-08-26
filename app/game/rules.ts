@@ -271,21 +271,21 @@ export const POPULATION_RULES = {
 } as const;
 
 /**
- * Where nations begin.
+ * Where players begin.
  *
  * Starts are drafted one at a time rather than placed at fixed points, so these
  * decide what "a good site" means: how far apart rivals must open, how much
  * land each starts holding, and how the shared strategic value map trades off
- * against a site suiting the nation's element.
+ * against a site suiting the player's element.
  */
 export const SPAWN_RULES = {
   /** World units required between any two starting capitals. */
   minimumSeparation: 5.2,
-  /** Radius in world units of the land a nation opens with. */
+  /** Radius in world units of the land a player opens with. */
   initialRegionRadius: 1.9,
   /** Weight of the shared strategic value field when scoring a site. */
   valueWeight: 1,
-  /** Weight of how well nearby terrain suits the nation's element. */
+  /** Weight of how well nearby terrain suits the player's element. */
   affinityWeight: 0.85,
   /** Radius in cells over which elemental terrain affinity is sampled. */
   affinityRadius: 3,

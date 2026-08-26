@@ -6,7 +6,7 @@ The simulation deliberately separates geography from politics and campaigns:
 
 1. **Cells** contain terrain, ownership, structures and local pressure.
 2. **Strategic regions** are connected, near-equal-area value basins. Their
-   stable identities do not belong to a nation and may cross borders.
+   stable identities do not belong to a player and may cross borders.
 3. **Theaters** are the current intersection of one target-specific campaign,
    its active frontier and one strategic region.
 
@@ -26,7 +26,7 @@ point-source diamonds.
 
 The partition is shared truth, but its value is not: every realm separately
 scores every region using ownership, access, elemental affinity, diplomacy,
-infrastructure and campaign focus. Selecting a nation in Theater Value mode
+infrastructure and campaign focus. Selecting a player in Theater Value mode
 therefore changes the heat colors without changing the underlying areas.
 
 A campaign theater keeps the stable identity `campaign + region`; changes to

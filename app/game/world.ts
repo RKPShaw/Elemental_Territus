@@ -1,6 +1,6 @@
 import { relationKey } from "./diplomacy";
 import { neighborIndices } from "./grid";
-import { NATIONS, NATION_ORDER, nationElement } from "./nations";
+import { PLAYERS, PLAYER_ORDER, playerElement } from "./players";
 import { SeededRandom, smoothCellNoise } from "./random";
 import { createStrategicRegions } from "./regions";
 import { realmSubject } from "./reporting";
@@ -8,7 +8,7 @@ import { TERRAIN_RULES, calculateTroopCap, normalizedCellArea } from "./rules";
 import { claimInitialTerritory, draftSpawnSites } from "./spawn";
 import type {
   Cell,
-  NationId,
+  PlayerId,
   FactionState,
   RelationState,
   SimulationConfig,
@@ -103,8 +103,8 @@ function emptyStructures(): StructureCounts {
   return { city: 0, fort: 0, factory: 0, harbor: 0 };
 }
 
-function makeFaction(id: NationId): FactionState {
-  const element = nationElement(id);
+function makeFaction(id: PlayerId): FactionState {
+  const element = playerElement(id);
   return {
     id,
     element,
@@ -169,19 +169,19 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
   }
 
   const factions = Object.fromEntries(
-    NATION_ORDER.map((id) => [id, makeFaction(id)]),
-  ) as Record<NationId, FactionState>;
+    PLAYER_ORDER.map((id) => [id, makeFaction(id)]),
+  ) as Record<PlayerId, FactionState>;
 
-  // Every nation drafts a start from the finished map, then opens holding the
+  // Every player drafts a start from the finished map, then opens holding the
   // land around it. Terrain is generated first and independently, so the sites
   // are chosen from the world rather than the world bent around the sites.
   const sites = draftSpawnSites({ cells, config });
   claimInitialTerritory({ cells, config }, sites);
   for (const site of sites) {
-    const faction = factions[site.nation]!;
+    const faction = factions[site.player]!;
     faction.capitalIndex = site.index;
-    cells[site.index]!.capitalOf = site.nation;
-    cells[site.index]!.owner = site.nation;
+    cells[site.index]!.capitalOf = site.player;
+    cells[site.index]!.owner = site.player;
   }
 
   const cellArea = normalizedCellArea(config);
@@ -210,10 +210,10 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
   }
 
   const relations: Record<string, RelationState> = {};
-  for (let first = 0; first < NATION_ORDER.length; first += 1) {
-    for (let second = first + 1; second < NATION_ORDER.length; second += 1) {
-      const a = NATION_ORDER[first]!;
-      const b = NATION_ORDER[second]!;
+  for (let first = 0; first < PLAYER_ORDER.length; first += 1) {
+    for (let second = first + 1; second < PLAYER_ORDER.length; second += 1) {
+      const a = PLAYER_ORDER[first]!;
+      const b = PLAYER_ORDER[second]!;
       const key = relationKey(a, b);
       relations[key] = {
         key,
@@ -261,7 +261,7 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
         id: 1,
         tick: 0,
         tone: "world",
-        text: `${worldName} wakes mostly unclaimed. ${NATION_ORDER.length} nations across five elemental families raise banners with 20K treasuries and no developed infrastructure.`,
+        text: `${worldName} wakes mostly unclaimed. ${PLAYER_ORDER.length} players across five elemental families raise banners with 20K treasuries and no developed infrastructure.`,
         actor: null,
       },
     ],
@@ -277,14 +277,14 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
         storyKey: `world:${seed}`,
         initiator: null,
         targets: [],
-        participants: NATION_ORDER.map(realmSubject),
+        participants: PLAYER_ORDER.map(realmSubject),
         links: {},
         facts: {
           seed,
           landTiles,
-          foundingRealms: NATION_ORDER.length,
+          foundingRealms: PLAYER_ORDER.length,
         },
-        summary: `${worldName} wakes mostly unclaimed as ${NATION_ORDER.length} realms of five elemental families raise their first banners.`,
+        summary: `${worldName} wakes mostly unclaimed as ${PLAYER_ORDER.length} realms of five elemental families raise their first banners.`,
       },
     ],
     stories: [],
