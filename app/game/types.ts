@@ -294,7 +294,8 @@ export interface TradeVehicle {
 export interface TradeDispatchState {
   kind: "train" | "ship";
   sourceIndex: number;
-  activeVehicleId: string | null;
+  /** Vehicles currently out from this site; a site may run several at once. */
+  activeVehicleIds: string[];
   readyAt: number;
   completedRuns: number;
   lastVehicleId: string | null;

@@ -237,6 +237,30 @@ export const TRADE_RULES = {
   trainSpawnIntervalTicks: 8,
   shipSpawnIntervalTicks: 12,
   vehicleTurnaroundTicks: 30,
+  /**
+   * Vehicles a single site may have out at once.
+   *
+   * A harbour used to be allowed exactly one boat, not by any rule but because
+   * the dispatch record held a single slot -- so the world's seventeen harbours
+   * could never float more than seventeen ships however high the fleet cap was
+   * set. A port is a place many ships sail from, and a bigger one sails more.
+   *
+   * Factories stay at one train each: rail dispatch is the expensive half of
+   * trade, and there is no evidence yet that it is being starved the way sea
+   * trade was.
+   */
+  shipsPerHarbor: 3,
+  shipsPerHarborLevel: 1,
+  trainsPerFactory: 1,
+  /**
+   * Ticks a site waits between launches.
+   *
+   * Without it a harbour with room for four would empty its berths on four
+   * consecutive ticks and then sit idle, and every harbour would do it in
+   * lockstep. Sites are also given a starting offset from their own position on
+   * the map, so trade leaves port in a steady trickle rather than in waves.
+   */
+  launchIntervalTicks: 7,
   trainLimit: 300,
   shipLimit: 1_000,
   trainVelocity: 0.12,

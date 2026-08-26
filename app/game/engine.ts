@@ -180,7 +180,7 @@ export class ElementalWarEngine {
       tradeDispatches: Object.fromEntries(
         Object.entries(this.state.tradeDispatches).map(([key, dispatch]) => [
           key,
-          { ...dispatch },
+          { ...dispatch, activeVehicleIds: [...dispatch.activeVehicleIds] },
         ]),
       ),
       activePressureCells: [...this.state.activePressureCells],

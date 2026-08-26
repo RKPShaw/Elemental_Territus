@@ -360,7 +360,12 @@ test("rail routes stay contiguous, land-only and anchored to their stations", ()
   assert.ok(observedRoutes > 0, "the calibration worlds should build rail routes");
 });
 
-test("each trade building finishes its run and cooldown before dispatching again", () => {
+/**
+ * A site may now run several vehicles at once -- a harbour is a place many
+ * ships sail from -- so the invariant is no longer "one at a time" but "never
+ * more than the berths, and never during the cooldown between launches".
+ */
+test("each trade building respects its berths and its launch cooldown", () => {
   const engine = new ElementalWarEngine(0x240823);
   let state = engine.snapshot();
   let previousRailIds = new Set<string>();
@@ -369,17 +374,39 @@ test("each trade building finishes its run and cooldown before dispatching again
     const railIds = new Set(state.tradeRoutes.map((route) => route.id));
     assert.ok([...previousRailIds].every((id) => railIds.has(id)), "physical rail must persist");
     previousRailIds = railIds;
-    const activeSources = new Set<string>();
+    const activeBySource = new Map<string, number>();
     for (const vehicle of state.tradeVehicles) {
       const key = `${vehicle.kind}:${vehicle.sourceIndex}`;
-      assert.ok(!activeSources.has(key), `${key} dispatched more than one active vehicle`);
-      activeSources.add(key);
-      assert.equal(state.tradeDispatches[key]?.activeVehicleId, vehicle.id);
+      activeBySource.set(key, (activeBySource.get(key) ?? 0) + 1);
+      assert.ok(
+        state.tradeDispatches[key]?.activeVehicleIds.includes(vehicle.id),
+        `${key} is running ${vehicle.id} without a berth recorded for it`,
+      );
     }
     for (const [key, dispatch] of Object.entries(state.tradeDispatches)) {
-      if (dispatch.activeVehicleId !== null) continue;
+      const berths = dispatch.kind === "train"
+        ? TRADE_RULES.trainsPerFactory
+        : TRADE_RULES.shipsPerHarbor
+          + Math.max(0, (state.cells[dispatch.sourceIndex]?.structureLevel ?? 1) - 1)
+            * TRADE_RULES.shipsPerHarborLevel;
+      assert.ok(
+        dispatch.activeVehicleIds.length <= berths,
+        `${key} ran ${dispatch.activeVehicleIds.length} vehicles from ${berths} berths`,
+      );
+      assert.equal(
+        dispatch.activeVehicleIds.length,
+        activeBySource.get(key) ?? 0,
+        `${key} recorded berths that no live vehicle occupies`,
+      );
+      // The longest a site may be held is a turnaround plus its own standing
+      // offset in the launch cycle, which is what keeps ports from
+      // re-synchronising. Anything beyond that is a stuck dispatch.
+      const longestWait = TRADE_RULES.vehicleTurnaroundTicks + TRADE_RULES.launchIntervalTicks;
       if (state.tick < dispatch.readyAt) {
-        assert.ok(!activeSources.has(key), `${key} launched during its cooldown`);
+        assert.ok(
+          dispatch.readyAt - state.tick <= longestWait,
+          `${key} waits ${dispatch.readyAt - state.tick} ticks, longer than the ${longestWait} any rule allows`,
+        );
       }
     }
   }
@@ -390,9 +417,10 @@ test("each trade building finishes its run and cooldown before dispatching again
   const railStations = new Set(state.tradeRoutes.flatMap((route) => [route.startIndex, route.endIndex]));
   assert.ok(state.tradeRoutes.length < railStations.size, "the durable rail graph should remain sparse");
   for (const event of completed) {
-    assert.equal(
-      Number(event.facts.nextDepartureAt) - event.tick,
-      TRADE_RULES.vehicleTurnaroundTicks,
+    // At least the turnaround: a site that launched moments before a return
+    // may already be holding a later window than the turnaround alone implies.
+    assert.ok(
+      Number(event.facts.nextDepartureAt) - event.tick >= TRADE_RULES.vehicleTurnaroundTicks,
     );
     if (event.facts.vehicleKind === "train") {
       const movingTicks = Number(event.facts.distance) / TRADE_RULES.trainVelocity;

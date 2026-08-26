@@ -52,24 +52,61 @@ function dispatchFor(
   state.tradeDispatches[key] ??= {
     kind,
     sourceIndex,
-    activeVehicleId: null,
-    readyAt: 0,
+    activeVehicleIds: [],
+    // Sites open on a stagger drawn from where they sit, so a coastline that
+    // comes of age together does not sail together. Derived from the index
+    // rather than drawn at random, so it costs no entropy and stays stable.
+    readyAt: state.tick + siteOffset(sourceIndex),
     completedRuns: 0,
     lastVehicleId: null,
   };
   return state.tradeDispatches[key]!;
 }
 
+/**
+ * A site's standing place in the launch cycle, taken from where it sits on the
+ * map. Derived rather than drawn, so it costs no entropy and never moves.
+ */
+function siteOffset(sourceIndex: number): number {
+  return sourceIndex % TRADE_RULES.launchIntervalTicks;
+}
+
+/** How many vehicles this site may have out at once. */
+function dispatchCapacity(
+  state: WorldState,
+  kind: TradeVehicle["kind"],
+  sourceIndex: number,
+): number {
+  if (kind === "train") return TRADE_RULES.trainsPerFactory;
+  const level = state.cells[sourceIndex]?.structureLevel ?? 1;
+  return TRADE_RULES.shipsPerHarbor
+    + Math.max(0, level - 1) * TRADE_RULES.shipsPerHarborLevel;
+}
+
 function reserveDispatch(state: WorldState, vehicle: TradeVehicle): void {
   const dispatch = dispatchFor(state, vehicle.kind, vehicle.sourceIndex);
-  dispatch.activeVehicleId = vehicle.id;
+  dispatch.activeVehicleIds.push(vehicle.id);
+  // The berth is free again immediately -- capacity decides that -- but the
+  // site still waits before sending the next one out.
+  dispatch.readyAt = state.tick + TRADE_RULES.launchIntervalTicks;
 }
 
 function releaseDispatch(state: WorldState, vehicle: TradeVehicle): number {
   const dispatch = dispatchFor(state, vehicle.kind, vehicle.sourceIndex);
-  if (dispatch.activeVehicleId === vehicle.id) {
-    dispatch.activeVehicleId = null;
-    dispatch.readyAt = state.tick + TRADE_RULES.vehicleTurnaroundTicks;
+  const at = dispatch.activeVehicleIds.indexOf(vehicle.id);
+  if (at >= 0) {
+    dispatch.activeVehicleIds.splice(at, 1);
+    // Turning a vehicle around occupies the site, so it delays the next launch
+    // -- but only if that is longer than the wait already standing.
+    // The turnaround carries the site's own offset. Without it, journeys of
+    // similar length plus a turnaround of fixed size kept re-synchronising
+    // sites that had once launched together, and trade left port in waves. A
+    // few ticks of standing offset per site holds them apart for good, and
+    // spreads the cost of route-finding across ticks instead of spiking it.
+    dispatch.readyAt = Math.max(
+      dispatch.readyAt,
+      state.tick + TRADE_RULES.vehicleTurnaroundTicks + siteOffset(vehicle.sourceIndex),
+    );
     dispatch.completedRuns += 1;
     dispatch.lastVehicleId = vehicle.id;
   }
@@ -82,7 +119,8 @@ function dispatchReady(
   sourceIndex: number,
 ): boolean {
   const dispatch = dispatchFor(state, kind, sourceIndex);
-  return dispatch.activeVehicleId === null && state.tick >= dispatch.readyAt;
+  if (dispatch.activeVehicleIds.length >= dispatchCapacity(state, kind, sourceIndex)) return false;
+  return state.tick >= dispatch.readyAt;
 }
 
 function tradeStoryKey(first: PlayerId, second: PlayerId, tick: number): string {
@@ -973,6 +1011,10 @@ export class TradeNetworkSystem implements SimulationSystem {
       }
     }
     if (state.tick % TRADE_RULES.trainSpawnIntervalTicks === 0) spawnTrains(context);
-    if (state.tick % TRADE_RULES.shipSpawnIntervalTicks === 0) spawnShips(context);
+    // Ships are paced by their harbours, not by a world clock. The global
+    // cadence that used to gate this made every port in the world sail on the
+    // same tick and sit idle between, which no per-site timer could undo while
+    // it stood: a harbour ready on tick nine simply was not asked until twelve.
+    spawnShips(context);
   }
 }
