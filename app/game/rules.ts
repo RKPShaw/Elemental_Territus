@@ -156,7 +156,35 @@ export const DIPLOMACY_RULES = {
 
 export const CAMPAIGN_RULES = {
   maximumStrengthRatio: 2,
-  landPressurePerTick: 0.085,
+  /**
+   * How fast a front advances when the attacker has decisive odds.
+   *
+   * A front is judged on the ratio of the force pressing it to the force
+   * defending it, not on troops per cell. Density was the old measure and it
+   * could not survive a change of scale: an army was compared against people
+   * per tile, so halving everyone's realm left defenders as thick as ever while
+   * armies shrank sevenfold, and attacks that worked with five players stalled
+   * with fifty. Odds are the same number whether the armies are fifty thousand
+   * or five hundred thousand.
+   *
+   * Taking ground is not killing everyone standing on it, so an attacker with
+   * the advantage advances at a rate set by how large that advantage is, and
+   * the defenders it did not kill are what it inherits.
+   */
+  landPressurePerTick: 0.22,
+  /**
+   * Below these odds a push stalls; at or above the second it runs at full
+   * speed. Measured against real fronts rather than chosen: a front presses
+   * with about seven thousand against a committed defence of about twelve, so
+   * the interesting range is a little under parity up to a clear advantage.
+   */
+  stallOdds: 0.55,
+  decisiveOdds: 2.4,
+  /**
+   * The share of a realm's army that holds ground whatever it has formally
+   * committed. Without it a lapsed commitment reads as an undefended realm.
+   */
+  garrisonShare: 0.05,
   navalLandingPressurePerTick: 0.064,
   navalTransportVelocity: 0.75,
   maximumDurationTicks: 480,

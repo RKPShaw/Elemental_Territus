@@ -178,7 +178,7 @@ export class StrategyAiSystem implements SimulationSystem {
       if (!recovering && !defending) {
         const reserve = Math.max(faction.troopCap * 0.24, incomingThreat * 0.65);
         const spendable = Math.max(0, faction.troops - reserve);
-        const desired = faction.troops * clamp(0.3 + bestScore * 0.045, 0.28, 0.48);
+        const desired = faction.troops * clamp(0.55 + bestScore * 0.06, 0.5, 0.8);
         const reinforcementNeeded = outgoing && outgoing.remaining < outgoing.initialCommitted * 0.34;
         if (!outgoing || reinforcementNeeded) {
           plannedCommitment = Math.floor(Math.min(spendable, desired));

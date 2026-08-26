@@ -51,24 +51,24 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
     seed: 0x240823,
     checkpoints: [
       { tick: 60, world: "5fdd3dffb244df0ea8451728cfcd24e3", cells: "8395edc1d04ac9db" },
-      { tick: 200, world: "a04ad5b09b1d71e715f96e9757bc5d6f", cells: "a7afd69ce5ddfcf6" },
-      { tick: 600, world: "a26ea3b687772252f5871edddfb7a28b", cells: "09ca6025790027d0", deep: true },
+      { tick: 200, world: "b65e581dfe7104f02ae7a29b4c49a477", cells: "9ceef5d55eb7aad1" },
+      { tick: 600, world: "1fb6635dc72882cc60ba48b98ea1b576", cells: "4a187a7a0d8cae58", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
       { tick: 60, world: "94d8900fae657eafe6ed1550478898d8", cells: "54a062a2f37f687d" },
-      { tick: 200, world: "0ef03edc80545dbd0f5f77af49c9d28b", cells: "77a036794226f841" },
-      { tick: 600, world: "5de92d349c49adc2a65760b94397b665", cells: "32fbe1cf7970fbc0", deep: true },
+      { tick: 200, world: "7025c023ec1255d698139fa06f48826d", cells: "9ca8d824b34a319a" },
+      { tick: 600, world: "ccfd639b12068aaec2d997103aafab2e", cells: "40353a3eb13f1c61", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
       { tick: 60, world: "70b6d5132a3b2fa23dea2b9ec79e8828", cells: "d62c1666d84af794" },
-      { tick: 200, world: "e2e9b6880e2ba54cf09d68c4fcb18b44", cells: "d2bac78a6929eeb9" },
-      { tick: 600, world: "bf81ee886712ecb678e361fa170e21f6", cells: "39a1d6eb80fc4586", deep: true },
+      { tick: 200, world: "8369b86877eed42d36a0b981f7d54e51", cells: "e460cba5953854c5" },
+      { tick: 600, world: "d50f7411314737ad50ecf5e9b3a9201a", cells: "6a4092affb2a9e0d", deep: true },
     ],
   },
 ];

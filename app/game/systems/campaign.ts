@@ -461,6 +461,31 @@ function processSettlementCampaign(context: SimulationContext, campaign: Campaig
   }
 }
 
+const FRONTS_HELD = new WeakMap<object, { tick: number; counts: Map<PlayerId, number> }>();
+
+/**
+ * How many fronts each realm is defending right now.
+ *
+ * A realm's army defends everywhere at once, so the force it can bring to any
+ * one front is its army divided by the fronts it is holding. That is what makes
+ * a second war expensive: it does not merely cost troops, it halves the odds on
+ * every front already open. Two realms grinding each other down are each
+ * defending at a fraction of their strength, which is precisely when a third
+ * should be able to walk in.
+ */
+function frontsHeldBy(state: WorldState): Map<PlayerId, number> {
+  const cached = FRONTS_HELD.get(state);
+  if (cached && cached.tick === state.tick) return cached.counts;
+  const counts = new Map<PlayerId, number>();
+  for (const theater of state.theaters) {
+    if (theater.target === "wilderness" || theater.allocation <= 0) continue;
+    const defender = theater.target as PlayerId;
+    counts.set(defender, (counts.get(defender) ?? 0) + 1);
+  }
+  FRONTS_HELD.set(state, { tick: state.tick, counts });
+  return counts;
+}
+
 function processLandCampaign(context: SimulationContext, campaign: Campaign): void {
   if (campaign.target === "wilderness") return;
   const { state } = context;
@@ -478,35 +503,55 @@ function processLandCampaign(context: SimulationContext, campaign: Campaign): vo
     boundaryByRegion.set(regionId, regionBoundary);
   }
   const cellArea = normalizedCellArea(state.config);
-  const lengthScale = normalizedCellLength(state.config);
-  const defenderDensity = Math.max(25, defender.troops / Math.max(1, defender.territory * cellArea));
   const traitorVulnerability = state.tick < defender.traitorUntil
     ? DIPLOMACY_RULES.traitorAttackMultiplier
     : 1;
+  // What the defender actually has at this front: the force it committed
+  // against this campaign, spread over the fronts the campaign opened, and
+  // never less than a standing garrison drawn from the realm's army. The
+  // garrison floor matters because a commitment can lapse to nothing, and a
+  // realm should never be free to walk over.
+  const fronts = Math.max(1, frontsHeldBy(state).get(campaign.target as PlayerId) ?? 1);
+  const committedDefense = Math.max(0, campaign.defenderRemaining) / fronts;
+  const garrison = defender.troops * CAMPAIGN_RULES.garrisonShare;
+  const defendingHere = Math.max(1, committedDefense, garrison);
 
   for (const theater of theaters) {
     const targets = boundaryByRegion.get(theater.regionId) ?? [];
     if (targets.length === 0) continue;
     const weights = theaterFrontWeights(state, theater, targets);
+    // Odds belong to the front, not to the tile: an army arrives as an army.
+    const odds = (theater.allocation
+      * realmMatchup(state, campaign.attacker, campaign.target)
+      * traitorVulnerability) / defendingHere;
+    const momentum = clamp(
+      (odds - CAMPAIGN_RULES.stallOdds) / (CAMPAIGN_RULES.decisiveOdds - CAMPAIGN_RULES.stallOdds),
+      0,
+      1,
+    );
+    if (momentum <= 0) continue;
+    // Weights still decide where the push is sharpest, so a front leans on the
+    // cities and the open ground rather than advancing as a flat wall.
+    let heaviest = 0;
+    for (const index of targets) heaviest = Math.max(heaviest, weights.get(index) ?? 0);
+
     for (const targetIndex of targets) {
       if (campaign.remaining <= 0 || defender.troops <= 0) return;
       const tile = state.cells[targetIndex]!;
       trackPressure(state, targetIndex);
       const defense = conquestCostAt(state, targetIndex, campaign.target);
       const localSupport = 1 + ownedNeighborCount(state, targetIndex, campaign.attacker) * 0.055;
-      const assignedTroops = theater.allocation * (weights.get(targetIndex) ?? 0);
-      const attackDensity = assignedTroops / Math.max(3.4, 3.4 * lengthScale);
-      const ratio = clamp(
-        (attackDensity * localSupport * realmMatchup(state, campaign.attacker, campaign.target) * traitorVulnerability) /
-          Math.max(1, defenderDensity * defense),
-        0.04,
-        CAMPAIGN_RULES.maximumStrengthRatio,
-      );
+      const focus = heaviest > 0 ? 0.4 + 0.6 * ((weights.get(targetIndex) ?? 0) / heaviest) : 1;
+      const ratio = odds;
       const progress =
         CAMPAIGN_RULES.landPressurePerTick *
-        (1 / lengthScale) *
-        (ratio / CAMPAIGN_RULES.maximumStrengthRatio) *
-        state.config.aggression;
+        momentum * focus * localSupport *
+        state.config.aggression /
+        // Ground still resists, but overwhelming force rolls over it. Without
+        // this a hill costs an army with ten times the odds exactly what it
+        // costs an even one, and a realm that has clearly won its war grinds to
+        // a halt against its opponent's worst terrain.
+        Math.max(0.5, defense / clamp(odds / CAMPAIGN_RULES.decisiveOdds, 1, 3));
       if (tile.pressureBy && tile.pressureBy !== campaign.attacker) {
         tile.pressure = Math.max(0, tile.pressure - progress * 0.9);
         if (tile.pressure === 0) tile.pressureBy = campaign.attacker;
@@ -515,8 +560,10 @@ function processLandCampaign(context: SimulationContext, campaign: Campaign): vo
         tile.pressure += progress;
       }
 
-      const defenderLoss = defenderDensity * progress * 2.6 * cellArea;
-      const casualtyFactor = clamp(1.48 - ratio * 0.34, 0.8, 1.45);
+      // Losses follow the fighting: a contested push costs both sides, and a
+      // one-sided one costs the loser most.
+      const defenderLoss = defendingHere * progress * 0.06 * cellArea;
+      const casualtyFactor = clamp(1.48 - Math.min(ratio, 3) * 0.34, 0.35, 1.45);
       applyCombatCosts(context, campaign, defenderLoss, defenderLoss * defense * casualtyFactor);
       if (tile.pressure >= 1) captureEnemyTile(context, campaign, theater, targetIndex);
     }
