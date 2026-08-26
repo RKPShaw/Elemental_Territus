@@ -146,6 +146,19 @@ export class ElementalWarEngine {
         infrastructure: this.state.strategicMeta.infrastructure.slice(),
         updatedAt: this.state.strategicMeta.updatedAt,
       },
+      theaterMap: {
+        byPlayer: Object.fromEntries(
+          Object.entries(this.state.theaterMap.byPlayer).map(([player, store]) => [
+            player,
+            {
+              value: store.value.slice(),
+              trend: store.trend.slice(),
+              observedAt: store.observedAt.slice(),
+            },
+          ]),
+        ) as typeof this.state.theaterMap.byPlayer,
+        regionCount: this.state.theaterMap.regionCount,
+      },
       regionByCell: [...this.state.regionByCell],
       theaters: this.state.theaters.map((theater) => ({
         ...theater,

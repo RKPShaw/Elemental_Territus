@@ -296,6 +296,26 @@ export const SPAWN_RULES = {
   separationRelaxation: 0.78,
 } as const;
 
+export const THEATER_MAP_RULES = {
+  /**
+   * Correction toward what was just seen, and how fast the trend follows it.
+   * Shared shape with the theater value filter, so a belief behaves the same
+   * whether it is about a region or a front.
+   */
+  valueAlpha: 0.45,
+  trendBeta: 0.12,
+  /**
+   * Ticks between one player's own observations. Every player re-observes once
+   * per interval, spread across the ticks in it, so cost per tick is flat in
+   * roster size.
+   *
+   * The value is a starting point, not a finding. It wants measuring against
+   * real games: long enough that acting on stale ground reads as being
+   * out-manoeuvred, short enough that nobody looks merely stupid.
+   */
+  observationInterval: 80,
+} as const;
+
 export const CLAIM_RULES = {
   initialRegionRadius: 2.8,
   pressurePerTick: 8,

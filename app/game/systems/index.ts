@@ -10,6 +10,7 @@ import { EconomySystem } from "./economy";
 import { StrategyAiSystem } from "./strategy-ai";
 import { StorySystem } from "./story";
 import { StrategicGeographySystem } from "./strategic-geography";
+import { TheaterMapSystem } from "./theater-map";
 import { TheaterSystem } from "./theaters";
 import { TradeNetworkSystem } from "./trade";
 import { VictorySystem } from "./victory";
@@ -25,6 +26,7 @@ export const DEFAULT_SYSTEMS: readonly SimulationSystem[] = [
   new ConstructionAiSystem(),
   new CommandExecutionSystem(),
   new StrategicGeographySystem(),
+  new TheaterMapSystem(),
   new TheaterSystem(),
   new CampaignSystem(),
   new VictorySystem(),

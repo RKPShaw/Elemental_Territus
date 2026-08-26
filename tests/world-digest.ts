@@ -143,6 +143,7 @@ const WORLD_FIELDS = [
   "campaigns",
   "strategicRegions",
   "strategicMeta",
+  "theaterMap",
   "regionByCell",
   "theaters",
   "tradeRoutes",

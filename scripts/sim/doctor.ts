@@ -239,6 +239,26 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     `${state.strategicRegions.length} regions, last repartition at tick ${evidence.geographyUpdatedAt}, boundaries ${evidence.regionsChanged ? "moved" : "never moved"}`,
   );
 
+  // Beliefs are only ever written by the observation system, so a roster that
+  // has looked at ground and has ageing readings is the whole proof it ran.
+  // Both halves matter: everything fresh would mean the fog is not working,
+  // and nothing observed would mean nobody is looking.
+  let observedRegions = 0;
+  let stalest = 0;
+  for (const store of Object.values(state.theaterMap.byPlayer)) {
+    for (const seenAt of store.observedAt) {
+      if (seenAt < 0) continue;
+      observedRegions += 1;
+      stalest = Math.max(stalest, state.tick - seenAt);
+    }
+  }
+  add(
+    "theater-map-observation",
+    "players form and age beliefs about ground",
+    observedRegions > 0 && stalest > 0,
+    `${observedRegions} region beliefs held across the roster, oldest ${stalest} ticks stale`,
+  );
+
   const theaters = count("military.theater-formed");
   add(
     "persistent-geographic-theaters",

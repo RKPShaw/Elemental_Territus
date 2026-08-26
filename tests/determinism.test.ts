@@ -15,7 +15,12 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * This baseline was re-recorded when the frontier and border indexes began
+ * Re-recorded again when the theater map became world state. That adds a field
+ * to the world, so every world digest moves by construction -- but the cell
+ * digests did not move at all, which is the proof that stage one only builds
+ * beliefs and nothing yet acts on them.
+ *
+ * The previous baseline was re-recorded when the frontier and border indexes began
  * holding their answers for the length of a tick rather than recomputing per
  * query. That is a gameplay change and it was the point: it also stops the
  * roster order from deciding who is scored against the freshest map. It was
@@ -40,25 +45,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "0e590c4951ab96465a06816c17629b1e", cells: "8f55e109778275e7" },
-      { tick: 200, world: "0addcd8dc13b52ec4f7223a75348e8e3", cells: "126f02ad471368cc" },
-      { tick: 600, world: "c5d8ed5a22acfda3cfb38471bd62a4de", cells: "4d35843e1b378e18", deep: true },
+      { tick: 60, world: "f955663f09e8ea66c0ac8e6c06eaa93a", cells: "8f55e109778275e7" },
+      { tick: 200, world: "a7ece009bfa1df6393544113faf9b305", cells: "126f02ad471368cc" },
+      { tick: 600, world: "d4bf0cc91a5f3304676faf9aadeef4d1", cells: "4d35843e1b378e18", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "0b5614c58570f3adca30c8b29e891251", cells: "4fdf45291be7c9c6" },
-      { tick: 200, world: "d48401af64dd1a5b2175f8bfb622c21d", cells: "36d7975d48445d88" },
-      { tick: 600, world: "4e3fb75293f8bb848de6491f7e25857e", cells: "c749b3a9532f04a7", deep: true },
+      { tick: 60, world: "c6f00482fd461777d3f793d31e16f41e", cells: "4fdf45291be7c9c6" },
+      { tick: 200, world: "26d76ea6833fdc1f4b8be7c8b8734d29", cells: "36d7975d48445d88" },
+      { tick: 600, world: "96d15e89f7bf8def5024e089a46422a3", cells: "c749b3a9532f04a7", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "8776fa7a48a3176a3f30a3580d0cc121", cells: "bc417f8350aebd1c" },
-      { tick: 200, world: "99001151b14904b48d269c53f33df43d", cells: "a476c1fd61d76449" },
-      { tick: 600, world: "83698d679e05b59e462083e9fd02f08c", cells: "68e7eeed43fd183a", deep: true },
+      { tick: 60, world: "d2d4ceb43c3b45063b96e4e1dee520f2", cells: "bc417f8350aebd1c" },
+      { tick: 200, world: "b5e20ef30107b69e95ae4942fe8c0881", cells: "a476c1fd61d76449" },
+      { tick: 600, world: "92d238c0e4520b3d3406520470d11d83", cells: "68e7eeed43fd183a", deep: true },
     ],
   },
 ];

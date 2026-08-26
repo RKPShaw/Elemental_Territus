@@ -192,6 +192,25 @@ export interface StrategicRegion {
  * renderer. Keeping these fields in the snapshot prevents the display thread
  * from rebuilding geography every time React receives a new world state.
  */
+/**
+ * One player's remembered reading of the world, per strategic region.
+ *
+ * value and trend are the two states of the filter in theater-map.ts, laid out
+ * as region-major runs of OBSERVED_LAYERS. observedAt is when each region was
+ * last seen, or -1 for never -- which is how a player tells ground it believes
+ * is empty from ground it has simply never looked at.
+ */
+export interface RegionObservation {
+  value: Float32Array;
+  trend: Float32Array;
+  observedAt: Int32Array;
+}
+
+export interface TheaterMapState {
+  byPlayer: Record<PlayerId, RegionObservation>;
+  regionCount: number;
+}
+
 export interface StrategicMetaState {
   value: Float32Array;
   productivity: Float32Array;
@@ -515,6 +534,8 @@ export interface WorldState {
   campaigns: Campaign[];
   strategicRegions: StrategicRegion[];
   strategicMeta: StrategicMetaState;
+  /** Per-player beliefs about the ground; see theater-map.ts. */
+  theaterMap: TheaterMapState;
   /** Cell index -> persistent strategic region id; water is -1. */
   regionByCell: number[];
   theaters: Theater[];

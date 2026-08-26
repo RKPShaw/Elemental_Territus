@@ -3,6 +3,7 @@ import { neighborIndices } from "./grid";
 import { PLAYERS, PLAYER_ORDER, playerElement } from "./players";
 import { SeededRandom, smoothCellNoise } from "./random";
 import { createStrategicRegions } from "./regions";
+import { createTheaterMap } from "./theater-map";
 import { realmSubject } from "./reporting";
 import { TERRAIN_RULES, calculateTroopCap, normalizedCellArea } from "./rules";
 import { claimInitialTerritory, draftSpawnSites } from "./spawn";
@@ -261,6 +262,7 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
     campaigns: [],
     strategicRegions: strategicMap.regions,
     strategicMeta: { ...strategicMap.meta, updatedAt: 0 },
+    theaterMap: createTheaterMap(strategicMap.regions.length),
     regionByCell: strategicMap.regionByCell,
     theaters: [],
     tradeRoutes: [],
