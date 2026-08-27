@@ -344,16 +344,23 @@ function findCheapestRailLink(
     for (const neighbor of surroundingIndices(current, width, height)) {
       const cell = state.cells[neighbor]!;
       if (cell.terrain === "water") continue;
-      // Track may only be laid inside factory coverage or along existing
-      // track; a station that would terminate the link is exempt.
-      const terminates = nodeCells.has(neighbor) && accept(neighbor, seedIndex);
-      if (!terminates && !coverage[neighbor] && !existingTrack.has(neighbor)) continue;
+      // Track may be laid inside factory coverage, along existing track, or
+      // through a station. Stations were previously passable only when they
+      // ended the link, so a line ran around every city it did not terminate
+      // at -- which is why cities sat beside the rails instead of on them.
+      const isStation = nodeCells.has(neighbor);
+      if (!isStation && !coverage[neighbor] && !existingTrack.has(neighbor)) continue;
       const bx = neighbor % width;
       const by = (neighbor - bx) / width;
       const stepLength = ax !== bx && ay !== by ? Math.SQRT2 : 1;
+      // Running through a station is nearly free, so a line threads the towns
+      // between its ends rather than skirting them. Track already laid is
+      // cheaper still, which keeps the network converging on shared trunks.
       const stepCost = existingTrack.has(neighbor)
         ? TRADE_RULES.railExistingTrackCost * stepLength
-        : railTraversalCost(cell.terrain as LandTerrainId) * stepLength;
+        : isStation
+          ? TRADE_RULES.railStationCost * stepLength
+          : railTraversalCost(cell.terrain as LandTerrainId) * stepLength;
       const proposed = cost + stepCost;
       if (railStamp[neighbor] === railGeneration && proposed >= railDistance[neighbor]!) continue;
       railStamp[neighbor] = railGeneration;

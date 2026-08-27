@@ -70,9 +70,68 @@ export function waterPathToAnyLandCell(
     return null;
   }
   const destination = landingByWater.get(reached)!;
-  const path = [startLandCell, ...reconstructWaterPath(previous, reached), destination];
+  const path = smoothWaterPath(
+    state,
+    [startLandCell, ...reconstructWaterPath(previous, reached), destination],
+  );
   WATER_PATH_CACHE.set(key, path);
   return path;
+}
+
+/** Every cell a straight line between two cells passes through. */
+function lineCells(state: WorldState, from: number, to: number): number[] {
+  const width = state.config.width;
+  const ax = from % width;
+  const ay = (from - ax) / width;
+  const bx = to % width;
+  const by = (to - bx) / width;
+  const steps = Math.max(Math.abs(bx - ax), Math.abs(by - ay));
+  const cells: number[] = [];
+  for (let step = 0; step <= steps; step += 1) {
+    const t = steps === 0 ? 0 : step / steps;
+    const x = Math.round(ax + (bx - ax) * t);
+    const y = Math.round(ay + (by - ay) * t);
+    const index = y * width + x;
+    if (cells[cells.length - 1] !== index) cells.push(index);
+  }
+  return cells;
+}
+
+/** True when a vessel can sail straight between two cells without crossing land. */
+function clearWaterRun(state: WorldState, from: number, to: number): boolean {
+  const cells = lineCells(state, from, to);
+  for (let position = 1; position < cells.length - 1; position += 1) {
+    if (state.cells[cells[position]!]!.terrain !== "water") return false;
+  }
+  return true;
+}
+
+/**
+ * Turns a cardinal search path into sea lanes.
+ *
+ * The search walks north-south-east-west, so its route around a headland is a
+ * staircase hugging the shore. Drawn as straight lines between cell centres
+ * that reads as a ship grinding along the coast and clipping every corner,
+ * because the line between two diagonal steps cuts inside the land they were
+ * stepping around. Waypoints a vessel can simply sail past are dropped, which
+ * leaves the long straight runs an actual sea route is made of.
+ */
+function smoothWaterPath(state: WorldState, path: readonly number[]): number[] {
+  if (path.length <= 2) return [...path];
+  const smoothed = [path[0]!];
+  let anchor = 0;
+  while (anchor < path.length - 1) {
+    let furthest = anchor + 1;
+    for (let candidate = path.length - 1; candidate > anchor + 1; candidate -= 1) {
+      if (clearWaterRun(state, path[anchor]!, path[candidate]!)) {
+        furthest = candidate;
+        break;
+      }
+    }
+    smoothed.push(path[furthest]!);
+    anchor = furthest;
+  }
+  return smoothed;
 }
 
 export function waterPathBetweenLandCells(
@@ -92,11 +151,12 @@ export function isValidWaterPath(state: WorldState, path: readonly number[]): bo
   for (let position = 1; position < path.length - 1; position += 1) {
     if (state.cells[path[position]!]!.terrain !== "water") return false;
   }
+  // Legs are sailed, not stepped: a route is valid when open water lies between
+  // each pair of waypoints. Requiring cardinal adjacency instead rejected every
+  // smoothed route, and a rejected route is a ship the map declines to draw --
+  // which is what made vessels wink out and reappear.
   for (let position = 1; position < path.length; position += 1) {
-    const previous = path[position - 1]!;
-    if (!neighborIndices(previous, state.config.width, state.config.height).includes(path[position]!)) {
-      return false;
-    }
+    if (!clearWaterRun(state, path[position - 1]!, path[position]!)) return false;
   }
   return true;
 }

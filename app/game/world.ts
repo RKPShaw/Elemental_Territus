@@ -87,13 +87,24 @@ function landAt(seed: number, x: number, y: number, config: SimulationConfig): b
   const fineNoise =
     smoothCellNoise(seed ^ 0xbb67ae85, x, y, config.width / 48) - 0.5;
   const coastWobble = broadNoise * 0.3 + fineNoise * 0.055;
-  const west = ellipse(nx, ny, 0.265, 0.52, 0.285, 0.45) < 1 + coastWobble;
-  const east = ellipse(nx, ny, 0.735, 0.51, 0.285, 0.45) < 1 + coastWobble;
-  const tideNorth = ellipse(nx, ny, 0.51, 0.18, 0.105, 0.145) < 1 + coastWobble * 0.7;
-  const tideSouth = ellipse(nx, ny, 0.505, 0.76, 0.095, 0.12) < 1 + coastWobble * 0.7;
-  let land = west || east || tideNorth || tideSouth;
+  // Continents sit inside the frame rather than running off it. They used to
+  // span past both edges and be cut off by the border guard, so the world read
+  // as a crop of something larger with no sea beyond the coast -- and a coast
+  // that is a straight line down the edge of the screen is the one shape no
+  // coastline ever has.
+  const west = ellipse(nx, ny, 0.30, 0.50, 0.235, 0.385) < 1 + coastWobble;
+  const east = ellipse(nx, ny, 0.70, 0.50, 0.235, 0.385) < 1 + coastWobble;
+  const tideNorth = ellipse(nx, ny, 0.50, 0.205, 0.095, 0.125) < 1 + coastWobble * 0.7;
+  const tideSouth = ellipse(nx, ny, 0.50, 0.775, 0.085, 0.105) < 1 + coastWobble * 0.7;
+  const land = west || east || tideNorth || tideSouth;
 
-  if (x < 2 || y < 2 || x >= config.width - 2 || y >= config.height - 2) return false;
+  // Open water all the way round, wide enough to read as ocean rather than as
+  // a hairline. Scaled to the map so it survives a change of size.
+  const margin = Math.max(3, Math.round(Math.min(config.width, config.height) * 0.045));
+  if (
+    x < margin || y < margin
+    || x >= config.width - margin || y >= config.height - margin
+  ) return false;
   return land;
 }
 

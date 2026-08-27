@@ -206,7 +206,20 @@ export const STRATEGIC_REGION_RULES = {
   infrastructureValueWeight: 0.52,
   seedHeatBias: 0.18,
   criticalValuePull: 4.6,
-  initialRelaxationPasses: 3,
+  /**
+   * Passes of area relaxation before the first tick.
+   *
+   * Two forces pull against each other here. Too few and the opening partition
+   * is less even than the one a running world settles into -- with the
+   * continents pulled inside the frame there is less land to divide, and at
+   * three a region opened a hair under the area budget that the same world
+   * satisfied comfortably a hundred ticks later. Too many and the partition
+   * starts where it would have ended, so boundaries no longer visibly migrate
+   * as terrain develops, which is half of what makes the map feel alive.
+   * Four clears both: the smallest region opens comfortably inside its budget
+   * and the map still redraws itself as the world grows.
+   */
+  initialRelaxationPasses: 4,
   initialRelaxationGain: 0.7,
   filterAlpha: 0.11,
   filterBeta: 0.022,
@@ -255,6 +268,12 @@ export const TRADE_RULES = {
   trainRadius: 5,
   railSnapDistance: 1.25,
   railExistingTrackCost: 0.08,
+  /**
+   * What it costs a line to run through a station rather than around it.
+   * Well below open ground, so rails thread the towns between their ends --
+   * which is what makes a network look like it was planned around its cities.
+   */
+  railStationCost: 0.2,
   railMaximumNewLinksPerRebuild: 10,
   networkRebuildTicks: 120,
   trainSpawnIntervalTicks: 8,

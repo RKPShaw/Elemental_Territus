@@ -76,9 +76,18 @@ function mix(base: RgbColor, overlay: RgbColor, amount: number): RgbColor {
   };
 }
 
-// Two raster pixels per authoritative cell preserve curved frontiers while
-// keeping snapshot work short enough for the 60 Hz display loop.
-const STATIC_FIELD_GRID_SCALE = 2;
+/**
+ * Raster pixels per authoritative cell.
+ *
+ * Two was chosen when the ownership field cost one channel per realm and the
+ * whole raster had to stay affordable; the map was drawn at 336 by 208 and
+ * stretched to fill the canvas, which five broad regions survived and fifty
+ * intricate frontiers do not. Now that the field is sparse, the expensive half
+ * -- blurring -- is per cell and does not grow with this at all, so doubling
+ * the linear resolution costs only the sampling pass and still lands well under
+ * what the dense field cost at half the size.
+ */
+const STATIC_FIELD_GRID_SCALE = 4;
 
 function geometry(state: WorldState, canvas: HTMLCanvasElement): MapGeometry {
   return {
