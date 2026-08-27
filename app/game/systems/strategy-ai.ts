@@ -33,7 +33,7 @@ export class StrategyAiSystem implements SimulationSystem {
       );
       const incomingPressure = state.campaigns.reduce((total, campaign) => {
         if (campaign.target !== id) return total;
-        return total + Math.max(0, campaign.remaining - campaign.defenderRemaining);
+        return total + Math.max(0, campaign.remaining);
       }, 0);
       const defendingEmergency = incomingPressure > Math.max(5_000, faction.troopCap * 0.22);
       let settlementCommitment = 0;
@@ -109,7 +109,23 @@ export class StrategyAiSystem implements SimulationSystem {
         );
         const safeHomeReserve = faction.troopCap * 0.2;
         const available = Math.max(0, faction.troops - safeHomeReserve);
-        const desired = Math.max(0, uncovered * 0.62 - incomingCampaign.defenderRemaining);
+        // Throwing troops at an invasion cancels attackers one for one, which
+        // is the only way an army defends and is paid for in people. Ground is
+        // not worth that price -- it can be retaken -- so a realm blunts an
+        // attack only when the invasion is inside reach of something it cannot
+        // rebuild: a city, a factory, a harbour, its capital. Everywhere else
+        // it yields the ground and lets the terrain do the defending.
+        const threatened = state.theaters.some((theater) => {
+          if (theater.campaignId !== incomingCampaign.id) return false;
+          if (theater.allocation <= 0) return false;
+          return theater.objectiveCells.some((index) => {
+            const cell = state.cells[index]!;
+            return cell.owner === id && (cell.capitalOf !== null || cell.structure !== null);
+          });
+        });
+        const desired = threatened
+          ? Math.max(0, uncovered * 0.62 - incomingCampaign.defenderRemaining)
+          : 0;
         const plannedCommitment = Math.floor(Math.min(available, desired));
         if (plannedCommitment >= 8_000) {
           state.commands.push({
@@ -124,7 +140,9 @@ export class StrategyAiSystem implements SimulationSystem {
           posture: "defending",
           confidence: clamp(0.48 + incomingCampaign.defenderRemaining / Math.max(1, incomingCampaign.remaining) * 0.4, 0.4, 0.9),
           plannedCommitment,
-          reason: `${compactNumber(incomingCampaign.defenderRemaining)} reserved defenders cancel the invading wave one-for-one; ${compactNumber(uncovered)} attackers remain able to press the line.`,
+          reason: threatened
+            ? `${compactNumber(incomingCampaign.defenderRemaining)} defenders trade one-for-one to hold works the realm cannot rebuild; ${compactNumber(uncovered)} attackers still press the line.`
+            : `${compactNumber(uncovered)} attackers press open ground, which the terrain can contest more cheaply than people can.`,
         };
         continue;
       }

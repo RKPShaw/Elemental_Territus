@@ -155,7 +155,10 @@ test("target campaigns discover theaters and conserve their commitment", () => {
       const allocated = state.theaters
         .filter((theater) => theater.campaignId === campaign.id && theater.staleRefreshes === 0)
         .reduce((total, theater) => total + theater.allocation, 0);
-      const usable = Math.max(0, campaign.remaining - campaign.defenderRemaining);
+      // A campaign's power is simply what it still has. Defenders who blunted
+      // the invasion already took their toll on remaining when they traded, so
+      // subtracting them again here would be charging the same soldiers twice.
+      const usable = Math.max(0, campaign.remaining);
       assert.ok(allocated <= usable * 1.001 + 1, "theaters cannot create campaign power");
     }
   }

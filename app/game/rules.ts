@@ -157,34 +157,29 @@ export const DIPLOMACY_RULES = {
 export const CAMPAIGN_RULES = {
   maximumStrengthRatio: 2,
   /**
-   * How fast a front advances when the attacker has decisive odds.
+   * Troops that must press a tile for one tick to take it on open ground.
    *
-   * A front is judged on the ratio of the force pressing it to the force
-   * defending it, not on troops per cell. Density was the old measure and it
-   * could not survive a change of scale: an army was compared against people
-   * per tile, so halving everyone's realm left defenders as thick as ever while
-   * armies shrank sevenfold, and attacks that worked with five players stalled
-   * with fifty. Odds are the same number whether the armies are fifty thousand
-   * or five hundred thousand.
+   * The whole fight is this one number. A front's force is spread over the
+   * tiles it presses, and each tile falls at the rate that force arrives,
+   * divided by what the ground costs. Nothing about the defender's army enters
+   * it -- taking ground is not killing everyone standing on it, and a realm
+   * that lets an army walk in loses the ground at the speed the army walks.
    *
-   * Taking ground is not killing everyone standing on it, so an attacker with
-   * the advantage advances at a rate set by how large that advantage is, and
-   * the defenders it did not kill are what it inherits.
+   * Defenders resist in two ways instead. The ground itself resists, through
+   * conquestCostAt: hills, forts and cities all raise the price. And a realm
+   * may throw troops directly at an invasion to blunt it, which cancels
+   * attackers one for one and is the only way an army defends -- see
+   * applyDefensiveStunt. That trade is expensive in people, so it is worth
+   * making to save a city and not worth making to save a field.
+   *
+   * Expressed as a cost rather than as a ratio because a cost is scale-free.
+   * Ten times the army takes ground ten times as fast, whether the world holds
+   * five realms or a hundred, and a hundred-realm world becomes a five-realm
+   * world if anybody wins.
    */
-  landPressurePerTick: 0.22,
-  /**
-   * Below these odds a push stalls; at or above the second it runs at full
-   * speed. Measured against real fronts rather than chosen: a front presses
-   * with about seven thousand against a committed defence of about twelve, so
-   * the interesting range is a little under parity up to a clear advantage.
-   */
-  stallOdds: 0.55,
-  decisiveOdds: 2.4,
-  /**
-   * The share of a realm's army that holds ground whatever it has formally
-   * committed. Without it a lapsed commitment reads as an undefended realm.
-   */
-  garrisonShare: 0.05,
+  troopsToTakeATile: 9_000,
+  /** A contested beach costs more than open ground. */
+  landingCostMultiplier: 1.22,
   navalLandingPressurePerTick: 0.064,
   navalTransportVelocity: 0.75,
   maximumDurationTicks: 480,

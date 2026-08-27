@@ -396,11 +396,13 @@ function refreshCampaignTheaters(context: SimulationContext, campaign: Campaign)
 }
 
 function campaignUsablePower(state: WorldState, campaign: Campaign): number {
-  const usable = Math.max(0, campaign.remaining - campaign.defenderRemaining);
+  // Blunting already cancelled attackers one for one when it happened;
+  // deducting the defenders again would charge the same soldiers twice.
+  const usable = Math.max(0, campaign.remaining);
   if (campaign.target !== "wilderness") return usable;
   const incoming = state.campaigns.reduce((total, candidate) => {
     if (candidate.target !== campaign.attacker || candidate.remaining <= 0) return total;
-    return total + Math.max(0, candidate.remaining - candidate.defenderRemaining);
+    return total + Math.max(0, candidate.remaining);
   }, 0);
   const emergency = Math.max(5_000, state.factions[campaign.attacker].troopCap * 0.22);
   return incoming > emergency ? 0 : usable;
