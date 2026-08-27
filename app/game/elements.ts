@@ -1,8 +1,10 @@
 import { ELEMENT_RULES, TRADE_RULES, clamp } from "./rules";
 import type {
+  Cell,
   ElementDefinition,
   ElementId,
   ElementTier,
+  FactionState,
   FoundingElementId,
   PlayerId,
   TradeForm,
@@ -741,6 +743,64 @@ export function tradeHostShare(shared: number, allied: boolean): number {
       ? ELEMENT_RULES.resonantHostShareOne
       : TRADE_RULES.foreignHostShare;
   return Math.max(allied ? TRADE_RULES.alliedHostShare : 0, resonant);
+}
+
+/**
+ * Infrastructure memory.
+ *
+ * Every structure carries the expressed element of the realm that raised it
+ * (Cell.structureHeritage), stamped at build and never cleared. What a
+ * structure pays its current owner depends on how well the owner's history
+ * covers the heritage's trade forms — who can exploit a captured network
+ * best, never whether it survives; nothing is ever razed.
+ */
+export type HeritageStanding = "native" | "legacy" | "incompatible";
+
+/**
+ * How well a realm can run works of the given heritage: native when its
+ * expressed element trades by one of the heritage's forms, legacy when only
+ * its absorbed history does, incompatible when nothing in its history does.
+ * A realm is always native to its own buildings — an element shares every
+ * form with itself — and absorption is how a conqueror grows into networks
+ * it could not run before.
+ */
+export function heritageStanding(
+  faction: Pick<FactionState, "expressedElement" | "absorbedElements">,
+  heritage: ElementId,
+): HeritageStanding {
+  if (sharedTradeForms(faction.expressedElement, heritage) > 0) return "native";
+  for (const absorbed of faction.absorbedElements) {
+    if (sharedTradeForms(absorbed, heritage) > 0) return "legacy";
+  }
+  return "incompatible";
+}
+
+/** The payout efficiency each standing earns. Native pays exactly full value. */
+export function heritageEfficiency(standing: HeritageStanding): number {
+  if (standing === "native") return 1;
+  return standing === "legacy"
+    ? ELEMENT_RULES.legacyEfficiency
+    : ELEMENT_RULES.incompatibleEfficiency;
+}
+
+/**
+ * The multiplier on everything a cell's structure pays its current owner.
+ *
+ * Native heritage pays in full, legacy history pays most, an incompatible
+ * network pays least — and a native owner on ground taken within the
+ * resonant window pulls a premium from the fresh conquest. The window reads
+ * the cell's capturedAt, so a structure the captor itself raises on freshly
+ * won ground briefly rides the same wave; that costs no second timestamp
+ * and reads as building in the momentum of the conquest.
+ */
+export function structurePayoutMultiplier(state: WorldState, cell: Cell): number {
+  if (cell.structure === null || cell.structureHeritage === null || cell.owner === null) return 1;
+  const standing = heritageStanding(state.factions[cell.owner], cell.structureHeritage);
+  if (standing !== "native") return heritageEfficiency(standing);
+  const sinceCapture = state.tick - cell.capturedAt;
+  return cell.capturedAt >= 0 && sinceCapture >= 0 && sinceCapture < ELEMENT_RULES.resonantWindowTicks
+    ? 1 + ELEMENT_RULES.resonantCaptureBonus
+    : 1;
 }
 
 export interface BuildAffinity {

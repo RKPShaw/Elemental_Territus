@@ -192,6 +192,7 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
         pressureBy: null,
         pressureTracked: false,
         capturedAt: -99,
+        structureHeritage: null,
       });
     }
   }
@@ -223,6 +224,8 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
     // see the capital-capture annexation in the campaign system.
     cells[site.index]!.structure = "city";
     cells[site.index]!.structureLevel = 1;
+    // The founders' ways are in the stonework from the first day.
+    cells[site.index]!.structureHeritage = faction.expressedElement;
   }
 
   const cellArea = normalizedCellArea(config);

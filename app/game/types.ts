@@ -171,6 +171,14 @@ export interface Cell {
   pressureBy: PlayerId | null;
   pressureTracked: boolean;
   capturedAt: number;
+  /**
+   * The expressed element of the realm that raised this cell's structure,
+   * stamped at build and never cleared: infrastructure remembers its builders
+   * through every capture. How well the current owner's history covers the
+   * heritage's trade forms decides what the works pay it (see
+   * structurePayoutMultiplier in elements.ts). Null wherever nothing stands.
+   */
+  structureHeritage: ElementId | null;
 }
 
 export interface AiIntent {
@@ -496,6 +504,7 @@ export type CoreReportEventKind =
   | "military.theater-victory"
   | "territory.capital-captured"
   | "territory.structure-captured"
+  | "territory.resonant-capture"
   | "territory.realm-conquered"
   | "territory.settlement-milestone"
   | "infrastructure.structure-built"

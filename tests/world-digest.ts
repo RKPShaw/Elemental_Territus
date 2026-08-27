@@ -30,6 +30,7 @@ const CELL_FIELDS = [
   "pressureBy",
   "pressureTracked",
   "capturedAt",
+  "structureHeritage",
 ] as const;
 
 function writeScalar(parts: string[], value: unknown): void {
@@ -117,6 +118,8 @@ function normalizeCellValue(field: (typeof CELL_FIELDS)[number], raw: unknown): 
       return TERRAIN_CODES[raw] ?? raw;
     case "structure":
       return raw < 0 ? null : (STRUCTURE_CODES[raw] ?? raw);
+    case "structureHeritage":
+      return raw < 0 ? null : (HERITAGE_CODES[raw] ?? raw);
     case "coastal":
     case "pressureTracked":
       return raw === 1;
@@ -135,6 +138,15 @@ function normalizeCellValue(field: (typeof CELL_FIELDS)[number], raw: unknown): 
 // the wider element space; new numeric codes (e.g. structure heritage) must
 // map against ELEMENT_SPACE order instead.
 const ELEMENT_CODES = ["ember", "tide", "grove", "stone", "gale"] as const;
+// Heritage is an element of the full space, so its numeric codes map against
+// ELEMENT_SPACE order (canonical in elements.ts), pinned here per rule 2.
+const HERITAGE_CODES = [
+  "ember", "tide", "grove", "stone", "gale",
+  "steam", "magma", "lightning", "ice", "sand",
+  "geyser", "tempest", "bloom", "mist", "mirage",
+  "plasma", "ash", "obsidian", "glass", "spirit",
+  "aurora", "lodestone", "amber", "fungus", "crystal",
+] as const;
 const TERRAIN_CODES = ["water", "farmland", "plains", "forest", "hills", "mountains"] as const;
 const STRUCTURE_CODES = ["city", "fort", "factory", "harbor", "plant", "skyport"] as const;
 

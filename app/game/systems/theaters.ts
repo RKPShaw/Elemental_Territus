@@ -5,10 +5,12 @@ import {
   ownedNeighborCount,
 } from "../grid";
 import { frontierTargets } from "../frontier";
+import { sharedTradeForms } from "../elements";
 import { smoothCellNoise } from "../random";
 import {
   CAMPAIGN_RULES,
   CLAIM_RULES,
+  ELEMENT_RULES,
   ENEMY_TERRAIN_COST,
   FORT_RADIUS,
   STRATEGIC_REGION_RULES,
@@ -27,6 +29,7 @@ import type {
   Campaign,
   CampaignTarget,
   LandTerrainId,
+  PlayerId,
   SimulationContext,
   SimulationSystem,
   Theater,
@@ -90,9 +93,9 @@ export function conquestCostAt(
   return ENEMY_TERRAIN_COST[terrain] * fort * city;
 }
 
-function infrastructureValue(state: WorldState, index: number): number {
+function infrastructureValue(state: WorldState, index: number, viewer?: PlayerId): number {
   const cell = state.cells[index]!;
-  const structure = cell.structure === "city"
+  let structure = cell.structure === "city"
     ? 30 + Math.max(0, cell.structureLevel - 1) * 14
     : cell.structure === "factory"
       ? 27
@@ -105,6 +108,18 @@ function infrastructureValue(state: WorldState, index: number): number {
             : cell.structure === "fort"
               ? 5
               : 0;
+  // Resonant conquest enters the valuation: an attacker weighs a rival's
+  // works higher when their heritage trades the ways it does, because those
+  // are the networks it could run natively the day they fall.
+  if (
+    viewer !== undefined &&
+    cell.structureHeritage !== null &&
+    cell.owner !== null &&
+    cell.owner !== viewer &&
+    sharedTradeForms(state.factions[viewer].expressedElement, cell.structureHeritage) > 0
+  ) {
+    structure *= ELEMENT_RULES.heritagePrizeWeight;
+  }
   return structure + (cell.capitalOf ? 70 : 0);
 }
 
@@ -192,7 +207,7 @@ function theaterDraft(
       STRATEGIC_REGION_RULES.objectiveLookaheadCells,
       frontDistance.get(index)!,
     );
-    return infrastructureValue(state, index) + terrainOpportunity(cell.terrain as LandTerrainId) * 2 + rail + depth * 0.18;
+    return infrastructureValue(state, index, campaign.attacker) + terrainOpportunity(cell.terrain as LandTerrainId) * 2 + rail + depth * 0.18;
   };
   const ranked = opportunityCells.map((index) => ({ index, score: objectiveScore(index) }));
   ranked.sort((first, second) => second.score - first.score);
@@ -230,7 +245,7 @@ function theaterDraft(
   for (const index of opportunityCells) {
     const cell = state.cells[index]!;
     landTotal += terrainOpportunity(cell.terrain as LandTerrainId);
-    prizeTotal += infrastructureValue(state, index);
+    prizeTotal += infrastructureValue(state, index, campaign.attacker);
     if (railCells.has(index)) railTotal += 1;
   }
   const landAverage = landTotal / Math.max(1, opportunityCells.length);
@@ -522,7 +537,7 @@ export function theaterFrontWeights(
       : distanceInCells(state, index, state.strategicRegions[theater.regionId]!.centroidIndex);
     const objectivePull = 1 + 4.2 / (1 + objectiveDistance * 0.22);
     const landValue = terrainOpportunity(terrain);
-    const immediatePrize = infrastructureValue(state, index);
+    const immediatePrize = infrastructureValue(state, index, theater.attacker);
     const localSupply = 0.72 + ownedNeighborCount(state, index, theater.attacker) * 0.12;
     const [x, y] = cellCoordinates(index, state.config.width);
     const contour = 0.68 + smoothCellNoise(

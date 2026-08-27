@@ -13,15 +13,18 @@ import {
   compositionOf,
   deriveDominantBase,
   elementMultiplier,
+  heritageEfficiency,
+  heritageStanding,
   realmMatchup,
   sharedTradeForms,
+  structurePayoutMultiplier,
   tradeFormIncomeMultiplier,
   tradeHostShare,
   tradesBy,
   VEHICLE_FORM,
 } from "../app/game/elements";
 import { ELEMENT_RULES, TRADE_RULES } from "../app/game/rules";
-import type { ElementId, TradeForm, WorldState } from "../app/game/types";
+import type { Cell, ElementId, TradeForm, WorldState } from "../app/game/types";
 
 /**
  * The composed matchup table is the live combat rule, read per realm through
@@ -394,4 +397,84 @@ test("construction affinity leans a realm toward the carriers it holds", () => {
     assert.equal(affinity.plant > 0, tradesBy(element, "energy"), `${element} plant gate`);
     assert.equal(affinity.skyport > 0, tradesBy(element, "airborne"), `${element} skyport gate`);
   }
+});
+
+test("heritage standing ladders by trade-form coverage of what was built", () => {
+  // Native: the owner's expressed element trades one of the heritage's forms.
+  assert.equal(heritageStanding({ expressedElement: "tide", absorbedElements: ["tide"] }, "tide"), "native");
+  assert.equal(heritageStanding({ expressedElement: "tide", absorbedElements: ["tide"] }, "steam"), "native");
+  // Legacy: only absorbed history covers it — conquest taught the network.
+  assert.equal(
+    heritageStanding({ expressedElement: "stone", absorbedElements: ["stone", "tide"] }, "tide"),
+    "legacy",
+  );
+  // Incompatible: nothing in the realm's history trades those ways.
+  assert.equal(
+    heritageStanding({ expressedElement: "stone", absorbedElements: ["stone"] }, "tide"),
+    "incompatible",
+  );
+  // A realm is always native to its own works: every element shares its forms.
+  for (const element of ELEMENT_SPACE) {
+    assert.equal(
+      heritageStanding({ expressedElement: element, absorbedElements: [element] }, element),
+      "native",
+      `${element} must run its own works natively`,
+    );
+  }
+  // The efficiency ladder is strictly ordered and native pays exactly par.
+  assert.equal(heritageEfficiency("native"), 1);
+  assert.equal(heritageEfficiency("legacy"), ELEMENT_RULES.legacyEfficiency);
+  assert.equal(heritageEfficiency("incompatible"), ELEMENT_RULES.incompatibleEfficiency);
+  assert.ok(ELEMENT_RULES.incompatibleEfficiency < ELEMENT_RULES.legacyEfficiency);
+  assert.ok(ELEMENT_RULES.legacyEfficiency < 1);
+});
+
+test("structure payouts read heritage, and fresh native conquest resonates", () => {
+  const heritageCell = (
+    owner: string,
+    heritage: ElementId | null,
+    capturedAt: number,
+    structure: Cell["structure"] = "harbor",
+  ): Cell => ({
+    owner,
+    terrain: "plains",
+    structure,
+    structureLevel: 1,
+    capitalOf: null,
+    coastal: true,
+    pressure: 0,
+    pressureBy: null,
+    pressureTracked: false,
+    capturedAt,
+    structureHeritage: heritage,
+  });
+  const state = {
+    tick: 1_000,
+    factions: {
+      "tide-1": { expressedElement: "tide", absorbedElements: ["tide"] },
+      "stone-1": { expressedElement: "stone", absorbedElements: ["stone"] },
+      "learned-1": { expressedElement: "stone", absorbedElements: ["stone", "tide"] },
+    },
+  } as unknown as WorldState;
+  const resonant = 1 + ELEMENT_RULES.resonantCaptureBonus;
+  const window = ELEMENT_RULES.resonantWindowTicks;
+  // A native owner runs long-held works at par, freshly conquered at the premium.
+  assert.equal(structurePayoutMultiplier(state, heritageCell("tide-1", "tide", 100)), 1);
+  assert.equal(structurePayoutMultiplier(state, heritageCell("tide-1", "tide", 1_000 - window + 1)), resonant);
+  // Ground never captured — stamped at world creation — never resonates.
+  assert.equal(structurePayoutMultiplier(state, heritageCell("tide-1", "tide", -99)), 1);
+  // The window closes exactly at resonantWindowTicks.
+  assert.equal(structurePayoutMultiplier(state, heritageCell("tide-1", "tide", 1_000 - window)), 1);
+  // Legacy and incompatible standings pay their efficiencies, fresh or not.
+  assert.equal(
+    structurePayoutMultiplier(state, heritageCell("learned-1", "tide", 990)),
+    ELEMENT_RULES.legacyEfficiency,
+  );
+  assert.equal(
+    structurePayoutMultiplier(state, heritageCell("stone-1", "tide", 990)),
+    ELEMENT_RULES.incompatibleEfficiency,
+  );
+  // Bare ground and unstamped works pay exactly what they always did.
+  assert.equal(structurePayoutMultiplier(state, heritageCell("stone-1", null, 990)), 1);
+  assert.equal(structurePayoutMultiplier(state, heritageCell("stone-1", null, 990, null)), 1);
 });

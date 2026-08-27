@@ -11,6 +11,7 @@ import {
   populationGrowthEfficiency,
 } from "../rules";
 import type { PlayerId, SimulationContext, SimulationSystem } from "../types";
+import { structurePayoutMultiplier } from "../elements";
 import { recordLandIncome } from "../economics";
 
 export class EconomySystem implements SimulationSystem {
@@ -21,12 +22,24 @@ export class EconomySystem implements SimulationSystem {
     // Keyed by player, not by element: ten players share each element, so a
     // fixed five-key tally would silently drop every owner's income.
     const landIncome = new Map<PlayerId, number>();
+    // City income is tallied per site rather than from the city count, so a
+    // captured city pays at its heritage efficiency instead of at par.
+    const cityIncome = new Map<PlayerId, number>();
     for (const cell of state.cells) {
       if (!cell.owner) continue;
       landIncome.set(
         cell.owner,
         (landIncome.get(cell.owner) ?? 0) + TERRAIN_RULES[cell.terrain].goldYield * cellArea,
       );
+      if (cell.structure === "city") {
+        cityIncome.set(
+          cell.owner,
+          (cityIncome.get(cell.owner) ?? 0) +
+            ECONOMY_RULES.cityIncome
+            * Math.max(1, cell.structureLevel)
+            * structurePayoutMultiplier(state, cell),
+        );
+      }
     }
     for (const id of PLAYER_ORDER) {
       const faction = state.factions[id];
@@ -34,7 +47,7 @@ export class EconomySystem implements SimulationSystem {
       recordLandIncome(state, id, (landIncome.get(id) ?? 0) * ECONOMY_RULES.landIncomeScale);
       faction.goldRate =
         (landIncome.get(id) ?? 0) * ECONOMY_RULES.landIncomeScale +
-        faction.structures.city * ECONOMY_RULES.cityIncome;
+        (cityIncome.get(id) ?? 0);
       faction.gold = clamp(
         faction.gold + faction.goldRate,
         0,

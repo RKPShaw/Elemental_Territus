@@ -498,17 +498,39 @@ test("train stops pay the fixed values, scaled by stacks and trade-form rewards"
   // Convoys and the stations they call at are both halves of the land
   // carrier, so each side's income is its base value times the station
   // stack times the land reward -- and only a realm holding the form ever
-  // earns it.
+  // earns it. Infrastructure memory prices each leg too: the dispatching
+  // factory's heritage efficiency scales the owner's side, the station's
+  // scales the host's, and both ride the report so the arithmetic stays
+  // fully accountable.
   const formBonus = 1 + ELEMENT_RULES.tradeFormIncomeBonus;
+  const efficiencies = new Set([
+    1,
+    ELEMENT_RULES.legacyEfficiency,
+    ELEMENT_RULES.incompatibleEfficiency,
+    1 + ELEMENT_RULES.resonantCaptureBonus,
+  ]);
   for (const event of stops) {
     const multiplier = Number(event.facts.stationMultiplier);
     const ownerBonus = event.facts.convoyBonus === true ? formBonus : 1;
     const hostBonus = event.facts.stationBonus === true ? formBonus : 1;
+    const sourceEfficiency = Number(event.facts.sourceEfficiency);
+    const hostEfficiency = Number(event.facts.hostEfficiency);
+    assert.ok(efficiencies.has(sourceEfficiency), `unknown source efficiency ${sourceEfficiency}`);
+    assert.ok(efficiencies.has(hostEfficiency), `unknown host efficiency ${hostEfficiency}`);
     if (event.facts.foreign) {
-      assert.equal(event.facts.ownerIncome, TRADE_RULES.foreignTrainStopPayout * multiplier * ownerBonus);
-      assert.equal(event.facts.hostIncome, TRADE_RULES.foreignTrainStopPayout * multiplier * hostBonus);
+      assert.equal(
+        event.facts.ownerIncome,
+        TRADE_RULES.foreignTrainStopPayout * multiplier * ownerBonus * sourceEfficiency,
+      );
+      assert.equal(
+        event.facts.hostIncome,
+        TRADE_RULES.foreignTrainStopPayout * multiplier * hostBonus * hostEfficiency,
+      );
     } else {
-      assert.equal(event.facts.ownerIncome, TRADE_RULES.domesticTrainStopPayout * multiplier * ownerBonus);
+      assert.equal(
+        event.facts.ownerIncome,
+        TRADE_RULES.domesticTrainStopPayout * multiplier * ownerBonus * sourceEfficiency,
+      );
       assert.equal(event.facts.hostIncome, 0);
     }
   }
