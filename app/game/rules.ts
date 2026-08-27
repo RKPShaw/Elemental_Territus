@@ -294,11 +294,19 @@ export const ELEMENT_RULES = {
    */
   absorbedBaseRelief: 0.33,
   /**
-   * Optional counter strength across the cycle's neutral pairs (ember–gale,
-   * tide–stone), as a share of a full counter. Zero is document-faithful;
-   * raise it if sweeps show mid-game combat going elementally flat.
+   * Counter strength across the cycle's neutral pairs (ember–gale,
+   * tide–stone), as a share of a full counter, paid to the legacy winners.
+   * Zero is document-faithful; the balance sweeps raised it. With the pairs
+   * truly neutral, neutrality meant no deterrent: whichever family armed,
+   * the predation spilled onto tide — the least martial court, guarded from
+   * stone by nothing — and tide won zero of twenty-nine resolutions.
+   * Half-counters give tide back its stone deterrent and ember its pressure
+   * on gale. The knowing cost: the balanced tier-3 trio picks up a residual
+   * edge of at most matchupEdge * neutralPairEdge / 4 (under two percent),
+   * so "no inherent counter" becomes near-zero rather than exactly zero —
+   * the elements test pins that bound.
    */
-  neutralPairEdge: 0,
+  neutralPairEdge: 0.5,
   /** Absorbed base depth required in each constituent to form a tier 2. */
   tier2BaseDepth: 2,
   /** Total realms absorbed before any tier 3 becomes formable. */

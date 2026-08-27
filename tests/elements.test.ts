@@ -138,22 +138,39 @@ test("the founding sub-table reproduces the counter cycle at exactly the full ed
     assert.equal(elementMultiplier(winner, loser), advantage);
     assert.equal(elementMultiplier(loser, winner), penalty);
   }
-  // The pairs outside the cycle are neutral while neutralPairEdge stays zero.
-  assert.equal(ELEMENT_RULES.neutralPairEdge, 0);
-  for (const [first, second] of [["ember", "gale"], ["tide", "stone"]] as const) {
-    assert.equal(elementMultiplier(first, second), 1);
-    assert.equal(elementMultiplier(second, first), 1);
+  // The pairs outside the cycle pay the legacy winners exactly the knob's
+  // share of a counter: the balance sweeps raised it from the
+  // document-faithful zero so neutrality stops meaning "safe to prey on".
+  const neutralEdge = ELEMENT_RULES.matchupEdge * ELEMENT_RULES.neutralPairEdge;
+  for (const [winner, loser] of [["ember", "gale"], ["tide", "stone"]] as const) {
+    assert.equal(elementMultiplier(winner, loser), 1 + neutralEdge);
+    assert.equal(elementMultiplier(loser, winner), 1 - neutralEdge);
   }
   for (const founding of FOUNDING_ELEMENTS) {
     assert.equal(elementMultiplier(founding, founding), 1);
   }
 });
 
-test("balanced tier 3 elements compose to no edge against anything", () => {
+test("balanced tier 3 elements keep at most the neutral-pair residual edge", () => {
+  // With the neutral pairs truly neutral this bound is zero and the trio has
+  // no edge against anything; the raised knob leaves them a residual of at
+  // most a quarter of the neutral edge, amplified by tier — under two
+  // percent, noise beside a real counter, so their power still lives in
+  // their mechanics rather than the table.
+  const residual = ELEMENT_RULES.matchupEdge
+    * ELEMENT_RULES.neutralPairEdge
+    * 0.25
+    * ELEMENT_RULES.tierAmplitude[3];
   for (const balanced of BALANCED_TIER_THREE) {
     for (const other of ELEMENT_SPACE) {
-      assert.equal(elementMultiplier(balanced, other), 1, `${balanced} vs ${other}`);
-      assert.equal(elementMultiplier(other, balanced), 1, `${other} vs ${balanced}`);
+      assert.ok(
+        Math.abs(elementMultiplier(balanced, other) - 1) <= residual + 1e-12,
+        `${balanced} vs ${other}`,
+      );
+      assert.ok(
+        Math.abs(elementMultiplier(other, balanced) - 1) <= residual + 1e-12,
+        `${other} vs ${balanced}`,
+      );
     }
   }
 });
@@ -173,14 +190,17 @@ test("the table is antisymmetric: an edge one way is a risk the other", () => {
 });
 
 test("tier amplitude grades mixed matchups without exceeding the founding edge", () => {
-  // A compound meets the counter of one of its halves at half strength,
-  // amplified by its tier: steam (ember+tide) into stone.
-  near(elementMultiplier("steam", "stone"), 1 + 0.12 * 0.5 * 1.15, "steam vs stone");
-  near(elementMultiplier("stone", "steam"), 1 - 0.12 * 0.5 * 1.15, "stone vs steam");
+  const knob = ELEMENT_RULES.neutralPairEdge;
+  // A compound meets the counter of one of its halves at half strength —
+  // plus its other half's neutral-pair share — amplified by its tier:
+  // steam (ember+tide) into stone rides ember's counter and tide's edge.
+  near(elementMultiplier("steam", "stone"), 1 + 0.12 * 0.5 * (1 + knob) * 1.15, "steam vs stone");
+  near(elementMultiplier("stone", "steam"), 1 - 0.12 * 0.5 * (1 + knob) * 1.15, "stone vs steam");
   // A dominant tier 3 caught by its dominant base's counter suffers more than
-  // a compound would — the higher ceiling cuts both ways.
-  near(elementMultiplier("geyser", "tide"), 1 - 0.12 * 0.5 * 1.25, "geyser vs tide");
-  near(elementMultiplier("tide", "geyser"), 1 + 0.12 * 0.5 * 1.25, "tide vs geyser");
+  // a compound would — the higher ceiling cuts both ways. Geyser's stone
+  // quarter gives a sliver back through the tide–stone pair.
+  near(elementMultiplier("geyser", "tide"), 1 - 0.12 * (0.5 + 0.25 * knob) * 1.25, "geyser vs tide");
+  near(elementMultiplier("tide", "geyser"), 1 + 0.12 * (0.5 + 0.25 * knob) * 1.25, "tide vs geyser");
   // Nothing in the space swings harder than a founding counter.
   for (const value of MATCHUP_TABLE) {
     assert.ok(Math.abs(value - 1) <= ELEMENT_RULES.matchupEdge + 1e-12);
@@ -212,8 +232,10 @@ test("realm matchups read expressed elements and pay the composed edge", () => {
   // the legacy rule, where stone beat ember — at exactly the founding edge.
   assert.equal(realmMatchup(state, "ember-1", "stone-1"), 1.12);
   assert.equal(realmMatchup(state, "stone-1", "ember-1"), 0.88);
-  // Ember–gale sits outside the cycle now: neutral, where it was an edge.
-  assert.equal(realmMatchup(state, "ember-1", "gale-1"), 1);
+  // Ember–gale sits outside the cycle: the legacy winner keeps the knob's
+  // half-counter, and gale's own base grants no relief against ember.
+  const neutralEdge = ELEMENT_RULES.matchupEdge * ELEMENT_RULES.neutralPairEdge;
+  assert.equal(realmMatchup(state, "ember-1", "gale-1"), 1 + neutralEdge);
   // Expression decides the matchup: a steam realm meets stone at the graded
   // compound edge, not at its founding family's full counter.
   assert.equal(

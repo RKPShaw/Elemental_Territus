@@ -143,15 +143,8 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: [],
     dominantBase: null,
     tradeForms: ["land"],
-    // The counter-holder has to enforce its counter: stone is the only
-    // family gale fears, and a stone that never marches leaves gale
-    // unhunted — the second hundred-game sweep watched exactly that, gale
-    // and ember running to 41% of crowns each. A measured share of stone's
-    // thrift now funds campaigns and mastery; defense still leads. Tempering
-    // the aggressors instead was tried and rejected: with every court
-    // cautious, worlds stopped resolving at all.
     priorityProfile: {
-      economy: 0.2, conquest: 0.17, ascension: 0.12, diplomacy: 0.1, defense: 0.27, trade: 0.14,
+      economy: 0.24, conquest: 0.14, ascension: 0.1, diplomacy: 0.1, defense: 0.28, trade: 0.14,
     },
     favoredTerrain: "mountains",
     temperament: "Turns mountain approaches into forts before counterattacking.",

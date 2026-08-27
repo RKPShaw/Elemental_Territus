@@ -25,17 +25,18 @@ import { cellDigest, worldDigest } from "./world-digest";
  * awarding tier 2 and 3 expression from conquest tallies, war targeting
  * learned to hunt formability, and the opening partition's relaxation gain
  * rose so the smallest region opens inside its area budget under the new
- * capital draft. The balance sweeps then reshaped the founding profiles:
- * the first hundred games saw trade-first tide eaten before its economy
- * matured (zero wins in twenty-nine), and with tide armed the second
- * hundred watched ember and gale run to 41% of crowns each while a passive
- * stone left gale unhunted. The cycle's two enforcement arms — tide against
- * ember, stone against gale — lean further into conquest, defense and
- * mastery, while ember and gale keep their original fury: tempering the
- * aggressors instead was tried and rejected, because with every court
- * cautious worlds stopped resolving at all. The digests carry that tuning.
- * Cell digests and world digests both move everywhere, and that is the
- * point: this is the phase where the element space stops being dormant.
+ * capital draft. The balance sweeps then tuned the founding order twice.
+ * The first hundred games saw trade-first tide eaten before its economy
+ * matured — zero wins in twenty-nine — so tide's priorities lean further
+ * into conquest, defense and mastery. With tide armed, the second hundred
+ * watched ember and gale run to 41% of crowns each while everyone's
+ * predation kept spilling onto tide through the truly neutral pairs, and
+ * arming or tempering other courts only moved the imbalance around, so
+ * neutralPairEdge rose from its document-faithful zero to a half-counter:
+ * the legacy winners' edges return at half strength, and neutrality stops
+ * meaning safe to prey on. The digests carry the tuning. Cell digests and
+ * world digests both move everywhere, and that is the point: this is the
+ * phase where the element space stops being dormant.
  *
  * Before that, re-recorded when realms gained strategic priorities: element-seeded,
  * situation-bent weights that scale war desire, alliance appetite, trade
@@ -93,25 +94,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "080a7cbc43797aa9c011247ca9547c56", cells: "c24971694dce1b93" },
-      { tick: 200, world: "ef2e99a355846dc76225f66c6593a9c7", cells: "5be79208711c11c7" },
-      { tick: 600, world: "b7c95a94cd402169aef6f4c053717432", cells: "ee3432785baf89db", deep: true },
+      { tick: 60, world: "7a11460ce1abd34ec1c7121de5f7f46c", cells: "c24971694dce1b93" },
+      { tick: 200, world: "e017e440582a013a73afff1d37e41164", cells: "a00e0ed08ad1b815" },
+      { tick: 600, world: "cccdccbe985996a52f8cf50ae9c40423", cells: "a46d80bddb881221", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "8371d5ecbcfc9a4437a2795eacde850c", cells: "c48ac0e305a72a12" },
-      { tick: 200, world: "5a2b180140306bfbdac52f98152e9774", cells: "14b8bef0d7b02946" },
-      { tick: 600, world: "748c8800389336b50d0df6315ec20d14", cells: "d524f7bff4cd98ae", deep: true },
+      { tick: 60, world: "3b1c81ef0c2263ca8fe401272f6f81b6", cells: "c48ac0e305a72a12" },
+      { tick: 200, world: "fd9dac4cbba2589b1066fa38a2b95553", cells: "5ac4519f6052f805" },
+      { tick: 600, world: "c2ca5eed647d25a9e1d38ec0ed0a198d", cells: "f77b905783085963", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "7b2420567d1abcdbac019db23d45bb4f", cells: "8dd0ae5739eb00e6" },
-      { tick: 200, world: "2ec8313ebf44b86038b033046c9c365a", cells: "76ac5e959f1aba9c" },
-      { tick: 600, world: "278364eb0c798d4e54548d70a3d2813b", cells: "7437b04b1358173c", deep: true },
+      { tick: 60, world: "cf043c7a239c1e5ae8bdddd546976718", cells: "8dd0ae5739eb00e6" },
+      { tick: 200, world: "d907b73908384a698e5097611397085c", cells: "dc227f068b240b87" },
+      { tick: 600, world: "3929f08eb3e5f91499dbf6bb90dbcf47", cells: "39ca772e940c3257", deep: true },
     ],
   },
 ];
