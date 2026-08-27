@@ -2,7 +2,14 @@ import { PLAYER_ORDER } from "../../app/game/players";
 import { expressionFor } from "../../app/game/ascension";
 import { baseMaskOf } from "../../app/game/elements";
 import { ElementalWarEngine } from "../../app/game/engine";
+import {
+  hasSwiftSight,
+  mirageDistortionFor,
+  mistVeilFor,
+  regionIntelligence,
+} from "../../app/game/information";
 import { ACTION_REPORT_KINDS } from "../../app/game/reporting";
+import { THEATER_MAP_RULES } from "../../app/game/rules";
 import type { ReportEventKind, WorldState } from "../../app/game/types";
 
 /**
@@ -366,6 +373,88 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     "players form and age beliefs about ground",
     observedRegions > 0 && stalest > 0,
     `${observedRegions} region beliefs held across the roster, oldest ${stalest} ticks stale`,
+  );
+
+  // The information identities live on the belief layer, so their proof is a
+  // belief asymmetry. Swift sight always has evidence — a dozen airborne
+  // realms are seated in every world — and the assertion reads only current
+  // beliefs (fresher than one interval), so lost contact from an earlier age
+  // cannot pollute the comparison. The mist and mirage lines are evidence
+  // lines like the bespoke powers': their drama waits on a realm expressing
+  // the element, so silence there is inconclusive, never sick.
+  let swiftAgeTotal = 0;
+  let swiftAgeCount = 0;
+  let ordinaryAgeTotal = 0;
+  let ordinaryAgeCount = 0;
+  for (const id of PLAYER_ORDER) {
+    const faction = state.factions[id];
+    if (!faction.alive) continue;
+    const swift = hasSwiftSight(faction.expressedElement);
+    for (const seenAt of state.theaterMap.byPlayer[id]!.observedAt) {
+      if (seenAt < 0) continue;
+      const age = state.tick - seenAt;
+      if (age >= THEATER_MAP_RULES.observationInterval) continue;
+      if (swift) {
+        swiftAgeTotal += age;
+        swiftAgeCount += 1;
+      } else {
+        ordinaryAgeTotal += age;
+        ordinaryAgeCount += 1;
+      }
+    }
+  }
+  const swiftMean = swiftAgeTotal / Math.max(1, swiftAgeCount);
+  const ordinaryMean = ordinaryAgeTotal / Math.max(1, ordinaryAgeCount);
+  add(
+    "theater-map-observation/swift-sight",
+    "airborne and glass realms hold fresher beliefs",
+    swiftAgeCount > 0 && ordinaryAgeCount > 0 && swiftMean < ordinaryMean,
+    `swift realms' current beliefs average ${swiftMean.toFixed(1)} ticks stale over ${swiftAgeCount}, the rest ${ordinaryMean.toFixed(1)} over ${ordinaryAgeCount}`,
+    swiftAgeCount === 0 || ordinaryAgeCount === 0,
+  );
+
+  const expressing = (element: string) => PLAYER_ORDER.filter(
+    (id) => state.factions[id].alive && state.factions[id].expressedElement === element,
+  ).length;
+  const living = PLAYER_ORDER.filter((id) => state.factions[id].alive);
+  const mistRealms = expressing("mist");
+  let veiledMeasurements = 0;
+  if (mistRealms > 0) {
+    for (let regionId = 0; regionId < state.strategicRegions.length; regionId += 1) {
+      for (const observer of living) {
+        if (mistVeilFor(state, observer, regionId) > 0) veiledMeasurements += 1;
+      }
+    }
+  }
+  add(
+    "theater-map-observation/mist",
+    "a veil keeps rivals' measurements of mist ground stale",
+    veiledMeasurements > 0,
+    `${mistRealms} realms express mist, ${veiledMeasurements} rival measurements veiled`,
+    mistRealms === 0,
+  );
+
+  const mirageRealms = expressing("mirage");
+  let distortedReadings = 0;
+  let collapsedReadings = 0;
+  if (mirageRealms > 0) {
+    const { pluralityOwner } = regionIntelligence(state);
+    for (let regionId = 0; regionId < state.strategicRegions.length; regionId += 1) {
+      const illusionist = pluralityOwner[regionId];
+      if (!illusionist || state.factions[illusionist].expressedElement !== "mirage") continue;
+      for (const viewer of living) {
+        if (viewer === illusionist) continue;
+        if (mirageDistortionFor(state, viewer, regionId, "prize") !== 1) distortedReadings += 1;
+        else collapsedReadings += 1;
+      }
+    }
+  }
+  add(
+    "theater-map-observation/mirage",
+    "rivals believe distorted prize and openness of mirage ground",
+    distortedReadings > 0,
+    `${mirageRealms} realms express mirage, ${distortedReadings} rival readings distorted, ${collapsedReadings} collapsed by corroboration`,
+    mirageRealms === 0,
   );
 
   const theaters = count("military.theater-formed");
