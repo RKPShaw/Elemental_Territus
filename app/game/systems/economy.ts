@@ -12,6 +12,7 @@ import {
 } from "../rules";
 import type { PlayerId, SimulationContext, SimulationSystem } from "../types";
 import { structurePayoutMultiplier } from "../elements";
+import { powerGrowthFactor } from "../powers";
 import { recordLandIncome } from "../economics";
 
 export class EconomySystem implements SimulationSystem {
@@ -58,7 +59,10 @@ export class EconomySystem implements SimulationSystem {
       const homeRatio = faction.troops / Math.max(1, faction.troopCap);
       const growthEfficiency = populationGrowthEfficiency(homeRatio);
       faction.troopGrowth =
-        faction.troopCap * POPULATION_RULES.peakGrowthPerTick * growthEfficiency;
+        faction.troopCap
+        * POPULATION_RULES.peakGrowthPerTick
+        * growthEfficiency
+        * powerGrowthFactor(state, id);
       faction.troops = clamp(
         faction.troops + faction.troopGrowth,
         0,

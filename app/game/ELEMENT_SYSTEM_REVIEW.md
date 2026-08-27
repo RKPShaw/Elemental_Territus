@@ -46,6 +46,22 @@ construction-affinity lean survive from the original plan unchanged in
 spirit. Phase 7's information identities for airborne realms stack on top of
 the carrier rather than replacing it.
 
+**Addendum (Phase 6, as built).** The five bespoke mechanics shipped as
+planned — geyser's pressure bank and eruption, tempest's decaying conquest
+momentum, bloom's ×1.5 settlement with an automatic overextension check,
+plasma's ×1.6 payouts against a per-structure gold burn with treasury-zero
+containment failure, obsidian's reflected casualties with a fracture counter
+that flips to shatter — with one seam correction: the geyser refill weakness
+(and every other power's defense pricing) rides `conquestCostAt`, the live
+per-tile invasion price, not the `defenseMultiplier` export this review had
+flagged as the seam. That export was dead code shadowing the real combat
+path and Phase 6 deleted it. The rest of the tier 3 space ships as bounded
+stat profiles inside a ±15% band at five chokepoints (attack, defense,
+settlement, payout, growth), the bespoke five carry authored strategy
+profiles so accumulate/release postures ride the priority system, and the
+mist–mirage–glass trio stays deliberately neutral for Phase 7's information
+identities.
+
 ---
 
 ## 1. Verdict

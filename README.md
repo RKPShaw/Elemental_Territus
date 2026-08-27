@@ -39,7 +39,7 @@ npm run sim -- systems                  # per-system timing profile
 npm run sim -- doctor                   # check every system is doing its job
 ```
 
-`doctor` runs a world and asserts each of the seventeen systems produced its
+`doctor` runs a world and asserts each of the eighteen systems produced its
 characteristic activity — trade completed journeys, campaigns concluded,
 ascensions expressed, theaters formed, the partition moved — and exits non-zero
 naming anything that has gone quiet. It is the fastest way to find a system that silently stopped
@@ -93,6 +93,17 @@ identity — name, family, colors — never changes. `app/game/ascension.ts` own
 the arithmetic; combat resolves matchups through the composed 25×25 table with
 graded relief for the founding bases a disadvantaged realm's history covers.
 
+An advanced element also *does* something. Five tier-3 identities carry a
+bespoke mechanic — geyser banks pressure and erupts into its wars, tempest
+gathers conquest momentum that decays when pinned down, bloom settles half
+again as fast until overextension checks it, plasma runs every payout hot
+against a gold burn that can fail containment, obsidian reflects attacker
+casualties until sustained siege shatters the edge — and every remaining
+tier-3 identity leans through a bounded stat profile at the same
+chokepoints. `app/game/powers.ts` owns the meters and factors, the
+`element-powers` system advances them, and each mechanic's weakness triggers
+mechanically from world state rather than relying on rival AI cleverness.
+
 Starts are drafted rather than fixed. Terrain is generated first, then each
 player in turn takes the best site still available to it, scoring the shared
 strategic value field against how well the surrounding terrain suits its
@@ -125,8 +136,8 @@ last. `app/game/spawn.ts` owns this; `SPAWN_RULES` in `rules.ts` tunes it.
 `app/game/systems/index.ts` is the composition root. Every shared clock tick runs:
 
 1. clock and pressure decay;
-2. neutral-land settlement, realm accounting, elemental ascension and
-   troop-cap recalculation;
+2. neutral-land settlement, realm accounting, elemental ascension, power
+   meters and troop-cap recalculation;
 3. economic growth and trade-vehicle resolution;
 4. truce timers plus diplomatic and military AI intent;
 5. construction intent;

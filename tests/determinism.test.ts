@@ -15,7 +15,21 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded when infrastructure gained memory. Every structure now carries
+ * Re-recorded when the advanced elements gained their powers. Every faction now
+ * carries a power meter (FactionState.power — new state, so every world
+ * digest moves by construction) behind five bespoke tier 3 mechanics: geyser
+ * banks pressure and erupts into its wars, tempest gathers conquest momentum
+ * that decays when pinned down, bloom settles half again as fast until
+ * overextension checks it, plasma multiplies its payouts against a gold burn
+ * that can fail containment, and obsidian reflects attacker casualties until
+ * sustained siege shatters the edge; the rest of the tier 3 space leans
+ * through bounded stat profiles at the same chokepoints. At every recorded
+ * checkpoint the cell digests did not move at all, which is the proof the
+ * phase wants: no realm reaches tier 3 inside 600 ticks, so the new
+ * mechanics are provably dormant until an advanced element actually walks
+ * the world — new state, unchanged play.
+ *
+ * Before that, re-recorded when infrastructure gained memory. Every structure now carries
  * its builder's expressed element (structureHeritage — a new cell field, so
  * every digest moves by construction) and pays its current owner by how well
  * that owner's history covers the heritage's trade forms: native works pay
@@ -117,25 +131,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "7daac289fe9477fd71d993084f421a46", cells: "c533d5f1040b2ff1" },
-      { tick: 200, world: "b05db30db2ef9883c82e370c354f4174", cells: "77cd275d067b3ff9" },
-      { tick: 600, world: "999a00c7614f5e05fde2462ae3ca06ec", cells: "eab8adb502d9fa68", deep: true },
+      { tick: 60, world: "78b22061b78a8fbfd63b6f4a8e3d1009", cells: "c533d5f1040b2ff1" },
+      { tick: 200, world: "9893e9fa15cce98342363c87575f9d7e", cells: "77cd275d067b3ff9" },
+      { tick: 600, world: "608f8bc1429a30afbc48bfa5dabd066c", cells: "eab8adb502d9fa68", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "d6541e4f0decbf041b5fc98148f90a65", cells: "7b32593869bea912" },
-      { tick: 200, world: "b22d9eabf4db293e6b24d750cacd6ee0", cells: "f6872f718ea82adf" },
-      { tick: 600, world: "31930bb7af5b741c695e11517f994af0", cells: "4d81f25e9737955e", deep: true },
+      { tick: 60, world: "783db8fc02b939cd5a4f8c1ae0d84fe9", cells: "7b32593869bea912" },
+      { tick: 200, world: "61fdf95862d2854d9edd9fc18419ad00", cells: "f6872f718ea82adf" },
+      { tick: 600, world: "1ab7373e52d8c8bf1c4d606c2d424366", cells: "4d81f25e9737955e", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "d2bd4c7a64c29e8eb634937bb42fd116", cells: "d3e68b9445214f1d" },
-      { tick: 200, world: "37094f9aa274cd0be691df730848315d", cells: "e85bd3d4fa2f8088" },
-      { tick: 600, world: "8c6cb0e943c188b72f08f16c902f66eb", cells: "66215bb9de10b8ae", deep: true },
+      { tick: 60, world: "b60cac264d5cfa6a770e8c59baa0fb6e", cells: "d3e68b9445214f1d" },
+      { tick: 200, world: "9ce8d9a35ca06c3d96a6d1573daff2f5", cells: "e85bd3d4fa2f8088" },
+      { tick: 600, world: "d2a8449e1f8fa4c1334a42ef49b9d001", cells: "66215bb9de10b8ae", deep: true },
     ],
   },
 ];

@@ -3,6 +3,11 @@ import { openLens } from "../lenses";
 import { PLAYERS } from "../players";
 import { getRelation, isAtWar } from "../diplomacy";
 import { ELEMENTS, heritageStanding, realmMatchup } from "../elements";
+import {
+  powerAttackFactor,
+  powerAttackerCasualtyFactor,
+  powerSettleFactor,
+} from "../powers";
 import { ownedNeighborCount } from "../grid";
 import {
   CAMPAIGN_RULES,
@@ -425,6 +430,7 @@ function processNavalCampaign(context: SimulationContext, campaign: Campaign): v
   const progress =
     (landingTroops
       * realmMatchup(state, campaign.attacker, campaign.target)
+      * powerAttackFactor(state, campaign.attacker)
       * traitorVulnerability
       * state.config.aggression)
     / (CAMPAIGN_RULES.troopsToTakeATile * Math.max(0.5, defense));
@@ -433,7 +439,13 @@ function processNavalCampaign(context: SimulationContext, campaign: Campaign): v
   tile.pressure += progress;
   const defenderLoss = landingTroops * progress * 0.05 * defense * cellArea;
   const casualtyFactor = clamp(0.55 + defense * 0.28, 0.5, 1.45);
-  applyCombatCosts(context, campaign, defenderLoss, defenderLoss * defense * casualtyFactor);
+  applyCombatCosts(
+    context,
+    campaign,
+    defenderLoss,
+    defenderLoss * defense * casualtyFactor
+      * powerAttackerCasualtyFactor(state, campaign.target),
+  );
 
   if (tile.pressure >= 1) {
     captureEnemyTile(context, campaign, null, targetIndex);
@@ -487,6 +499,9 @@ function processSettlementCampaign(context: SimulationContext, campaign: Campaig
   }
   const lengthScale = normalizedCellLength(state.config);
   const settle = openLens(state, campaign.attacker, "settle");
+  // Bloom turns frontier into heartland half again as fast — unless the
+  // overgrowth has outrun its people, when the check pauses the bonus.
+  const settleFactor = powerSettleFactor(state, campaign.attacker);
 
   for (const theater of theaters) {
     const targets = boundaryByRegion.get(theater.regionId) ?? [];
@@ -511,6 +526,7 @@ function processSettlementCampaign(context: SimulationContext, campaign: Campaig
         readiness *
         compactness *
         preference *
+        settleFactor *
         state.config.aggression /
         (cost * Math.max(0.7, lengthScale));
       if (tile.pressureBy && tile.pressureBy !== campaign.attacker) {
@@ -546,6 +562,11 @@ function processLandCampaign(context: SimulationContext, campaign: Campaign): vo
   const traitorVulnerability = state.tick < defender.traitorUntil
     ? DIPLOMACY_RULES.traitorAttackMultiplier
     : 1;
+  // The attacker's power drives the push — an erupting geyser's surge, a
+  // tempest's momentum — and the defender's ground answers through the
+  // conquest cost; obsidian additionally reflects casualties on every push.
+  const attackFactor = powerAttackFactor(state, campaign.attacker);
+  const reflectedCasualties = powerAttackerCasualtyFactor(state, campaign.target);
   for (const theater of theaters) {
     const targets = boundaryByRegion.get(theater.regionId) ?? [];
     if (targets.length === 0) continue;
@@ -562,6 +583,7 @@ function processLandCampaign(context: SimulationContext, campaign: Campaign): vo
       const progress =
         (assignedTroops
           * realmMatchup(state, campaign.attacker, campaign.target)
+          * attackFactor
           * traitorVulnerability
           * localSupport
           * state.config.aggression)
@@ -580,7 +602,12 @@ function processLandCampaign(context: SimulationContext, campaign: Campaign): vo
       // hard it was to take rather than to how many people lived there.
       const defenderLoss = assignedTroops * progress * 0.05 * defense * cellArea;
       const casualtyFactor = clamp(0.55 + defense * 0.28, 0.5, 1.45);
-      applyCombatCosts(context, campaign, defenderLoss, defenderLoss * defense * casualtyFactor);
+      applyCombatCosts(
+        context,
+        campaign,
+        defenderLoss,
+        defenderLoss * defense * casualtyFactor * reflectedCasualties,
+      );
       if (tile.pressure >= 1) captureEnemyTile(context, campaign, theater, targetIndex);
     }
   }

@@ -260,6 +260,52 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     ascensionBooksExact,
   );
 
+  // The bespoke tier 3 mechanics. One invariant line can genuinely fail:
+  // every living realm's power meter must sit inside its band. The
+  // per-mechanic lines are evidence lines — each mechanic's drama is
+  // conditional on a realm expressing its element and meeting its trigger
+  // inside the horizon, so silence there is inconclusive, never sick.
+  let meterViolations = 0;
+  for (const id of PLAYER_ORDER) {
+    const faction = state.factions[id];
+    if (!faction.alive) continue;
+    const power = faction.power;
+    if (
+      !(power.charge >= 0 && power.charge <= 1)
+      || power.releasedAt > state.tick
+      || power.tally > faction.capturedTiles
+    ) meterViolations += 1;
+  }
+  add(
+    "element-powers",
+    "power meters stay inside their bands",
+    meterViolations === 0,
+    meterViolations === 0
+      ? "every living realm's meter is in [0, 1] with sane bookkeeping"
+      : `${meterViolations} realms hold a meter outside its band`,
+  );
+  const expressedCount = (element: string) => state.reports.filter(
+    (event) => event.kind === "dynasty.element-ascended" && event.facts.to === element,
+  ).length;
+  const powerLines = [
+    ["geyser", "dynasty.geyser-erupted", "banked pressure erupts into a war"],
+    ["tempest", "dynasty.tempest-crested", "conquest momentum crests"],
+    ["bloom", "dynasty.bloom-overextended", "overgrowth outruns its people"],
+    ["plasma", "dynasty.plasma-containment-failed", "a drained treasury fails containment"],
+    ["obsidian", "dynasty.obsidian-shattered", "sustained siege shatters the edge"],
+  ] as const;
+  for (const [element, kind, looksFor] of powerLines) {
+    const fired = count(kind);
+    const expressed = expressedCount(element);
+    add(
+      `element-powers/${element}`,
+      looksFor,
+      fired > 0,
+      `${expressed} realms expressed ${element}, ${fired} ${element} power events`,
+      fired === 0,
+    );
+  }
+
   const wars = count("diplomacy.war-declared");
   const alliances = count("diplomacy.alliance-formed");
   add(

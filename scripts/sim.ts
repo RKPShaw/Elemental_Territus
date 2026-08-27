@@ -8,6 +8,13 @@
 import { ascensionTitle, baseDepthsOf, nextFormable, totalRealmsAbsorbed } from "../app/game/ascension";
 import { committedTroopsFor } from "../app/game/campaigns";
 import { ELEMENTS } from "../app/game/elements";
+import {
+  bloomIsOverextended,
+  geyserSurging,
+  geyserVenting,
+  obsidianShattered,
+  plasmaContainmentFailed,
+} from "../app/game/powers";
 import { PLAYERS, PLAYER_ORDER } from "../app/game/players";
 import { ElementalWarEngine } from "../app/game/engine";
 import { latestStories } from "../app/game/reporting";
@@ -275,6 +282,31 @@ function inspectStructures(state: WorldState): void {
   }
 }
 
+function powerMeter(state: WorldState, id: string): string {
+  const faction = state.factions[id];
+  const power = faction.power;
+  switch (faction.expressedElement) {
+    case "geyser":
+      return geyserSurging(power, state.tick)
+        ? "erupting"
+        : geyserVenting(power, state.tick)
+          ? "venting"
+          : `bank ${(power.charge * 100).toFixed(0)}%`;
+    case "tempest":
+      return `momentum ${(power.charge * 100).toFixed(0)}%`;
+    case "bloom":
+      return bloomIsOverextended(power) ? "overextended" : "blooming";
+    case "plasma":
+      return plasmaContainmentFailed(power, state.tick) ? "containment failed" : "burning hot";
+    case "obsidian":
+      return obsidianShattered(power, state.tick)
+        ? "shattered"
+        : `fracture ${(power.charge * 100).toFixed(0)}%`;
+    default:
+      return "";
+  }
+}
+
 function inspectElements(state: WorldState): void {
   write(heading("elements"));
   const fallen = PLAYER_ORDER.filter((id) => !state.factions[id].alive).length;
@@ -297,7 +329,8 @@ function inspectElements(state: WorldState): void {
           ? `next ${ELEMENTS[next.element].name} ${(next.progress * 100).toFixed(0)}%`
           : "next —"
         : "apex") +
-      (title ? dim(`  ${title}`, color) : ""),
+      (title ? dim(`  ${title}`, color) : "") +
+      (powerMeter(state, id) ? dim(`  ${powerMeter(state, id)}`, color) : ""),
     );
   }
 }

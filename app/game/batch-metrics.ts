@@ -79,6 +79,12 @@ export interface PlayerCumulativeMetrics {
   ticksByFocus: Record<StrategicDomain, number>;
   /** Elemental ascensions this realm achieved, tier 2 and 3 together. */
   ascensions: number;
+  /** Bespoke-mechanic drama, one counter per tier 3 power. */
+  geyserEruptions: number;
+  tempestCrests: number;
+  bloomOverextensions: number;
+  plasmaContainmentFailures: number;
+  obsidianShatters: number;
 }
 
 export interface PlayerBalanceSnapshot {
@@ -238,6 +244,11 @@ function emptyPlayerMetrics(): PlayerCumulativeMetrics {
     strategyChanges: 0,
     ticksByFocus: emptyFocusCounts(),
     ascensions: 0,
+    geyserEruptions: 0,
+    tempestCrests: 0,
+    bloomOverextensions: 0,
+    plasmaContainmentFailures: 0,
+    obsidianShatters: 0,
   };
 }
 
@@ -344,6 +355,11 @@ export class BatchMetricsCollector {
     if (event.kind === "diplomacy.alliance-betrayed" && actor) this.players[actor].alliancesBetrayed += 1;
     if (event.kind === "leadership.strategy-adopted" && actor) this.players[actor].strategyChanges += 1;
     if (event.kind === "dynasty.element-ascended" && actor) this.players[actor].ascensions += 1;
+    if (event.kind === "dynasty.geyser-erupted" && actor) this.players[actor].geyserEruptions += 1;
+    if (event.kind === "dynasty.tempest-crested" && actor) this.players[actor].tempestCrests += 1;
+    if (event.kind === "dynasty.bloom-overextended" && actor) this.players[actor].bloomOverextensions += 1;
+    if (event.kind === "dynasty.plasma-containment-failed" && actor) this.players[actor].plasmaContainmentFailures += 1;
+    if (event.kind === "dynasty.obsidian-shattered" && actor) this.players[actor].obsidianShatters += 1;
 
     if (event.kind === "trade.train-stop-served" && actor) {
       const ownerIncome = Number(event.facts.ownerIncome ?? 0);

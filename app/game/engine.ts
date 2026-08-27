@@ -120,6 +120,7 @@ export class ElementalWarEngine {
             structures: { ...faction.structures },
             intent: { ...faction.intent },
             strategy: { ...faction.strategy, weights: { ...faction.strategy.weights } },
+            power: { ...faction.power },
             economy: cloneEconomyLedger(faction.economy),
           },
         ]),
