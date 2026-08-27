@@ -25,12 +25,15 @@ import { cellDigest, worldDigest } from "./world-digest";
  * awarding tier 2 and 3 expression from conquest tallies, war targeting
  * learned to hunt formability, and the opening partition's relaxation gain
  * rose so the smallest region opens inside its area budget under the new
- * capital draft. The first hundred-game sweep then saw the trade-first tide
- * family eaten before its economy matured — zero wins in twenty-nine
- * resolutions — so tide's priority profile leans further into conquest,
- * defense and mastery, and the digests carry that tuning. Cell digests and
- * world digests both move everywhere, and that is the point: this is the
- * phase where the element space stops being dormant.
+ * capital draft. The balance sweeps then reshaped the founding profiles:
+ * the first hundred games saw trade-first tide eaten before its economy
+ * matured (zero wins in twenty-nine), and with tide armed the second
+ * hundred watched ember and gale run to 41% of crowns each while a passive
+ * stone left gale unhunted. Tide and stone lean further into conquest,
+ * defense and mastery; ember and gale each give a shade of fury back to
+ * their homes. The digests carry that tuning. Cell digests and world
+ * digests both move everywhere, and that is the point: this is the phase
+ * where the element space stops being dormant.
  *
  * Before that, re-recorded when realms gained strategic priorities: element-seeded,
  * situation-bent weights that scale war desire, alliance appetite, trade
@@ -88,25 +91,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "7a11460ce1abd34ec1c7121de5f7f46c", cells: "c24971694dce1b93" },
-      { tick: 200, world: "3b0fa4ab56268c187195b3acff31d0f6", cells: "ef9f774f1580acb1" },
-      { tick: 600, world: "16ba68e95cdaf9439f03654089cabed9", cells: "e729c6bd51130e41", deep: true },
+      { tick: 60, world: "1f3d057012eb0bcf7d61915a7b1602cb", cells: "c24971694dce1b93" },
+      { tick: 200, world: "b3437eb75e1c21fcdb339af9031456fa", cells: "799d4104ed900954" },
+      { tick: 600, world: "911af7a2bf1086e41706e6ccc1dbbf9e", cells: "12834e277f55508a", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "3b1c81ef0c2263ca8fe401272f6f81b6", cells: "c48ac0e305a72a12" },
-      { tick: 200, world: "b4281945bd4180c12e52fec250e1734c", cells: "ccfee1c42d1c30d7" },
-      { tick: 600, world: "9b12ef4de323d079b6e4bde68b6dcdc1", cells: "7b7570674a184a69", deep: true },
+      { tick: 60, world: "909d86bec58932ae23c5aac9f37c9e84", cells: "c48ac0e305a72a12" },
+      { tick: 200, world: "31ec405fa3c2df4349a916f20064fedd", cells: "a1f489637db774b2" },
+      { tick: 600, world: "13fd58e538ec210e48218daaca25d2e0", cells: "5943b778f8c28ed8", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "cf043c7a239c1e5ae8bdddd546976718", cells: "8dd0ae5739eb00e6" },
-      { tick: 200, world: "65c4ce59ebe490b700491d85bfa1b28c", cells: "1ba52435f4ff6991" },
-      { tick: 600, world: "6ab8944415b30b3212f6c28aeb0e8354", cells: "f0cfe2cc365eeb79", deep: true },
+      { tick: 60, world: "d14af883ca9b59536a54a58aab460e35", cells: "8dd0ae5739eb00e6" },
+      { tick: 200, world: "13446b89e46f2807f00d33d347af9a0d", cells: "59a08dd697d16ed4" },
+      { tick: 600, world: "a1cdaf07c5c73f86d844977e75dc993c", cells: "7288b10865f6729f", deep: true },
     ],
   },
 ];
