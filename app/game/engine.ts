@@ -116,6 +116,7 @@ export class ElementalWarEngine {
           {
             ...faction,
             absorbedElements: [...faction.absorbedElements],
+            elementCounts: { ...faction.elementCounts },
             structures: { ...faction.structures },
             intent: { ...faction.intent },
             economy: cloneEconomyLedger(faction.economy),

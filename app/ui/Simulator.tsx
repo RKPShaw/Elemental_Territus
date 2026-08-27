@@ -515,17 +515,26 @@ export function Simulator() {
                 <div className="absorbed-elements" aria-label="Elements held by this player">
                   <span>Elements</span>
                   <div>
-                    {chosen.absorbedElements.map((elementId) => (
-                      <b
-                        key={elementId}
-                        title={ELEMENTS[elementId].name}
-                        style={{ background: ELEMENTS[elementId].softColor, color: ELEMENTS[elementId].deepColor }}
-                      >
-                        {ELEMENTS[elementId].glyph}
-                      </b>
-                    ))}
+                    {chosen.absorbedElements.map((elementId) => {
+                      const held = chosen.elementCounts[elementId] ?? 0;
+                      return (
+                        <b
+                          key={elementId}
+                          title={held > 1
+                            ? `${ELEMENTS[elementId].name} — ${held} realms absorbed`
+                            : ELEMENTS[elementId].name}
+                          style={{ background: ELEMENTS[elementId].softColor, color: ELEMENTS[elementId].deepColor }}
+                        >
+                          {ELEMENTS[elementId].glyph}
+                          {held > 1 && <sup>{held}</sup>}
+                        </b>
+                      );
+                    })}
                   </div>
-                  <small>{chosen.absorbedElements.length > 1 ? "conquered powers absorbed" : "native power"}</small>
+                  <small>{(() => {
+                    const realms = Object.values(chosen.elementCounts).reduce((total, count) => total + count, 0);
+                    return realms > 1 ? `${realms} realms absorbed` : "native power";
+                  })()}</small>
                 </div>
 
                 <div className="infrastructure-row" aria-label="Infrastructure counts">

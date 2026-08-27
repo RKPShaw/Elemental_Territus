@@ -44,31 +44,81 @@ function mix(base: RgbColor, overlay: RgbColor, amount: number): RgbColor {
   };
 }
 
-function blurOwnershipField(source: Float32Array, width: number, height: number): Float32Array {
-  const channels = RASTER_PLAYER_ORDER.length + 2;
-  const horizontal = new Float32Array(source.length);
-  const output = new Float32Array(source.length);
+/**
+ * Ownership as a sparse field, so smoothing costs the same at any roster size.
+ *
+ * Borders are drawn by treating ownership as a field, blurring it, and finding
+ * where the two strongest claims meet. Held as one channel per realm that is
+ * exact but wasteful: the field is one-hot, so of fifty-two channels at most a
+ * couple are ever non-zero in a cell and at most a handful across the
+ * neighbourhood a blur touches. Five elements made the waste affordable; fifty
+ * realms made it seven times the work and eleven megabytes of churn a frame,
+ * which is what turned the map to a stutter.
+ *
+ * Each cell keeps only the claims that exist on it, so the cost follows the
+ * number of realms meeting at a point -- rarely more than three -- rather than
+ * the number in the world.
+ */
+const CLAIMS_PER_CELL = 6;
+/** Separable [1,2,1] applied twice, as one 3x3 pass. */
+const BLUR_KERNEL = [1, 2, 1, 2, 4, 2, 1, 2, 1];
+
+interface ClaimField {
+  /** Field id per slot, -1 where a cell has fewer claims than slots. */
+  ids: Int16Array;
+  weights: Float32Array;
+}
+
+function blurClaims(
+  rawIds: Int16Array,
+  rawWeights: Float32Array,
+  width: number,
+  height: number,
+): ClaimField {
+  const cells = width * height;
+  const ids = new Int16Array(cells * CLAIMS_PER_CELL).fill(-1);
+  const weights = new Float32Array(cells * CLAIMS_PER_CELL);
+  // At most two claims from each of nine neighbours.
+  const scratchIds = new Int16Array(18);
+  const scratchWeights = new Float64Array(18);
+
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      for (let channel = 0; channel < channels; channel += 1) {
-        const left = (y * width + Math.max(0, x - 1)) * channels + channel;
-        const center = (y * width + x) * channels + channel;
-        const right = (y * width + Math.min(width - 1, x + 1)) * channels + channel;
-        horizontal[center] = (source[left]! + source[center]! * 2 + source[right]!) / 4;
+      let found = 0;
+      for (let k = 0; k < 9; k += 1) {
+        const ny = Math.max(0, Math.min(height - 1, y + Math.floor(k / 3) - 1));
+        const nx = Math.max(0, Math.min(width - 1, x + (k % 3) - 1));
+        const weight = BLUR_KERNEL[k]! / 16;
+        const source = (ny * width + nx) * 2;
+        for (let slot = 0; slot < 2; slot += 1) {
+          const id = rawIds[source + slot]!;
+          if (id < 0) continue;
+          const value = rawWeights[source + slot]! * weight;
+          if (value <= 0) continue;
+          let at = -1;
+          for (let e = 0; e < found; e += 1) {
+            if (scratchIds[e] === id) { at = e; break; }
+          }
+          if (at < 0) { at = found; scratchIds[at] = id; scratchWeights[at] = 0; found += 1; }
+          scratchWeights[at]! += value;
+        }
+      }
+      // Keep the strongest claims; anything past them cannot win a pixel.
+      const target = (y * width + x) * CLAIMS_PER_CELL;
+      const keep = Math.min(found, CLAIMS_PER_CELL);
+      for (let slot = 0; slot < keep; slot += 1) {
+        let best = -1;
+        let bestValue = -1;
+        for (let e = 0; e < found; e += 1) {
+          if (scratchWeights[e]! > bestValue) { bestValue = scratchWeights[e]!; best = e; }
+        }
+        ids[target + slot] = scratchIds[best]!;
+        weights[target + slot] = bestValue;
+        scratchWeights[best] = -1;
       }
     }
   }
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      for (let channel = 0; channel < channels; channel += 1) {
-        const top = (Math.max(0, y - 1) * width + x) * channels + channel;
-        const center = (y * width + x) * channels + channel;
-        const bottom = (Math.min(height - 1, y + 1) * width + x) * channels + channel;
-        output[center] = (horizontal[top]! + horizontal[center]! * 2 + horizontal[bottom]!) / 4;
-      }
-    }
-  }
-  return output;
+  return { ids, weights };
 }
 
 function fieldIndex(owner: number, terrain: number): number {
@@ -78,21 +128,30 @@ function fieldIndex(owner: number, terrain: number): number {
 
 function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
   const { gridWidth, gridHeight, rasterWidth, rasterHeight } = request;
-  const channels = RASTER_PLAYER_ORDER.length + 2;
-  const raw = new Float32Array(gridWidth * gridHeight * channels);
+  const cells = gridWidth * gridHeight;
+  // Two claims per cell: who holds it, and who is pressing it.
+  const rawIds = new Int16Array(cells * 2).fill(-1);
+  const rawWeights = new Float32Array(cells * 2);
   for (let index = 0; index < request.owners.length; index += 1) {
     const owner = fieldIndex(request.owners[index]!, request.terrains[index]!);
     const pressureOwner = request.pressureOwners[index]!;
     const pressure = pressureOwner >= 0 && pressureOwner !== request.owners[index]
       ? Math.max(0, Math.min(1, request.pressures[index]!))
       : 0;
-    raw[index * channels + owner] = 1 - pressure;
-    if (pressure > 0) raw[index * channels + fieldIndex(pressureOwner, request.terrains[index]!)] = pressure;
+    rawIds[index * 2] = owner;
+    rawWeights[index * 2] = 1 - pressure;
+    if (pressure > 0) {
+      rawIds[index * 2 + 1] = fieldIndex(pressureOwner, request.terrains[index]!);
+      rawWeights[index * 2 + 1] = pressure;
+    }
   }
-  const scores = blurOwnershipField(raw, gridWidth, gridHeight);
+
+  const claims = blurClaims(rawIds, rawWeights, gridWidth, gridHeight);
   const fill = new Uint8ClampedArray(rasterWidth * rasterHeight * 4);
   const borders = new Uint8ClampedArray(fill.length);
-  const sampled = new Float32Array(channels);
+  // Four corners of the bilinear sample, each carrying its own claims.
+  const mergedIds = new Int16Array(CLAIMS_PER_CELL * 4);
+  const mergedWeights = new Float64Array(CLAIMS_PER_CELL * 4);
 
   for (let py = 0; py < rasterHeight; py += 1) {
     const gridY = ((py + 0.5) / rasterHeight) * gridHeight - 0.5;
@@ -106,28 +165,48 @@ function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
       const x0 = Math.max(0, Math.min(gridWidth - 1, floorX));
       const x1 = Math.min(gridWidth - 1, x0 + 1);
       const tx = Math.max(0, Math.min(1, gridX - floorX));
+
+      const corners = [
+        { cell: y0 * gridWidth + x0, share: (1 - tx) * (1 - ty) },
+        { cell: y0 * gridWidth + x1, share: tx * (1 - ty) },
+        { cell: y1 * gridWidth + x0, share: (1 - tx) * ty },
+        { cell: y1 * gridWidth + x1, share: tx * ty },
+      ];
+      let merged = 0;
+      for (const corner of corners) {
+        if (corner.share <= 0) continue;
+        const base = corner.cell * CLAIMS_PER_CELL;
+        for (let slot = 0; slot < CLAIMS_PER_CELL; slot += 1) {
+          const id = claims.ids[base + slot]!;
+          if (id < 0) break;
+          const value = claims.weights[base + slot]! * corner.share;
+          let at = -1;
+          for (let e = 0; e < merged; e += 1) {
+            if (mergedIds[e] === id) { at = e; break; }
+          }
+          if (at < 0) { at = merged; mergedIds[at] = id; mergedWeights[at] = 0; merged += 1; }
+          mergedWeights[at]! += value;
+        }
+      }
+
       let first = -1;
+      let firstValue = 0;
       let second = -1;
-      for (let channel = 0; channel < channels; channel += 1) {
-        const topLeft = scores[(y0 * gridWidth + x0) * channels + channel]!;
-        const topRight = scores[(y0 * gridWidth + x1) * channels + channel]!;
-        const bottomLeft = scores[(y1 * gridWidth + x0) * channels + channel]!;
-        const bottomRight = scores[(y1 * gridWidth + x1) * channels + channel]!;
-        sampled[channel] =
-          (topLeft + (topRight - topLeft) * tx) * (1 - ty)
-          + (bottomLeft + (bottomRight - bottomLeft) * tx) * ty;
-        if (first < 0 || sampled[channel]! > sampled[first]!) {
-          second = first;
-          first = channel;
-        } else if (second < 0 || sampled[channel]! > sampled[second]!) {
-          second = channel;
+      let secondValue = 0;
+      for (let e = 0; e < merged; e += 1) {
+        const value = mergedWeights[e]!;
+        if (first < 0 || value > firstValue) {
+          second = first; secondValue = firstValue;
+          first = mergedIds[e]!; firstValue = value;
+        } else if (second < 0 || value > secondValue) {
+          second = mergedIds[e]!; secondValue = value;
         }
       }
 
       const nearestX = Math.max(0, Math.min(gridWidth - 1, Math.round(gridX)));
       const nearestY = Math.max(0, Math.min(gridHeight - 1, Math.round(gridY)));
       const terrainId = RASTER_TERRAIN_ORDER[request.terrains[nearestY * gridWidth + nearestX]!]!;
-      const winner = first < RASTER_PLAYER_ORDER.length ? RASTER_PLAYER_ORDER[first]! : null;
+      const winner = first >= 0 && first < RASTER_PLAYER_ORDER.length ? RASTER_PLAYER_ORDER[first]! : null;
       const terrain = rgb(TERRAIN_RULES[first === WATER_FIELD ? "water" : terrainId].fill);
       const fillColor = winner
         ? mix(terrain, rgb(PLAYERS[winner]!.color), first === request.selected ? 0.76 : 0.66)
@@ -140,8 +219,8 @@ function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
       fill[pixel + 2] = fillColor.blue;
       fill[pixel + 3] = 255;
 
-      if (second < 0 || sampled[second]! < 0.055) continue;
-      const gap = sampled[first]! - sampled[second]!;
+      if (second < 0 || secondValue < 0.055) continue;
+      const gap = firstValue - secondValue;
       const strength = Math.max(0, Math.min(1, 1 - gap / 0.25));
       if (strength <= 0) continue;
       const firstOwner = first < RASTER_PLAYER_ORDER.length ? first : -1;

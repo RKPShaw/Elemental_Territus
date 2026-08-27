@@ -3,7 +3,7 @@ import { ELEMENTS } from "../elements";
 import { getRelation } from "../diplomacy";
 import { realmSubject } from "../reporting";
 import { applyRealmAccounting, collectRealmAccounting } from "./shared";
-import type { SimulationContext, SimulationSystem } from "../types";
+import type { ElementId, SimulationContext, SimulationSystem } from "../types";
 
 export class RealmAccountingSystem implements SimulationSystem {
   readonly id = "realm-accounting";
@@ -18,10 +18,18 @@ export class RealmAccountingSystem implements SimulationSystem {
         const conquerorId = state.factions[id].lastConqueror;
         const conqueror = conquerorId ? state.factions[conquerorId] : null;
         if (conqueror?.alive) {
+          const fallen = state.factions[id];
           conqueror.absorbedElements = [...new Set([
             ...conqueror.absorbedElements,
-            ...state.factions[id].absorbedElements,
+            ...fallen.absorbedElements,
           ])];
+          // The set says what powers a realm now holds; the tally says how many
+          // of each it took to get them, which the set cannot: absorbing ten
+          // Ember neighbours and absorbing one both read as "ember" alone.
+          for (const [element, count] of Object.entries(fallen.elementCounts)) {
+            const key = element as ElementId;
+            conqueror.elementCounts[key] = (conqueror.elementCounts[key] ?? 0) + count;
+          }
         }
         const relation = conquerorId ? getRelation(state, conquerorId, id) : null;
         context.report({
@@ -39,6 +47,7 @@ export class RealmAccountingSystem implements SimulationSystem {
           facts: {
             absorbedElements: [...state.factions[id].absorbedElements],
             conquerorElements: conqueror ? [...conqueror.absorbedElements] : [],
+            conquerorElementCounts: conqueror ? { ...conqueror.elementCounts } : {},
             finalTerritory: state.factions[id].territory,
           },
           summary: conquerorId && conqueror?.alive

@@ -150,31 +150,63 @@ function fieldIndex(owner: PlayerId | null, terrain: WorldState["cells"][number]
   return terrain === "water" ? WATER_FIELD : NEUTRAL_FIELD;
 }
 
-function blurOwnershipField(source: Float32Array, width: number, height: number): Float32Array {
-  const channels = PLAYER_ORDER.length + 2;
-  const horizontal = new Float32Array(source.length);
-  const output = new Float32Array(source.length);
+/**
+ * The same sparse ownership field the raster worker uses, for the frames drawn
+ * before the worker answers. Held densely it was one channel per realm, so the
+ * fallback alone churned megabytes a frame at fifty players; a cell only ever
+ * carries the claims actually on it.
+ */
+const CLAIMS_PER_CELL = 6;
+const BLUR_KERNEL = [1, 2, 1, 2, 4, 2, 1, 2, 1];
+
+function blurClaims(
+  rawIds: Int16Array,
+  rawWeights: Float32Array,
+  width: number,
+  height: number,
+): { ids: Int16Array; weights: Float32Array } {
+  const cells = width * height;
+  const ids = new Int16Array(cells * CLAIMS_PER_CELL).fill(-1);
+  const weights = new Float32Array(cells * CLAIMS_PER_CELL);
+  const scratchIds = new Int16Array(18);
+  const scratchWeights = new Float64Array(18);
+
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      for (let channel = 0; channel < channels; channel += 1) {
-        const left = (y * width + Math.max(0, x - 1)) * channels + channel;
-        const center = (y * width + x) * channels + channel;
-        const right = (y * width + Math.min(width - 1, x + 1)) * channels + channel;
-        horizontal[center] = (source[left]! + source[center]! * 2 + source[right]!) / 4;
+      let found = 0;
+      for (let k = 0; k < 9; k += 1) {
+        const ny = Math.max(0, Math.min(height - 1, y + Math.floor(k / 3) - 1));
+        const nx = Math.max(0, Math.min(width - 1, x + (k % 3) - 1));
+        const weight = BLUR_KERNEL[k]! / 16;
+        const source = (ny * width + nx) * 2;
+        for (let slot = 0; slot < 2; slot += 1) {
+          const id = rawIds[source + slot]!;
+          if (id < 0) continue;
+          const value = rawWeights[source + slot]! * weight;
+          if (value <= 0) continue;
+          let at = -1;
+          for (let e = 0; e < found; e += 1) {
+            if (scratchIds[e] === id) { at = e; break; }
+          }
+          if (at < 0) { at = found; scratchIds[at] = id; scratchWeights[at] = 0; found += 1; }
+          scratchWeights[at]! += value;
+        }
+      }
+      const target = (y * width + x) * CLAIMS_PER_CELL;
+      const keep = Math.min(found, CLAIMS_PER_CELL);
+      for (let slot = 0; slot < keep; slot += 1) {
+        let best = -1;
+        let bestValue = -1;
+        for (let e = 0; e < found; e += 1) {
+          if (scratchWeights[e]! > bestValue) { bestValue = scratchWeights[e]!; best = e; }
+        }
+        ids[target + slot] = scratchIds[best]!;
+        weights[target + slot] = bestValue;
+        scratchWeights[best] = -1;
       }
     }
   }
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      for (let channel = 0; channel < channels; channel += 1) {
-        const top = (Math.max(0, y - 1) * width + x) * channels + channel;
-        const center = (y * width + x) * channels + channel;
-        const bottom = (Math.min(height - 1, y + 1) * width + x) * channels + channel;
-        output[center] = (horizontal[top]! + horizontal[center]! * 2 + horizontal[bottom]!) / 4;
-      }
-    }
-  }
-  return output;
+  return { ids, weights };
 }
 
 function renderPoliticalField(
@@ -184,18 +216,22 @@ function renderPoliticalField(
   rasterHeight: number,
 ): PoliticalField {
   const { width, height } = state.config;
-  const channels = PLAYER_ORDER.length + 2;
-  const raw = new Float32Array(width * height * channels);
+  const rawIds = new Int16Array(width * height * 2).fill(-1);
+  const rawWeights = new Float32Array(width * height * 2);
   for (let index = 0; index < state.cells.length; index += 1) {
     const cell = state.cells[index]!;
     const owner = fieldIndex(cell.owner, cell.terrain);
     const pressure = cell.pressureBy && cell.pressureBy !== cell.owner
       ? Math.max(0, Math.min(1, cell.pressure))
       : 0;
-    raw[index * channels + owner] = 1 - pressure;
-    if (pressure > 0) raw[index * channels + fieldIndex(cell.pressureBy, cell.terrain)] = pressure;
+    rawIds[index * 2] = owner;
+    rawWeights[index * 2] = 1 - pressure;
+    if (pressure > 0) {
+      rawIds[index * 2 + 1] = fieldIndex(cell.pressureBy, cell.terrain);
+      rawWeights[index * 2 + 1] = pressure;
+    }
   }
-  const scores = blurOwnershipField(raw, width, height);
+  const claims = blurClaims(rawIds, rawWeights, width, height);
   const fill = document.createElement("canvas");
   const borders = document.createElement("canvas");
   fill.width = borders.width = rasterWidth;
@@ -205,7 +241,8 @@ function renderPoliticalField(
   if (!fillContext || !borderContext) return { fill, borders };
   const fillImage = fillContext.createImageData(rasterWidth, rasterHeight);
   const borderImage = borderContext.createImageData(rasterWidth, rasterHeight);
-  const sampled = new Float32Array(channels);
+  const mergedIds = new Int16Array(CLAIMS_PER_CELL * 4);
+  const mergedWeights = new Float64Array(CLAIMS_PER_CELL * 4);
 
   for (let py = 0; py < rasterHeight; py += 1) {
     const gridY = ((py + 0.5) / rasterHeight) * height - 0.5;
@@ -217,21 +254,39 @@ function renderPoliticalField(
       const x0 = Math.max(0, Math.min(width - 1, Math.floor(gridX)));
       const x1 = Math.min(width - 1, x0 + 1);
       const tx = Math.max(0, Math.min(1, gridX - Math.floor(gridX)));
+      const corners = [
+        { cell: y0 * width + x0, share: (1 - tx) * (1 - ty) },
+        { cell: y0 * width + x1, share: tx * (1 - ty) },
+        { cell: y1 * width + x0, share: (1 - tx) * ty },
+        { cell: y1 * width + x1, share: tx * ty },
+      ];
+      let merged = 0;
+      for (const corner of corners) {
+        if (corner.share <= 0) continue;
+        const base = corner.cell * CLAIMS_PER_CELL;
+        for (let slot = 0; slot < CLAIMS_PER_CELL; slot += 1) {
+          const id = claims.ids[base + slot]!;
+          if (id < 0) break;
+          const value = claims.weights[base + slot]! * corner.share;
+          let at = -1;
+          for (let e = 0; e < merged; e += 1) {
+            if (mergedIds[e] === id) { at = e; break; }
+          }
+          if (at < 0) { at = merged; mergedIds[at] = id; mergedWeights[at] = 0; merged += 1; }
+          mergedWeights[at]! += value;
+        }
+      }
       let first = -1;
+      let firstValue = 0;
       let second = -1;
-      for (let channel = 0; channel < channels; channel += 1) {
-        const topLeft = scores[(y0 * width + x0) * channels + channel]!;
-        const topRight = scores[(y0 * width + x1) * channels + channel]!;
-        const bottomLeft = scores[(y1 * width + x0) * channels + channel]!;
-        const bottomRight = scores[(y1 * width + x1) * channels + channel]!;
-        sampled[channel] =
-          (topLeft + (topRight - topLeft) * tx) * (1 - ty) +
-          (bottomLeft + (bottomRight - bottomLeft) * tx) * ty;
-        if (first < 0 || sampled[channel]! > sampled[first]!) {
-          second = first;
-          first = channel;
-        } else if (second < 0 || sampled[channel]! > sampled[second]!) {
-          second = channel;
+      let secondValue = 0;
+      for (let e = 0; e < merged; e += 1) {
+        const value = mergedWeights[e]!;
+        if (first < 0 || value > firstValue) {
+          second = first; secondValue = firstValue;
+          first = mergedIds[e]!; firstValue = value;
+        } else if (second < 0 || value > secondValue) {
+          second = mergedIds[e]!; secondValue = value;
         }
       }
 
@@ -251,8 +306,8 @@ function renderPoliticalField(
       fillImage.data[pixel + 2] = fillColor.blue;
       fillImage.data[pixel + 3] = 255;
 
-      if (second < 0 || sampled[second]! < 0.055) continue;
-      const gap = sampled[first]! - sampled[second]!;
+      if (second < 0 || secondValue < 0.055) continue;
+      const gap = firstValue - secondValue;
       const strength = Math.max(0, Math.min(1, 1 - gap / 0.25));
       if (strength <= 0) continue;
       const firstOwner = first < PLAYER_ORDER.length ? PLAYER_ORDER[first]! : null;

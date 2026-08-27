@@ -121,7 +121,16 @@ export interface FactionState {
   warships: number;
   structures: StructureCounts;
   capitalIndex: number;
+  /** Distinct elemental powers held; drives terrain affinity and matchups. */
   absorbedElements: ElementId[];
+  /**
+   * How many realms of each element this one has taken, itself included.
+   *
+   * The distinct set answers "what can this realm do"; the tally answers "how
+   * much of it does it hold", which is what a realm built from ten conquered
+   * Ember neighbours has that one holding a single Ember province does not.
+   */
+  elementCounts: Record<ElementId, number>;
   lastConqueror: PlayerId | null;
   intent: AiIntent;
 }

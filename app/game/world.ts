@@ -10,6 +10,7 @@ import { TERRAIN_RULES, calculateTroopCap, normalizedCellArea } from "./rules";
 import { claimInitialTerritory, draftSpawnSites } from "./spawn";
 import type {
   Cell,
+  ElementId,
   PlayerId,
   FactionState,
   RelationState,
@@ -144,6 +145,7 @@ function makeFaction(id: PlayerId): FactionState {
     structures: emptyStructures(),
     capitalIndex: -1,
     absorbedElements: [element],
+    elementCounts: { [element]: 1 } as Record<ElementId, number>,
     lastConqueror: null,
     intent: {
       target: null,
