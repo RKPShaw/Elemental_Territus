@@ -1,4 +1,5 @@
 import type {
+  ElementTier,
   LandTerrainId,
   StructureRule,
   StructureType,
@@ -257,6 +258,90 @@ export const ENEMY_TERRAIN_COST: Record<LandTerrainId, number> = {
   hills: 5.65,
   mountains: 6.3,
 };
+
+/**
+ * The elemental balance surface.
+ *
+ * matchupEdge is the whole of elemental combat today: the founding counter
+ * cycle advances a front 1.12× faster with the edge and 0.88× slower against
+ * it (1 ± matchupEdge — the sums are float-exact, which the element tests
+ * pin). The rest of the block belongs to the wider 25-element space: the
+ * composed matchup table (built and tested in elements.ts, not yet consulted
+ * by combat), and the ascension, trade-form and infrastructure-memory
+ * constants of the phases that will light it up. An elemental edge should
+ * matter without ever deciding a battle by itself, so every multiplier here
+ * lives inside the floor/ceiling band.
+ */
+export const ELEMENT_RULES = {
+  /** Full counter advantage between two founding elements, as a share of 1. */
+  matchupEdge: 0.12,
+  /**
+   * How much of the composed edge each tier expresses. Higher tiers swing
+   * harder in both directions — a higher ceiling, never a higher floor.
+   */
+  tierAmplitude: { 1: 1, 2: 1.15, 3: 1.25 } satisfies Record<ElementTier, number>,
+  /** Hard band around any composed multiplier. */
+  matchupFloor: 0.85,
+  matchupCeiling: 1.15,
+  /**
+   * How much of an edge a realm's absorbed history can grade away when it
+   * covers the founding bases of what it faces. At most a third: history
+   * softens a matchup, it never erases one.
+   */
+  absorbedBaseRelief: 0.33,
+  /**
+   * Optional counter strength across the cycle's neutral pairs (ember–gale,
+   * tide–stone), as a share of a full counter. Zero is document-faithful;
+   * raise it if sweeps show mid-game combat going elementally flat.
+   */
+  neutralPairEdge: 0,
+  /** Absorbed base depth required in each constituent to form a tier 2. */
+  tier2BaseDepth: 2,
+  /** Total realms absorbed before any tier 3 becomes formable. */
+  tier3MinimumRealms: 6,
+  /** Captured-structure efficiency when only absorbed history covers its form. */
+  legacyEfficiency: 0.9,
+  /** Captured-structure efficiency when nothing in the realm's history does. */
+  incompatibleEfficiency: 0.78,
+  /** Extra value a form-matching conqueror pulls from freshly taken works. */
+  resonantCaptureBonus: 0.2,
+  /** How long after capture the resonant window stays open. */
+  resonantWindowTicks: 600,
+} as const;
+
+/**
+ * The strategic-priority surface.
+ *
+ * Every realm carries normalized weights over the strategic domains, seeded
+ * by its element and bent by situation. AI systems consume them only as
+ * multipliers inside the factor band, so a priority can never gate a
+ * behavior — a pacifist still defends itself, a warmonger still trades. The
+ * band is centred on 1: a realm weighting a domain at exactly the uniform
+ * share behaves as if the system did not exist.
+ */
+export const STRATEGY_RULES = {
+  /** Bounds on any weight-derived multiplier. */
+  factorFloor: 0.6,
+  factorCeiling: 1.6,
+  /** How far construction quotas may drift, as a share of the factor's drift. */
+  quotaDamping: 0.5,
+  /** Per-domain personality noise, so siblings of one family still differ. */
+  noiseAmplitude: 0.05,
+  /** Weight added to defense while campaigns press into the realm. */
+  threatDefenseSurge: 0.14,
+  /** Weight added to conquest while the realm has wars of its own. */
+  warConquestSurge: 0.08,
+  /** Weight added to diplomacy per point of war weariness. */
+  wearinessDiplomacySurge: 0.2,
+  /** Weight added to diplomacy while any rival holds this much of the land. */
+  hegemonDiplomacySurge: 0.12,
+  hegemonShareThreshold: 0.3,
+  /** Weight added to economy while the treasury outruns the works. */
+  richEconomySurge: 0.1,
+  richTreasuryFloor: 2_000_000,
+  /** Weight added to trade while the realm is entirely at peace. */
+  peacefulTradeSurge: 0.08,
+} as const;
 
 export const ECONOMY_RULES = {
   landIncomeScale: 2.4,

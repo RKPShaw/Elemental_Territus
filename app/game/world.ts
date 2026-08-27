@@ -8,6 +8,7 @@ import { createTheaterMap } from "./theater-map";
 import { realmSubject } from "./reporting";
 import { TERRAIN_RULES, calculateTroopCap, normalizedCellArea } from "./rules";
 import { claimInitialTerritory, draftSpawnSites } from "./spawn";
+import { initialStrategy } from "./strategy";
 import type {
   Cell,
   ElementId,
@@ -41,6 +42,7 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   decisionInterval: 10,
   diplomacyInterval: 16,
   constructionInterval: 2,
+  strategyInterval: 40,
   minimumPeaceTicks: 180,
   victoryShare: 0.8,
   maximumTroops: 1_500_000,
@@ -131,7 +133,7 @@ function emptyStructures(): StructureCounts {
   return { city: 0, fort: 0, factory: 0, harbor: 0 };
 }
 
-function makeFaction(id: PlayerId): FactionState {
+function makeFaction(id: PlayerId, seed: number): FactionState {
   const element = playerElement(id);
   return {
     id,
@@ -155,6 +157,7 @@ function makeFaction(id: PlayerId): FactionState {
     warships: 0,
     structures: emptyStructures(),
     capitalIndex: -1,
+    strategy: initialStrategy(seed, id, element),
     absorbedElements: [element],
     elementCounts: { [element]: 1 } as Record<ElementId, number>,
     lastConqueror: null,
@@ -199,7 +202,7 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
   }
 
   const factions = Object.fromEntries(
-    PLAYER_ORDER.map((id) => [id, makeFaction(id)]),
+    PLAYER_ORDER.map((id) => [id, makeFaction(id, seed)]),
   ) as Record<PlayerId, FactionState>;
 
   // Every player drafts a start from the finished map, then opens holding the

@@ -19,6 +19,7 @@ import {
   normalizedCellArea,
   normalizedCellLength,
 } from "../rules";
+import { strategyQuotaFactor } from "../strategy";
 import type {
   PlayerId,
   SimulationContext,
@@ -237,12 +238,21 @@ function desiredInfrastructure(
   const { state } = context;
   const faction = state.factions[owner];
   const physicalTerritory = faction.territory * normalizedCellArea(state.config);
-  const desiredCities = clamp(Math.ceil(physicalTerritory / 8), 2, 90);
-  const desiredTrade = clamp(Math.ceil(desiredCities * 0.8), 2, 100);
+  // Quotas lean the way the realm's priorities lean: cities carry the troop
+  // cap for conquest, trade buildings carry the economy, forts the defense.
+  // The damped factor keeps the drift gentle — a program, not a lurch.
+  const cityQuota = strategyQuotaFactor(faction.strategy, "conquest");
+  const tradeQuota = (
+    strategyQuotaFactor(faction.strategy, "economy")
+    + strategyQuotaFactor(faction.strategy, "trade")
+  ) / 2;
+  const fortQuota = strategyQuotaFactor(faction.strategy, "defense");
+  const desiredCities = clamp(Math.ceil((physicalTerritory / 8) * cityQuota), 2, 90);
+  const desiredTrade = clamp(Math.ceil(desiredCities * 0.8 * tradeQuota), 2, 100);
   const desiredHarbors = Math.min(20, Math.ceil(desiredTrade * 0.22));
   const tradeBuildings = counts.factory + counts.harbor;
   const vulnerable = vulnerableBoundaryCells(context, owner);
-  const desiredForts = Math.min(18, Math.max(0, Math.ceil(vulnerable.length / 18)));
+  const desiredForts = Math.min(18, Math.max(0, Math.ceil((vulnerable.length / 18) * fortQuota)));
   const defensiveResourceDump = vulnerable.length > 0 && faction.gold >= 1_250_000;
 
   if (allowFort && (counts.fort < desiredForts || defensiveResourceDump) && vulnerable.length > 0) return "fort";

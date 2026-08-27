@@ -1,4 +1,49 @@
-export type ElementId = "ember" | "tide" | "grove" | "stone" | "gale";
+/**
+ * Every elemental identity a realm can hold or one day express.
+ *
+ * The first five are the founding families that seat the roster. The rest are
+ * the compound (tier 2) and advanced (tier 3) elements of the wider space —
+ * declared and fully described in elements.ts, but dormant until the systems
+ * that award and express them arrive. Widening this union is deliberate: every
+ * Record<ElementId, …> site is then compiler-checked for the full space.
+ */
+export type ElementId =
+  | "ember"
+  | "tide"
+  | "grove"
+  | "stone"
+  | "gale"
+  | "steam"
+  | "magma"
+  | "lightning"
+  | "ice"
+  | "sand"
+  | "geyser"
+  | "tempest"
+  | "bloom"
+  | "mist"
+  | "mirage"
+  | "plasma"
+  | "ash"
+  | "obsidian"
+  | "glass"
+  | "spirit"
+  | "aurora"
+  | "lodestone"
+  | "amber"
+  | "fungus"
+  | "crystal";
+
+/** The four irreducible bases every element's character is composed from. */
+export type FoundingElementId = "ember" | "tide" | "stone" | "gale";
+
+export type ElementTier = 1 | 2 | 3;
+
+/**
+ * The four fundamental ways value moves through the world, one per founding
+ * base: ember trades energy, tide the waterways, stone the land, gale the air.
+ */
+export type TradeForm = "energy" | "waterway" | "land" | "airborne";
 
 /**
  * A competing power. Ten players share each element, so a player carries an
@@ -35,6 +80,36 @@ export type RealmPosture =
   | "recovering"
   | "trading";
 
+/**
+ * What a realm can choose to be about. Ascension is this game's technology:
+ * the pursuit of higher elemental tiers through conquest of complementary
+ * powers.
+ */
+export type StrategicDomain =
+  | "economy"
+  | "conquest"
+  | "ascension"
+  | "diplomacy"
+  | "defense"
+  | "trade";
+
+/**
+ * A realm's standing priorities: what it is trying to be about, before any
+ * single decision. Element identity seeds the weights and situation bends
+ * them; the AI systems read them as bounded multipliers, so a priority
+ * influences behavior without ever gating it.
+ */
+export interface StrategicPriorities {
+  /** Normalized weights over the domains; always sums to one. */
+  weights: Record<StrategicDomain, number>;
+  /** The leading domain, for display and stories. */
+  focus: StrategicDomain;
+  /** Tick the current focus was adopted. */
+  adoptedAt: number;
+  /** Why, in the realm's own words — like AiIntent.reason. */
+  reason: string;
+}
+
 export interface ElementDefinition {
   id: ElementId;
   name: string;
@@ -44,8 +119,31 @@ export interface ElementDefinition {
   color: string;
   softColor: string;
   deepColor: string;
+  /**
+   * The founding five's legacy counter cycle, still the live combat rule.
+   * Empty for the wider space; retired entirely when the composed matchup
+   * table takes over combat.
+   */
   strongAgainst: readonly ElementId[];
   weakAgainst: readonly ElementId[];
+  /** Where this element belongs in the three-tier space. */
+  tier: ElementTier;
+  /**
+   * What this element is made of: nothing for a founding base, two founding
+   * bases for tier 2, two tier-2 elements for tier 3. Composition — and from
+   * it dominance and counters — is derived from these, never hand-authored.
+   */
+  bases: readonly ElementId[];
+  /** The repeated base of a dominant tier 3; null for balanced and lower tiers. */
+  dominantBase: ElementId | null;
+  /** Native trade forms: one for tier 1, two thereafter. */
+  tradeForms: readonly TradeForm[];
+  /**
+   * Baseline strategic weights this element leans its civilization toward.
+   * Authored for the founding families; compounds inherit a blend of their
+   * bases (see strategy.ts), so omitting it here means "what I am made of".
+   */
+  priorityProfile?: Readonly<Record<StrategicDomain, number>>;
   favoredTerrain: LandTerrainId;
   temperament: string;
 }
@@ -121,6 +219,8 @@ export interface FactionState {
   warships: number;
   structures: StructureCounts;
   capitalIndex: number;
+  /** Standing priorities; seeded by element, bent by situation. */
+  strategy: StrategicPriorities;
   /** Distinct elemental powers held; drives terrain affinity and matchups. */
   absorbedElements: ElementId[];
   /**
@@ -414,7 +514,15 @@ export interface ReportSubject {
   realmId?: PlayerId;
 }
 
-export type ReportFact = string | number | boolean | null | string[] | number[];
+export type ReportFact =
+  | string
+  | number
+  | boolean
+  | null
+  | string[]
+  | number[]
+  /** Small labelled tallies, such as a conqueror's per-element counts. */
+  | Record<string, number>;
 
 export interface WorldReportEvent {
   schemaVersion: 1;
@@ -548,6 +656,8 @@ export interface SimulationConfig {
   decisionInterval: number;
   diplomacyInterval: number;
   constructionInterval: number;
+  /** Ticks between strategic-priority recomputes. */
+  strategyInterval: number;
   minimumPeaceTicks: number;
   victoryShare: number;
   maximumTroops: number;

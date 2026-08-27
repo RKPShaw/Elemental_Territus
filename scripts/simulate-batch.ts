@@ -4,6 +4,7 @@ import { Worker } from "node:worker_threads";
 import { DEFAULT_BATCH_CHECKPOINTS } from "../app/game/batch";
 import type { BatchGameResult } from "../app/game/batch";
 import { ELEMENT_ORDER, ELEMENTS } from "../app/game/elements";
+import { PLAYER_ORDER, playerElement } from "../app/game/players";
 
 interface Arguments {
   games: number;
@@ -93,7 +94,7 @@ const checkpointSummary = checkpointTicks.map((tick) => {
     const exact = result.checkpoints.find((checkpoint) => checkpoint.requestedTick === tick);
     return exact ? [exact.snapshot] : [];
   });
-  const players = samples.flatMap((sample) => ELEMENT_ORDER.map((id) => sample.players[id]));
+  const players = samples.flatMap((sample) => PLAYER_ORDER.map((id) => sample.players[id]));
   const structureSpend = mean(samples.map((sample) => sample.structureSpend));
   const tradeIncome = mean(samples.map((sample) => sample.trainIncome + sample.shipIncome));
   const ratioOfLifetime = (
@@ -106,11 +107,11 @@ const checkpointSummary = checkpointTicks.map((tick) => {
   };
   const cityCaptures = mean(samples.map((sample) => sample.citiesCaptured));
   const cityBuilds = mean(samples.map((sample) => sample.citiesBuilt));
-  const domesticStops = mean(samples.map((sample) => ELEMENT_ORDER.reduce(
+  const domesticStops = mean(samples.map((sample) => PLAYER_ORDER.reduce(
     (sum, id) => sum + sample.players[id].cumulative.domesticStopsServed,
     0,
   )));
-  const foreignStops = mean(samples.map((sample) => ELEMENT_ORDER.reduce(
+  const foreignStops = mean(samples.map((sample) => PLAYER_ORDER.reduce(
     (sum, id) => sum + sample.players[id].cumulative.foreignStopsServed,
     0,
   )));
@@ -136,20 +137,20 @@ const checkpointSummary = checkpointTicks.map((tick) => {
     lifetimeCommittedCapPct: rounded(
       ratioOfLifetime((player) => player.cumulative.committedRatioTotal) * 100,
     ),
-    citiesOwnedPerRealm: rounded(mean(samples.map((sample) => sample.structuresOwned.city)) / ELEMENT_ORDER.length),
-    citySitesOwnedPerRealm: rounded(mean(samples.map((sample) => sample.citySitesOwned)) / ELEMENT_ORDER.length),
-    cityLevelsBuiltPerRealm: rounded(mean(samples.map((sample) => sample.citiesBuilt)) / ELEMENT_ORDER.length),
-    citySitesBuiltPerRealm: rounded(mean(samples.map((sample) => sample.citySitesBuilt)) / ELEMENT_ORDER.length),
-    cityLevelsCapturedPerRealm: rounded(mean(samples.map((sample) => sample.citiesCaptured)) / ELEMENT_ORDER.length),
-    citySitesCapturedPerRealm: rounded(mean(samples.map((sample) => sample.citySitesCaptured)) / ELEMENT_ORDER.length),
-    cityLevelsLostPerRealm: rounded(mean(samples.map((sample) => sample.citiesLost)) / ELEMENT_ORDER.length),
+    citiesOwnedPerRealm: rounded(mean(samples.map((sample) => sample.structuresOwned.city)) / PLAYER_ORDER.length),
+    citySitesOwnedPerRealm: rounded(mean(samples.map((sample) => sample.citySitesOwned)) / PLAYER_ORDER.length),
+    cityLevelsBuiltPerRealm: rounded(mean(samples.map((sample) => sample.citiesBuilt)) / PLAYER_ORDER.length),
+    citySitesBuiltPerRealm: rounded(mean(samples.map((sample) => sample.citySitesBuilt)) / PLAYER_ORDER.length),
+    cityLevelsCapturedPerRealm: rounded(mean(samples.map((sample) => sample.citiesCaptured)) / PLAYER_ORDER.length),
+    citySitesCapturedPerRealm: rounded(mean(samples.map((sample) => sample.citySitesCaptured)) / PLAYER_ORDER.length),
+    cityLevelsLostPerRealm: rounded(mean(samples.map((sample) => sample.citiesLost)) / PLAYER_ORDER.length),
     capturedShareOfDevelopedCitiesPct: cityBuilds + cityCaptures > 0
       ? rounded(cityCaptures / (cityBuilds + cityCaptures) * 100)
       : 0,
-    stackedCityLevelsPerRealm: rounded(mean(samples.map((sample) => sample.stackedCityLevelsOwned)) / ELEMENT_ORDER.length),
-    factoriesPerRealm: rounded(mean(samples.map((sample) => sample.structuresOwned.factory)) / ELEMENT_ORDER.length),
-    harborsPerRealm: rounded(mean(samples.map((sample) => sample.structuresOwned.harbor)) / ELEMENT_ORDER.length),
-    fortsPerRealm: rounded(mean(samples.map((sample) => sample.structuresOwned.fort)) / ELEMENT_ORDER.length),
+    stackedCityLevelsPerRealm: rounded(mean(samples.map((sample) => sample.stackedCityLevelsOwned)) / PLAYER_ORDER.length),
+    factoriesPerRealm: rounded(mean(samples.map((sample) => sample.structuresOwned.factory)) / PLAYER_ORDER.length),
+    harborsPerRealm: rounded(mean(samples.map((sample) => sample.structuresOwned.harbor)) / PLAYER_ORDER.length),
+    fortsPerRealm: rounded(mean(samples.map((sample) => sample.structuresOwned.fort)) / PLAYER_ORDER.length),
     structureSpendPerWorld: rounded(structureSpend),
     nominalPassiveIncomePerWorld: rounded(mean(samples.map((sample) => sample.nominalPassiveIncome))),
     trainIncomePerWorld: rounded(mean(samples.map((sample) => sample.trainIncome))),
@@ -173,13 +174,13 @@ const checkpointSummary = checkpointTicks.map((tick) => {
     lifetimeAtWarPct: rounded(ratioOfLifetime((player) => player.cumulative.ticksAtWar) * 100),
     lifetimeAlliedPct: rounded(ratioOfLifetime((player) => player.cumulative.ticksAllied) * 100),
     warsDeclaredPerWorld: rounded(mean(samples.map((sample) =>
-      ELEMENT_ORDER.reduce((sum, id) => sum + sample.players[id].cumulative.warsDeclared, 0)
+      PLAYER_ORDER.reduce((sum, id) => sum + sample.players[id].cumulative.warsDeclared, 0)
     ))),
     alliancesFormedPerWorld: rounded(mean(samples.map((sample) =>
-      ELEMENT_ORDER.reduce((sum, id) => sum + sample.players[id].cumulative.alliancesFormed, 0)
+      PLAYER_ORDER.reduce((sum, id) => sum + sample.players[id].cumulative.alliancesFormed, 0)
     ))),
     betrayalsPerWorld: rounded(mean(samples.map((sample) =>
-      ELEMENT_ORDER.reduce((sum, id) => sum + sample.players[id].cumulative.alliancesBetrayed, 0)
+      PLAYER_ORDER.reduce((sum, id) => sum + sample.players[id].cumulative.alliancesBetrayed, 0)
     ))),
     activeWars: rounded(mean(samples.map((sample) => sample.activeWars)), 2),
     activeAlliances: rounded(mean(samples.map((sample) => sample.activeAlliances)), 2),
@@ -189,9 +190,12 @@ const checkpointSummary = checkpointTicks.map((tick) => {
   };
 });
 
-const winnerCounts = Object.fromEntries(ELEMENT_ORDER.map((id) => [
-  ELEMENTS[id].name,
-  results.filter((result) => result.champion === id).length,
+// Champions are players; the tally groups them back into their families.
+const winnerCounts = Object.fromEntries(ELEMENT_ORDER.map((element) => [
+  ELEMENTS[element].name,
+  results.filter((result) =>
+    result.champion !== null && playerElement(result.champion) === element,
+  ).length,
 ]));
 const summary = {
   games: results.length,

@@ -119,6 +119,7 @@ export class ElementalWarEngine {
             elementCounts: { ...faction.elementCounts },
             structures: { ...faction.structures },
             intent: { ...faction.intent },
+            strategy: { ...faction.strategy, weights: { ...faction.strategy.weights } },
             economy: cloneEconomyLedger(faction.economy),
           },
         ]),

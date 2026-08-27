@@ -8,6 +8,7 @@ import {
   structureCells,
 } from "../grid";
 import { CLAIM_RULES, POPULATION_RULES, compactNumber, clamp } from "../rules";
+import { strategyFactor } from "../strategy";
 import type { PlayerId, SimulationContext, SimulationSystem } from "../types";
 
 export class StrategyAiSystem implements SimulationSystem {
@@ -123,8 +124,11 @@ export class StrategyAiSystem implements SimulationSystem {
             return cell.owner === id && (cell.capitalOf !== null || cell.structure !== null);
           });
         });
+        // A defense-minded realm covers more of the pressing force; the clamp
+        // keeps even the most martial court from spending itself dry here.
+        const coverShare = clamp(0.62 * strategyFactor(faction.strategy, "defense"), 0.4, 0.9);
         const desired = threatened
-          ? Math.max(0, uncovered * 0.62 - incomingCampaign.defenderRemaining)
+          ? Math.max(0, uncovered * coverShare - incomingCampaign.defenderRemaining)
           : 0;
         const plannedCommitment = Math.floor(Math.min(available, desired));
         if (plannedCommitment >= 8_000) {
@@ -194,9 +198,18 @@ export class StrategyAiSystem implements SimulationSystem {
 
       let plannedCommitment = 0;
       if (!recovering && !defending) {
-        const reserve = Math.max(faction.troopCap * 0.24, incomingThreat * 0.65);
+        // Priorities size the blow: defense decides what stays home, conquest
+        // decides how much of the rest marches, both inside hard bands.
+        const reserve = Math.max(
+          faction.troopCap * 0.24 * strategyFactor(faction.strategy, "defense"),
+          incomingThreat * 0.65,
+        );
         const spendable = Math.max(0, faction.troops - reserve);
-        const desired = faction.troops * clamp(0.55 + bestScore * 0.06, 0.5, 0.8);
+        const desired = faction.troops * clamp(
+          clamp(0.55 + bestScore * 0.06, 0.5, 0.8) * strategyFactor(faction.strategy, "conquest"),
+          0.4,
+          0.85,
+        );
         const reinforcementNeeded = outgoing && outgoing.remaining < outgoing.initialCommitted * 0.34;
         if (!outgoing || reinforcementNeeded) {
           plannedCommitment = Math.floor(Math.min(spendable, desired));

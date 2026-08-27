@@ -15,7 +15,15 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded when capitals became founded cities whose capture annexes the
+ * Re-recorded when realms gained strategic priorities: element-seeded,
+ * situation-bent weights that scale war desire, alliance appetite, trade
+ * policy, commitment sizing and construction quotas. Every world digest moves
+ * twice over — the strategy block is new state, and realms genuinely decide
+ * differently. The cell digests tell the second half: seed 0x5eed01 still
+ * holds its old tick-60 map while the others have already diverged, which is
+ * the proof that priorities steer decisions rather than rewriting the ground.
+ *
+ * Before that, re-recorded when capitals became founded cities whose capture annexes the
  * whole realm, cities began to be sited on laid track, and trains took the
  * shortest physical line over track with a quarter of the old fleet. Every
  * digest moves, and that is the point: worlds open with fifty cities standing,
@@ -63,25 +71,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "d0cf5d02ebf3d42131bd1120a72bd45b", cells: "f2138440e5b81ece" },
-      { tick: 200, world: "997aa2c24d24771d3ee5fc46a9e38229", cells: "74185b9aa3c27078" },
-      { tick: 600, world: "73051aeeaced9889d7e8db5fcb92c60c", cells: "b5dcefb4599b7fc2", deep: true },
+      { tick: 60, world: "8f7d632b31fa2469db9200a6eb77cbaa", cells: "ca9d41b9364486aa" },
+      { tick: 200, world: "da41dadedab8e320582473fd78b57758", cells: "444025e9f6853b5a" },
+      { tick: 600, world: "a850be7989f50a7a91ec6b6f93a86abb", cells: "b1ca890358960e6b", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "349d020dcd89ce1d25eade66f63e8509", cells: "eccb98d23e6bfd8a" },
-      { tick: 200, world: "84dffe59806ad33c51b6f2f08a31360f", cells: "95b5103b67d6d3f9" },
-      { tick: 600, world: "6ccef635fa02556541421e6cbc026c61", cells: "192ddceed75f8bd9", deep: true },
+      { tick: 60, world: "67964efd15bd4229b57b9a0ade2f73eb", cells: "eccb98d23e6bfd8a" },
+      { tick: 200, world: "c91e172322f9130544076cd89758beae", cells: "24eebd475535ff02" },
+      { tick: 600, world: "7eae258864ea2ca06b6d69e0015b7471", cells: "e318f2defedc0861", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "0bd5fc640add9b9cac93b590ddd720ad", cells: "bbf988a0c7c810fa" },
-      { tick: 200, world: "c19b3ac9242f9f618325e08fdf68b26c", cells: "3b2fd48515839bf1" },
-      { tick: 600, world: "06a673068df888f623746b0942f42dde", cells: "68a2855663b64341", deep: true },
+      { tick: 60, world: "ac43c8b2d0856aaece952b34d0c74b65", cells: "f9c7c9012e508f64" },
+      { tick: 200, world: "35d403bc10a69550c141dc1562861076", cells: "7996941ecc836bee" },
+      { tick: 600, world: "ef06c65c79d2cee2de88756a4ebed5bd", cells: "382cfd72ed781fcc", deep: true },
     ],
   },
 ];

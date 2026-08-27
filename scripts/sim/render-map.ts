@@ -37,14 +37,22 @@ function mix(base: Rgb, overlay: Rgb, amount: number): Rgb {
   };
 }
 
-/** Letters stand in for realm colour when the terminal has none. */
-const REALM_LETTER: Record<ElementId, string> = {
+/**
+ * Letters stand in for realm colour when the terminal has none. Only the
+ * founding families seat realms, so only they get authored letters; anything
+ * beyond them falls back to its initial.
+ */
+const REALM_LETTER: Partial<Record<ElementId, string>> = {
   ember: "E",
   tide: "T",
   grove: "G",
   stone: "S",
   gale: "A",
 };
+
+function realmLetter(element: ElementId): string {
+  return REALM_LETTER[element] ?? ELEMENTS[element].name.slice(0, 1).toUpperCase();
+}
 
 const TERRAIN_CHAR = {
   water: "~",
@@ -117,7 +125,7 @@ function plainChar(state: WorldState, index: number, mode: MapMode): string {
     return " .:-=+*#%@"[Math.min(9, Math.max(0, Math.round(value * 9)))]!;
   }
   if (!cell.owner) return ".";
-  const letter = REALM_LETTER[playerElement(cell.owner)];
+  const letter = realmLetter(playerElement(cell.owner));
   return cell.structure ? letter : letter.toLowerCase();
 }
 
@@ -183,7 +191,7 @@ export function mapLegend(state: WorldState, options: MapOptions): string {
         if (faction.alive) alive += 1;
       }
       const share = ((territory / state.landTiles) * 100).toFixed(1);
-      const label = `${REALM_LETTER[element]} ${ELEMENTS[element].name} ${share}% (${alive} alive)`;
+      const label = `${realmLetter(element)} ${ELEMENTS[element].name} ${share}% (${alive} alive)`;
       if (!options.color) return label;
       const { red, green, blue } = rgb(ELEMENTS[element].color);
       return `\u001b[38;2;${red};${green};${blue}m■\u001b[0m ${label}`;
