@@ -369,6 +369,13 @@ export const ELEMENT_RULES = {
   waterwayHarborTradeShare: 0.34,
   waterwayHarborTradeCap: 0.4,
   /**
+   * Factories a realm must run before it reaches for a harbor. Waterway
+   * realms open their ports a factory earlier — the coast is their
+   * identity, and waiting for a full land program kept it theoretical.
+   */
+  harborFactoryPrerequisite: 3,
+  waterwayHarborFactoryPrerequisite: 2,
+  /**
    * How many plants an energy realm wants, as a share of its desired trade
    * program, and the hard cap on them; skyports scale with the city count
    * instead, with a floor of two because one skyport flies nowhere.
@@ -492,11 +499,14 @@ export const TRADE_RULES = {
   energyDeliveryPayout: 45_000,
   /**
    * The airborne carrier. Skyports fly straight to any other skyport, so
-   * the payout is bought with distance like a voyage — priced above sea
-   * freight because the line is straight and crosses anything — and a hop
-   * shorter than the minimum is not worth wings.
+   * the payout is bought with distance like a voyage. Air's premium is
+   * reach, not rate: it pays slightly under sea freight per travel tick —
+   * every flight the whole world over is a straight line — because the
+   * first sweep priced it above and gale realms took nearly half of all
+   * wins on flight income alone. A hop shorter than the minimum is not
+   * worth wings.
    */
-  airPayoutPerTravelTick: 5_500,
+  airPayoutPerTravelTick: 3_600,
   minimumFlightDistance: 4,
   foreignHostShare: 0.18,
   alliedHostShare: 0.35,

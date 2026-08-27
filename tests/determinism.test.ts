@@ -24,6 +24,11 @@ import { cellDigest, worldDigest } from "./world-digest";
  * ladder and the exclusive carriers gate on the expressed form, so
  * construction programs, treasuries and the map itself all diverge from the
  * first planning window — every digest moves, and gale finally trades.
+ * Tuned after the first hundred-game sweep of the carriers: air freight now
+ * pays slightly under sea freight per travel tick (gale had taken nearly
+ * half of all wins on flight income alone), and waterway realms open their
+ * first harbor a factory earlier, because tide's coastal identity kept
+ * arriving after its wars did.
  *
  * Before that, re-recorded when trade forms first went live riding the then-existing
  * carriers: trains earned the energy reward, stations the land reward, ships
@@ -102,24 +107,24 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
     seed: 0x240823,
     checkpoints: [
       { tick: 60, world: "4452b3ed11210df52a492352249e3330", cells: "1b5951d693443dc3" },
-      { tick: 200, world: "4c4d5e232f615fcacfeecdc5abd1c496", cells: "e2f24edbbb301e7d" },
-      { tick: 600, world: "1501adf33aec24e6654fbd9e86b80f34", cells: "91c3a0cf0ab73793", deep: true },
+      { tick: 200, world: "c892b4cfa4738ea852a3cec51c8e8e61", cells: "051476656c69d348" },
+      { tick: 600, world: "0e7584e13feeaac15b9b7a57d9281d84", cells: "15e235474cc82db9", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
       { tick: 60, world: "0362f855f9e798abe2582fc59d7580d4", cells: "ae4878a1aa128779" },
-      { tick: 200, world: "14b28d1b36f291075e15c77100aaad1e", cells: "a0e5279dee3180ff" },
-      { tick: 600, world: "5346ba781f1c9f9d667cb639d8ffb21e", cells: "9a4572bc0facc0f6", deep: true },
+      { tick: 200, world: "fc967620a786a40482ec3f5634e3dfc4", cells: "0da3cb89f82aeb9f" },
+      { tick: 600, world: "d1a6bd8e3a6209fd6afa17de7f7fb132", cells: "04715bf665fc614e", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
       { tick: 60, world: "ca23bb9a7bb1d7da4b0ce3af260000e5", cells: "503f482935f15882" },
-      { tick: 200, world: "d5e41a1f212b553bcc620344e94efcfc", cells: "f278fc5eacad9acc" },
-      { tick: 600, world: "62de19b6815125728fd5b6b2703bfb0c", cells: "af1ad94167eabc03", deep: true },
+      { tick: 200, world: "e056c0b3eb1e90eab8f7fd576293d305", cells: "663c88f0e88eaa3a" },
+      { tick: 600, world: "e537a72c74cc07aa0e62a172db658f53", cells: "bf954ebabe5fe12e", deep: true },
     ],
   },
 ];

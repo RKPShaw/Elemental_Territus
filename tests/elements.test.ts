@@ -345,6 +345,7 @@ test("construction affinity leans a realm toward the carriers it holds", () => {
     skyport: 0,
     harborShare: ELEMENT_RULES.waterwayHarborTradeShare,
     harborCap: ELEMENT_RULES.waterwayHarborTradeCap,
+    harborPrerequisite: ELEMENT_RULES.waterwayHarborFactoryPrerequisite,
   });
   // An energy realm reaches for the plants only it may raise.
   assert.deepEqual(buildAffinityOf("ember"), {
@@ -354,6 +355,7 @@ test("construction affinity leans a realm toward the carriers it holds", () => {
     skyport: 0,
     harborShare: ELEMENT_RULES.harborTradeShare,
     harborCap: ELEMENT_RULES.harborTradeCap,
+    harborPrerequisite: ELEMENT_RULES.harborFactoryPrerequisite,
   });
   // A land realm lets road-laying trade buildings jump its city queue.
   assert.deepEqual(buildAffinityOf("stone"), {
@@ -363,6 +365,7 @@ test("construction affinity leans a realm toward the carriers it holds", () => {
     skyport: 0,
     harborShare: ELEMENT_RULES.harborTradeShare,
     harborCap: ELEMENT_RULES.harborTradeCap,
+    harborPrerequisite: ELEMENT_RULES.harborFactoryPrerequisite,
   });
   // An airborne realm reaches for its skyports and nothing exclusive else.
   assert.deepEqual(buildAffinityOf("gale"), {
@@ -372,6 +375,7 @@ test("construction affinity leans a realm toward the carriers it holds", () => {
     skyport: ELEMENT_RULES.buildAffinity.skyport,
     harborShare: ELEMENT_RULES.harborTradeShare,
     harborCap: ELEMENT_RULES.harborTradeCap,
+    harborPrerequisite: ELEMENT_RULES.harborFactoryPrerequisite,
   });
   // Compounds compose their parents' leans, and the raised harbor share
   // follows the waterway form wherever it appears.

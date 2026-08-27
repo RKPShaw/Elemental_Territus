@@ -756,6 +756,8 @@ export interface BuildAffinity {
   harborShare: number;
   /** Running cap on harbors as a fraction of trade buildings standing. */
   harborCap: number;
+  /** Factories a realm must run before it reaches for a harbor. */
+  harborPrerequisite: number;
 }
 
 const BUILD_AFFINITIES = new Map<ElementId, BuildAffinity>();
@@ -785,6 +787,9 @@ export function buildAffinityOf(element: ElementId): BuildAffinity {
     harborCap: waterway
       ? ELEMENT_RULES.waterwayHarborTradeCap
       : ELEMENT_RULES.harborTradeCap,
+    harborPrerequisite: waterway
+      ? ELEMENT_RULES.waterwayHarborFactoryPrerequisite
+      : ELEMENT_RULES.harborFactoryPrerequisite,
   };
   BUILD_AFFINITIES.set(element, affinity);
   return affinity;

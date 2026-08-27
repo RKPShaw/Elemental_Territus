@@ -326,7 +326,7 @@ function desiredInfrastructure(
   if (skyportPriority === best) return "skyport";
   if (cityPriority >= tradePriority) return "city";
   if (
-    counts.factory >= 3 &&
+    counts.factory >= affinity.harborPrerequisite &&
     counts.harbor < desiredHarbors &&
     counts.harbor < tradeBuildings * affinity.harborCap
   ) return "harbor";
