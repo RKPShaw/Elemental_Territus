@@ -15,7 +15,14 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded when wilderness settlement began reading the theater map. Cell
+ * Re-recorded when sea lanes moved from breadth-first hop counting to a
+ * weighted distance search: merchant ships and naval invasions now sail
+ * measured, coast-rounding routes instead of L-shaped staircases, so voyage
+ * lengths, payouts and landing times genuinely differ. At the 200-tick gate
+ * only the world digests move while every cell digest holds, which is the
+ * proof that the change redrew journeys rather than the map.
+ *
+ * Before that, re-recorded when wilderness settlement began reading the theater map. Cell
  * digests move here, unlike the stage before it: settlers now press hardest on
  * the ground they most want, and what they want depends on what they believe
  * about the region around it, so the world genuinely plays differently.
@@ -52,7 +59,7 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
     checkpoints: [
       { tick: 60, world: "8a9f2765bb5345312755b70f11975e66", cells: "4ff325449e8ed1ef" },
       { tick: 200, world: "89d7e480e070835992138a12531d453f", cells: "200c99ba3a9378f7" },
-      { tick: 600, world: "6a24e2a099502b7d84210abdbe7c6a87", cells: "2a7c3c0e6d795a12", deep: true },
+      { tick: 600, world: "b444ca58a26c42f6d7dcea8c0dcdb6b7", cells: "64a0ea0c4d8ad1e1", deep: true },
     ],
   },
   {
@@ -60,7 +67,7 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
     checkpoints: [
       { tick: 60, world: "0c8f80f0ba4df7358749b36dc2b11932", cells: "f6b2db69c74bbcab" },
       { tick: 200, world: "74863f8a26ab7280365f73dcad01a22d", cells: "439cac8de792aef6" },
-      { tick: 600, world: "681def3a7ddcb9d94922f87e803a22a0", cells: "b7f49e0f551cf079", deep: true },
+      { tick: 600, world: "ff767f72c44388c58a529fb64375f4f7", cells: "aebe6a409019272c", deep: true },
     ],
   },
   {
@@ -68,7 +75,7 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
     checkpoints: [
       { tick: 60, world: "1071cc18c7c43ed65e83591495ecb303", cells: "5a76f76567a34def" },
       { tick: 200, world: "bbbf2dfd39d2af4c2566d039111a13e1", cells: "5cf2f5d085697d3f" },
-      { tick: 600, world: "4236c229f2d8f553195e6d591832f83b", cells: "fecb0806988d4ee6", deep: true },
+      { tick: 600, world: "cc7501cdfd32ba4faeecc71649a8984e", cells: "16982330b298a803", deep: true },
     ],
   },
 ];

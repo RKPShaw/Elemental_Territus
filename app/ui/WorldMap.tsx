@@ -527,31 +527,147 @@ function drawStructure(
   context.restore();
 }
 
+/** Traces a path of cell centers as a smoothed curve through segment midpoints. */
+function traceSmoothedPath(
+  context: CanvasRenderingContext2D,
+  state: WorldState,
+  shape: MapGeometry,
+  path: readonly number[],
+) {
+  const [sx, sy] = centerFor(path[0]!, state, shape);
+  context.moveTo(sx, sy);
+  let [px, py] = [sx, sy];
+  for (let at = 1; at < path.length - 1; at += 1) {
+    const [x, y] = centerFor(path[at]!, state, shape);
+    context.quadraticCurveTo(px, py, (px + x) / 2, (py + y) / 2);
+    [px, py] = [x, y];
+  }
+  const [ex, ey] = centerFor(path[path.length - 1]!, state, shape);
+  context.quadraticCurveTo(px, py, ex, ey);
+}
+
 function drawTradeRoutes(
   context: CanvasRenderingContext2D,
   state: WorldState,
   shape: MapGeometry,
 ) {
   context.save();
-  context.setLineDash([5, 5]);
   context.lineCap = "round";
+  context.lineJoin = "round";
   for (const route of state.tradeRoutes) {
     if (route.kind === "sea") continue;
     const path = route.pathIndices.length > 1
       ? route.pathIndices
       : [route.startIndex, route.endIndex];
-    const [sx, sy] = centerFor(path[0]!, state, shape);
-    context.strokeStyle = "rgba(255, 236, 169, 0.72)";
-    context.lineWidth = 1.35;
+    // A railway reads as one: a darker roadbed underneath, then a bright
+    // dashed running line over it, both following the same smoothed curve.
     context.beginPath();
-    context.moveTo(sx, sy);
-    for (const index of path.slice(1)) {
-      const [x, y] = centerFor(index, state, shape);
-      context.lineTo(x, y);
-    }
+    traceSmoothedPath(context, state, shape, path);
+    context.setLineDash([]);
+    context.strokeStyle = "rgba(58, 47, 28, 0.55)";
+    context.lineWidth = 2.6;
+    context.stroke();
+    context.setLineDash([4, 3.2]);
+    context.strokeStyle = "rgba(255, 236, 169, 0.85)";
+    context.lineWidth = 1.2;
     context.stroke();
   }
   context.restore();
+}
+
+/**
+ * Per-path render geometry, cached between animation frames.
+ *
+ * The display loop repositions up to 1,300 vehicles at 60 Hz, and it used to
+ * re-validate every ship's water route and rebuild its point and length arrays
+ * on every frame -- most of the frame budget went to redoing work whose inputs
+ * never change. A vehicle's path is fixed for its lifetime, so the projected
+ * points, cumulative lengths and validity are computed once per path and
+ * reused until the canvas geometry changes.
+ */
+interface PathRenderGeometry {
+  points: Float32Array;
+  cumulative: Float32Array;
+  total: number;
+  valid: boolean;
+  cellWidth: number;
+  cellHeight: number;
+  lastSeen: number;
+}
+
+const PATH_GEOMETRY = new Map<string, PathRenderGeometry>();
+const PATH_GEOMETRY_SWEEP_FRAMES = 600;
+let pathGeometryFrame = 0;
+
+function pathRenderGeometry(
+  key: string,
+  state: WorldState,
+  shape: MapGeometry,
+  path: readonly number[],
+  validateWater: boolean,
+): PathRenderGeometry {
+  const cached = PATH_GEOMETRY.get(key);
+  if (cached && cached.cellWidth === shape.cellWidth && cached.cellHeight === shape.cellHeight) {
+    cached.lastSeen = pathGeometryFrame;
+    return cached;
+  }
+  const valid = cached?.valid ?? (!validateWater || isValidWaterPath(state, path));
+  const points = new Float32Array(path.length * 2);
+  const cumulative = new Float32Array(path.length);
+  let total = 0;
+  for (let at = 0; at < path.length; at += 1) {
+    const [x, y] = centerFor(path[at]!, state, shape);
+    points[at * 2] = x;
+    points[at * 2 + 1] = y;
+    if (at > 0) total += Math.hypot(x - points[at * 2 - 2]!, y - points[at * 2 - 1]!);
+    cumulative[at] = total;
+  }
+  const geometry: PathRenderGeometry = {
+    points,
+    cumulative,
+    total,
+    valid,
+    cellWidth: shape.cellWidth,
+    cellHeight: shape.cellHeight,
+    lastSeen: pathGeometryFrame,
+  };
+  PATH_GEOMETRY.set(key, geometry);
+  return geometry;
+}
+
+function sweepPathGeometry(): void {
+  pathGeometryFrame += 1;
+  if (pathGeometryFrame % PATH_GEOMETRY_SWEEP_FRAMES !== 0) return;
+  for (const [key, geometry] of PATH_GEOMETRY) {
+    if (pathGeometryFrame - geometry.lastSeen > PATH_GEOMETRY_SWEEP_FRAMES) PATH_GEOMETRY.delete(key);
+  }
+}
+
+function positionAlong(
+  geometry: PathRenderGeometry,
+  progress: number,
+): { x: number; y: number; angle: number } {
+  const { points, cumulative } = geometry;
+  const target = Math.max(0, Math.min(0.9999, progress)) * geometry.total;
+  // Binary search for the segment holding the target distance.
+  let low = 0;
+  let high = cumulative.length - 1;
+  while (low + 1 < high) {
+    const mid = (low + high) >> 1;
+    if (cumulative[mid]! <= target) low = mid;
+    else high = mid;
+  }
+  const segmentLength = cumulative[low + 1]! - cumulative[low]!;
+  const local = segmentLength > 0 ? (target - cumulative[low]!) / segmentLength : 0;
+  const sx = points[low * 2]!;
+  const sy = points[low * 2 + 1]!;
+  const ex = points[low * 2 + 2]!;
+  const ey = points[low * 2 + 3]!;
+  return {
+    x: sx + (ex - sx) * local,
+    y: sy + (ey - sy) * local,
+    angle: Math.atan2(ey - sy, ex - sx),
+  };
 }
 
 function drawTradeVehicles(
@@ -560,42 +676,19 @@ function drawTradeVehicles(
   shape: MapGeometry,
   extrapolatedTicks = 0,
 ) {
+  sweepPathGeometry();
   for (const vehicle of state.tradeVehicles) {
     const path = vehicle.pathIndices.length > 1
       ? vehicle.pathIndices
       : [vehicle.startIndex, vehicle.endIndex];
     if (path.length < 2) continue;
-    if (vehicle.kind === "ship" && !isValidWaterPath(state, path)) continue;
-    const points = path.map((index) => centerFor(index, state, shape));
-    const lengths: number[] = [];
-    let totalLength = 0;
-    for (let index = 1; index < points.length; index += 1) {
-      const length = Math.hypot(
-        points[index]![0] - points[index - 1]![0],
-        points[index]![1] - points[index - 1]![1],
-      );
-      lengths.push(length);
-      totalLength += length;
-    }
+    const geometry = pathRenderGeometry(vehicle.id, state, shape, path, vehicle.kind === "ship");
+    if (!geometry.valid) continue;
     const visualDistance = vehicle.dwellRemaining > 0
       ? vehicle.distanceTravelled
       : Math.min(vehicle.totalDistance, vehicle.distanceTravelled + vehicle.velocity * extrapolatedTicks);
     const visualProgress = vehicle.totalDistance > 0 ? visualDistance / vehicle.totalDistance : vehicle.progress;
-    const targetDistance = Math.min(0.9999, visualProgress) * totalLength;
-    let segment = 0;
-    let distanceBefore = 0;
-    while (segment < lengths.length - 1 && distanceBefore + lengths[segment]! < targetDistance) {
-      distanceBefore += lengths[segment]!;
-      segment += 1;
-    }
-    const local = lengths[segment]! > 0
-      ? (targetDistance - distanceBefore) / lengths[segment]!
-      : 0;
-    const [sx, sy] = points[segment]!;
-    const [ex, ey] = points[segment + 1]!;
-    const x = sx + (ex - sx) * local;
-    const y = sy + (ey - sy) * local;
-    const angle = Math.atan2(ey - sy, ex - sx);
+    const { x, y, angle } = positionAlong(geometry, visualProgress);
     context.save();
     context.translate(x, y);
     context.rotate(angle);
@@ -687,35 +780,6 @@ function drawAllianceChains(
   }
 }
 
-function pointAlongPath(points: readonly [number, number][], progress: number): { x: number; y: number; angle: number } {
-  if (points.length < 2) return { x: points[0]?.[0] ?? 0, y: points[0]?.[1] ?? 0, angle: 0 };
-  const lengths: number[] = [];
-  let total = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    const length = Math.hypot(
-      points[index]![0] - points[index - 1]![0],
-      points[index]![1] - points[index - 1]![1],
-    );
-    lengths.push(length);
-    total += length;
-  }
-  const target = Math.max(0, Math.min(0.9999, progress)) * total;
-  let segment = 0;
-  let before = 0;
-  while (segment < lengths.length - 1 && before + lengths[segment]! < target) {
-    before += lengths[segment]!;
-    segment += 1;
-  }
-  const start = points[segment]!;
-  const end = points[segment + 1]!;
-  const local = lengths[segment]! > 0 ? (target - before) / lengths[segment]! : 0;
-  return {
-    x: start[0] + (end[0] - start[0]) * local,
-    y: start[1] + (end[1] - start[1]) * local,
-    angle: Math.atan2(end[1] - start[1], end[0] - start[0]),
-  };
-}
-
 function drawCampaigns(
   context: CanvasRenderingContext2D,
   state: WorldState,
@@ -728,12 +792,12 @@ function drawCampaigns(
   for (const campaign of state.campaigns) {
     const element = PLAYERS[campaign.attacker]!;
     if (campaign.mode === "naval" && campaign.originIndex !== null && campaign.targetIndex !== null) {
-      if (!isValidWaterPath(state, campaign.pathIndices)) continue;
-      const points = campaign.pathIndices.map((index) => centerFor(index, state, shape));
+      const geometry = pathRenderGeometry(campaign.id, state, shape, campaign.pathIndices, true);
+      if (!geometry.valid) continue;
       const journey = campaign.initialEta > 0
         ? 1 - Math.max(0, campaign.eta - extrapolatedTicks) / campaign.initialEta
         : 1;
-      const position = pointAlongPath(points, journey);
+      const position = positionAlong(geometry, journey);
       context.save();
       context.translate(position.x, position.y);
       context.rotate(position.angle);
