@@ -214,7 +214,7 @@ export function Simulator() {
     const seed = (world.seed * 1664525 + 1013904223 + world.tick) >>> 0;
     setWorld(null);
     workerRef.current?.postMessage({ type: "new-world", seed, aggression: temper } satisfies SimulationWorkerCommand);
-    // "ember" is not a player id -- the roster is "ember-1" through "gale-10".
+    // "ember" is not a player id -- the roster is "ember-1" through "gale-12".
     // Selecting it left the council panel dereferencing an undefined faction on
     // the new world's first frame, which crashed the whole page.
     setSelected(PLAYER_ORDER[0]!);

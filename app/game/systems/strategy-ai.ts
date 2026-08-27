@@ -1,4 +1,5 @@
 import { PLAYERS, PLAYER_ORDER } from "../players";
+import { ascensionAppetite } from "../ascension";
 import { otherParty, warsFor } from "../diplomacy";
 import { realmMatchup } from "../elements";
 import {
@@ -7,7 +8,7 @@ import {
   neighborIndices,
   structureCells,
 } from "../grid";
-import { CLAIM_RULES, POPULATION_RULES, compactNumber, clamp } from "../rules";
+import { CLAIM_RULES, ELEMENT_RULES, POPULATION_RULES, compactNumber, clamp } from "../rules";
 import { strategyFactor } from "../strategy";
 import type { PlayerId, SimulationContext, SimulationSystem } from "../types";
 
@@ -160,11 +161,16 @@ export class StrategyAiSystem implements SimulationSystem {
         if (!rival.alive) continue;
         const border = borderLength(state, id, rivalId);
         const troopEdge = faction.troops / Math.max(1, rival.troops);
+        // Among live wars, the enemy whose absorption advances the next tier
+        // is the one an ascension-minded realm presses hardest.
         const score =
           clamp(troopEdge, 0.25, 2.5) * 0.55 +
           (realmMatchup(state, id, rivalId) - 1) * 2.1 +
           Math.log2(border + 1) * 0.08 +
           (rival.territory / state.landTiles > 0.34 ? 0.35 : 0) +
+          ascensionAppetite(state, id, rivalId)
+            * ELEMENT_RULES.ascensionTargetPreference
+            * strategyFactor(faction.strategy, "ascension") +
           random.next() * 0.16;
         if (score > bestScore) {
           bestScore = score;

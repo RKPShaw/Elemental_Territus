@@ -4,16 +4,18 @@ import type { ElementDefinition, ElementId, PlayerId } from "./types";
 /**
  * The roster of competing players.
  *
- * A player is not the same thing as an element. Ten players share each element,
- * so they share its matchups, favoured terrain and temperament while competing
- * as separate powers with their own territory, treasury and diplomacy. Element
- * is what a player *is*; player is who it *is*.
+ * A player is not the same thing as an element. Twelve players share each
+ * founding element, so they share its matchups, favoured terrain and
+ * temperament while competing as separate powers with their own territory,
+ * treasury and diplomacy. Element is what a player *is*; player is who it
+ * *is*.
  *
  * The roster is fixed at module load, exactly as ELEMENT_ORDER was, so
  * iteration order is stable and the simulation stays deterministic.
  */
 /**
- * Players per element, ten by default.
+ * Players per element, twelve by default: four founding families of twelve,
+ * the closest even-family roster to the fifty realms the game grew up with.
  *
  * Overridable through ELEMENTAL_PLAYERS_PER_ELEMENT so performance work can
  * sweep the roster size and see how each system scales. The roster is still
@@ -24,11 +26,11 @@ export const PLAYERS_PER_ELEMENT = (() => {
     ? undefined
     : process.env?.ELEMENTAL_PLAYERS_PER_ELEMENT;
   const parsed = raw === undefined ? Number.NaN : Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 12;
 })();
 
 /** Roman numerals read better than digits on a map label; beyond them, digits. */
-const ORDINALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"] as const;
+const ORDINALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"] as const;
 
 function ordinalLabel(ordinal: number): string {
   return ORDINALS[ordinal] ?? String(ordinal + 1);
@@ -36,7 +38,7 @@ function ordinalLabel(ordinal: number): string {
 
 function buildRoster(): PlayerId[] {
   const roster: PlayerId[] = [];
-  // Grouped by element rather than interleaved, so a listing reads as five
+  // Grouped by element rather than interleaved, so a listing reads as four
   // families. Draft order is decided separately and deliberately.
   for (const element of ELEMENT_ORDER) {
     for (let ordinal = 0; ordinal < PLAYERS_PER_ELEMENT; ordinal += 1) {
@@ -63,9 +65,9 @@ function rgbToHex(red: number, green: number, blue: number): string {
 }
 
 /**
- * Ten distinguishable tints per element, walking from the element's soft colour
- * to its deep one. A player therefore reads as its family at a glance while
- * still being separable from its siblings.
+ * Twelve distinguishable tints per element, walking from the element's soft
+ * colour to its deep one. A player therefore reads as its family at a glance
+ * while still being separable from its siblings.
  */
 function shadeFor(element: ElementId, ordinal: number): string {
   const [softRed, softGreen, softBlue] = hexToRgb(ELEMENTS[element].softColor);
@@ -126,8 +128,8 @@ export function playersOfElement(element: ElementId): PlayerId[] {
 /**
  * Draft order for choosing start locations: a snake, reversing every round.
  *
- * Picking strictly in roster order would hand the whole first element the ten
- * best sites. Rotating the element each pick spreads the families, and
+ * Picking strictly in roster order would hand the whole first element the
+ * twelve best sites. Rotating the element each pick spreads the families, and
  * reversing each round means the player that picked last gets the first pick of
  * the next round, so no seat is systematically disadvantaged.
  */

@@ -15,7 +15,21 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded when realms gained strategic priorities: element-seeded,
+ * Re-recorded for the four-family roster and the live element system. The
+ * founding roster reworked to twelve players in each of four families — grove
+ * retired to an acquirable compound — so every draft, and with it every
+ * world, differs from the first tick by construction. On top of that the
+ * composed matchup table went live through each realm's expressed element
+ * with absorbed-history relief (flipping the ember–stone counter and
+ * neutralizing ember–gale and tide–stone), the ascension system began
+ * awarding tier 2 and 3 expression from conquest tallies, war targeting
+ * learned to hunt formability, and the opening partition's relaxation gain
+ * rose so the smallest region opens inside its area budget under the new
+ * capital draft. Cell digests and world digests both move everywhere, and
+ * that is the point: this is the phase where the element space stops being
+ * dormant.
+ *
+ * Before that, re-recorded when realms gained strategic priorities: element-seeded,
  * situation-bent weights that scale war desire, alliance appetite, trade
  * policy, commitment sizing and construction quotas. Every world digest moves
  * twice over — the strategy block is new state, and realms genuinely decide

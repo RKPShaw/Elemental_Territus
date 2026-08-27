@@ -217,11 +217,15 @@ export const STRATEGIC_REGION_RULES = {
    * satisfied comfortably a hundred ticks later. Too many and the partition
    * starts where it would have ended, so boundaries no longer visibly migrate
    * as terrain develops, which is half of what makes the map feel alive.
-   * Four clears both: the smallest region opens comfortably inside its budget
-   * and the map still redraws itself as the world grows.
+   * Four passes cleared both for the fifty-capital draft. The four-family
+   * roster's forty-eight capitals seed the heat differently and one seed
+   * opened under budget again — and further passes plateaued where it stood,
+   * so the correction is per-pass gain rather than more passes. The map still
+   * visibly redraws itself as the world grows, which the geography test
+   * continues to assert.
    */
   initialRelaxationPasses: 4,
-  initialRelaxationGain: 0.7,
+  initialRelaxationGain: 0.85,
   filterAlpha: 0.11,
   filterBeta: 0.022,
   velocityDamping: 0.72,
@@ -299,6 +303,15 @@ export const ELEMENT_RULES = {
   tier2BaseDepth: 2,
   /** Total realms absorbed before any tier 3 becomes formable. */
   tier3MinimumRealms: 6,
+  /**
+   * War desire added for a target whose absorption fully advances the next
+   * tier, before the realm's own ascension weight scales it. Comparable to
+   * the containment and finishing bonuses combined — a strong pull exactly
+   * when a conquest completes a history, faint when it merely helps.
+   */
+  ascensionWarDesire: 0.45,
+  /** The matching bonus when choosing which existing war to press. */
+  ascensionTargetPreference: 0.6,
   /** Captured-structure efficiency when only absorbed history covers its form. */
   legacyEfficiency: 0.9,
   /** Captured-structure efficiency when nothing in the realm's history does. */

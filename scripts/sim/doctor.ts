@@ -1,4 +1,6 @@
 import { PLAYER_ORDER } from "../../app/game/players";
+import { expressionFor } from "../../app/game/ascension";
+import { baseMaskOf } from "../../app/game/elements";
 import { ElementalWarEngine } from "../../app/game/engine";
 import { ACTION_REPORT_KINDS } from "../../app/game/reporting";
 import type { ReportEventKind, WorldState } from "../../app/game/types";
@@ -205,6 +207,31 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     "realms change strategic focus as situations change",
     strategyShifts > 0,
     `${strategyShifts} focus changes reported`,
+  );
+
+  // Two proofs, one per failure mode. Bookkeeping: recomputing every living
+  // realm's expression and base mask from its tallies must change nothing,
+  // because the system claims to keep them current every tick. Activity: an
+  // ascension reported inside the horizon; a run where no realm assembled a
+  // deep enough history is inconclusive rather than sick.
+  const ascensions = count("dynasty.element-ascended");
+  let expressionLag = 0;
+  let maskDrift = 0;
+  for (const id of PLAYER_ORDER) {
+    const faction = state.factions[id];
+    if (!faction.alive) continue;
+    if (expressionFor(faction) !== faction.expressedElement) expressionLag += 1;
+    if (baseMaskOf(faction.absorbedElements) !== faction.baseMask) maskDrift += 1;
+  }
+  const ascensionBooksExact = expressionLag === 0 && maskDrift === 0;
+  add(
+    "element-ascension",
+    "absorbed histories express higher elements",
+    ascensionBooksExact && ascensions > 0,
+    ascensionBooksExact
+      ? `${ascensions} ascensions reported, expression and base masks exact across the living roster`
+      : `${expressionLag} realms lag their formable expression, ${maskDrift} base masks drifted`,
+    ascensionBooksExact,
   );
 
   const wars = count("diplomacy.war-declared");

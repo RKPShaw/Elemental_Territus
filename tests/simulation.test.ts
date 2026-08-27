@@ -502,13 +502,13 @@ test("future feature namespaces feed the same story system", () => {
         domain: "dynasty",
         kind: "dynasty.marriage",
         importance: "major",
-        storyKey: "dynasty:ember:grove:1",
+        storyKey: "dynasty:ember:stone:1",
         initiator: { type: "character", id: "ember-heir", label: "the Ember heir", realmId: "ember-1" },
-        targets: [{ type: "character", id: "grove-heir", label: "the Grove heir", realmId: "grove-1" }],
+        targets: [{ type: "character", id: "stone-heir", label: "the Stone heir", realmId: "stone-1" }],
         participants: [],
-        links: { firstCharacter: "ember-heir", secondCharacter: "grove-heir" },
+        links: { firstCharacter: "ember-heir", secondCharacter: "stone-heir" },
         facts: { politicalValue: 0.82 },
-        summary: "The heirs of Ember and Grove entered a political marriage.",
+        summary: "The heirs of Ember and Stone entered a political marriage.",
       });
     },
   };

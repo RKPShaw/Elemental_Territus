@@ -1,5 +1,6 @@
 import type { SimulationSystem } from "../types";
 import { RealmAccountingSystem } from "./accounting";
+import { ElementAscensionSystem } from "./ascension";
 import { CampaignSystem } from "./campaign";
 import { WorldClockSystem } from "./clock";
 import { CommandExecutionSystem } from "./commands";
@@ -20,6 +21,7 @@ export const DEFAULT_SYSTEMS: readonly SimulationSystem[] = [
   new WorldClockSystem(),
   new DiplomacyClockSystem(),
   new RealmAccountingSystem(),
+  new ElementAscensionSystem(),
   new EconomySystem(),
   new TradeNetworkSystem(),
   new StrategicPlanningSystem(),

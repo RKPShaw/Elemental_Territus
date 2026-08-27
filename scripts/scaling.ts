@@ -7,17 +7,19 @@
  * player count is a different problem from one that is quadratic in it, and
  * they want different fixes.
  *
- *   npm run scaling -- --counts 5,10,25,50 --ticks 40
+ *   npm run scaling -- --counts 4,12,24,48 --ticks 40
  *
  * Each roster size runs in its own child process, because the roster is fixed
- * when app/game/players.ts loads.
+ * when app/game/players.ts loads. Counts are total players and should be
+ * multiples of the four founding families.
  */
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { ELEMENT_ORDER } from "../app/game/elements";
 import { parseArgs } from "./sim/args";
 
 const args = parseArgs(process.argv.slice(2));
-const counts = (args.flag("counts") ?? "5,10,25,50")
+const counts = (args.flag("counts") ?? "4,12,24,48")
   .split(",")
   .map((value) => Number.parseInt(value.trim(), 10))
   .filter((value) => Number.isFinite(value) && value > 0);
@@ -50,7 +52,7 @@ function measure(players: number): Measurement {
     {
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
-      env: { ...process.env, ELEMENTAL_PLAYERS_PER_ELEMENT: String(players / 5) },
+      env: { ...process.env, ELEMENTAL_PLAYERS_PER_ELEMENT: String(players / ELEMENT_ORDER.length) },
     },
   );
   return JSON.parse(output.trim().split("\n").at(-1)!) as Measurement;

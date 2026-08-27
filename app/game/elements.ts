@@ -11,20 +11,19 @@ import type {
 /**
  * The elemental space.
  *
- * Five founding families seat the roster, exactly as before. Around them sits
- * the full three-tier space: compound (tier 2) elements made of two founding
- * bases, and advanced (tier 3) elements made of two compounds. Everything
- * beyond the founding five is declared, composed and tested here but dormant:
- * no realm holds it, no system consults it, and the live combat rule is still
- * the founding counter cycle in matchup() below. The composed table exists so
- * the later ascension and combat phases switch a consumer, not a data model.
+ * Four founding families seat the roster. Around them sits the full
+ * three-tier space: compound (tier 2) elements made of two founding bases,
+ * and advanced (tier 3) elements made of two compounds. Grove is no longer a
+ * starting family — the Mossbound return as the first compound a conqueror of
+ * tide and stone realms can express. The composed matchup table below is the
+ * live combat rule, read through each realm's expressed element with graded
+ * relief for the founding bases its absorbed history covers.
  */
 
-/** The founding families, in roster order. This is still the seatable roster. */
+/** The founding families, in roster order. This is the seatable roster. */
 export const ELEMENT_ORDER: readonly ElementId[] = [
   "ember",
   "tide",
-  "grove",
   "stone",
   "gale",
 ] as const;
@@ -37,7 +36,7 @@ export const FOUNDING_ELEMENTS: readonly FoundingElementId[] = [
   "gale",
 ] as const;
 
-/** Canonical order of the whole space: founding five, then tier 2, then tier 3. */
+/** Canonical order of the whole space: legacy roster order first, then tier 2, then tier 3. */
 export const ELEMENT_SPACE: readonly ElementId[] = [
   "ember",
   "tide",
@@ -76,8 +75,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#ef6a5b",
     softColor: "#ffc2ad",
     deepColor: "#8e2f35",
-    strongAgainst: ["grove", "gale"],
-    weakAgainst: ["tide", "stone"],
     tier: 1,
     bases: [],
     dominantBase: null,
@@ -97,8 +94,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#45a9b8",
     softColor: "#ade1dc",
     deepColor: "#176375",
-    strongAgainst: ["ember", "stone"],
-    weakAgainst: ["grove", "gale"],
     tier: 1,
     bases: [],
     dominantBase: null,
@@ -118,8 +113,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#71a366",
     softColor: "#c9dda1",
     deepColor: "#426342",
-    strongAgainst: ["tide", "stone"],
-    weakAgainst: ["ember", "gale"],
     tier: 2,
     bases: ["tide", "stone"],
     dominantBase: null,
@@ -139,8 +132,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#c49a62",
     softColor: "#ead2a0",
     deepColor: "#74543e",
-    strongAgainst: ["ember", "gale"],
-    weakAgainst: ["tide", "grove"],
     tier: 1,
     bases: [],
     dominantBase: null,
@@ -160,8 +151,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#9684c5",
     softColor: "#d6cbef",
     deepColor: "#594d84",
-    strongAgainst: ["tide", "grove"],
-    weakAgainst: ["ember", "stone"],
     tier: 1,
     bases: [],
     dominantBase: null,
@@ -181,8 +170,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#9fb4bd",
     softColor: "#d9e4e8",
     deepColor: "#5b7078",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 2,
     bases: ["ember", "tide"],
     dominantBase: null,
@@ -199,8 +186,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#d1603d",
     softColor: "#f2b08a",
     deepColor: "#7a2e1d",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 2,
     bases: ["ember", "stone"],
     dominantBase: null,
@@ -217,8 +202,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#e8c94a",
     softColor: "#f7e9a8",
     deepColor: "#8a6d1f",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 2,
     bases: ["ember", "gale"],
     dominantBase: null,
@@ -235,8 +218,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#8fd0dd",
     softColor: "#d8f1f4",
     deepColor: "#3f7f93",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 2,
     bases: ["tide", "gale"],
     dominantBase: null,
@@ -253,8 +234,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#d3b26a",
     softColor: "#efdfb2",
     deepColor: "#8a6f3c",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 2,
     bases: ["stone", "gale"],
     dominantBase: null,
@@ -271,8 +250,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#6fb3ae",
     softColor: "#c3e5e0",
     deepColor: "#2f6a68",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["steam", "magma"],
     dominantBase: "ember",
@@ -289,8 +266,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#5f8fb4",
     softColor: "#b7d4e8",
     deepColor: "#2b4f70",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["steam", "lightning"],
     dominantBase: "ember",
@@ -307,8 +282,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#86c05a",
     softColor: "#d6ecb2",
     deepColor: "#477330",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["steam", "grove"],
     dominantBase: "tide",
@@ -325,8 +298,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#a9b8b4",
     softColor: "#dde7e3",
     deepColor: "#62736f",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["steam", "ice"],
     dominantBase: "tide",
@@ -343,8 +314,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#c9a8d4",
     softColor: "#ecdcf1",
     deepColor: "#7b5a88",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["steam", "sand"],
     dominantBase: null,
@@ -361,8 +330,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#d76bc4",
     softColor: "#f3c3e8",
     deepColor: "#7e2f72",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["magma", "lightning"],
     dominantBase: "ember",
@@ -379,8 +346,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#8d8578",
     softColor: "#cfc9bd",
     deepColor: "#4c463c",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["magma", "grove"],
     dominantBase: "stone",
@@ -397,8 +362,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#5a5668",
     softColor: "#a9a5b8",
     deepColor: "#232030",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["magma", "ice"],
     dominantBase: null,
@@ -415,8 +378,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#a9d6d0",
     softColor: "#e2f4f0",
     deepColor: "#57847e",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["magma", "sand"],
     dominantBase: "stone",
@@ -433,8 +394,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#9cc9a8",
     softColor: "#d9eedd",
     deepColor: "#4f7a5c",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["lightning", "grove"],
     dominantBase: null,
@@ -451,8 +410,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#74c9a4",
     softColor: "#c7ecd9",
     deepColor: "#3a7a6c",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["lightning", "ice"],
     dominantBase: "gale",
@@ -469,8 +426,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#7d8fa6",
     softColor: "#c4cfdd",
     deepColor: "#3e4c61",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["lightning", "sand"],
     dominantBase: "gale",
@@ -487,8 +442,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#d99b3d",
     softColor: "#f2d59c",
     deepColor: "#8a5c1d",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["grove", "ice"],
     dominantBase: "tide",
@@ -505,8 +458,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#b08e6e",
     softColor: "#e0cbb4",
     deepColor: "#5f4a35",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["grove", "sand"],
     dominantBase: "stone",
@@ -523,8 +474,6 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     color: "#9fb0e0",
     softColor: "#dbe2f5",
     deepColor: "#4f5f94",
-    strongAgainst: [],
-    weakAgainst: [],
     tier: 3,
     bases: ["ice", "sand"],
     dominantBase: "gale",
@@ -613,10 +562,9 @@ export function deriveDominantBase(element: ElementId): ElementId | null {
  * The edge is the composition-weighted sum of founding counters, in [-1, 1];
  * the multiplier expresses matchupEdge of it, amplified by the higher tier in
  * the pair and clamped to the band. Tier 1 against its counter lands on
- * exactly today's 1.12 and 0.88; a balanced tier 3 composes to zero edge
- * against everything. Combat does not read this yet — matchup() below is
- * still the live rule — but its properties are pinned by tests now so the
- * later switch changes a consumer, not a contract.
+ * exactly the classic 1.12 and 0.88; a balanced tier 3 composes to zero edge
+ * against everything. realmMatchup below reads this table through each
+ * realm's expressed element — this is the live combat rule.
  */
 export function buildMatchupTable(): Float64Array {
   const size = ELEMENT_SPACE.length;
@@ -651,44 +599,75 @@ export function buildMatchupTable(): Float64Array {
 
 export const MATCHUP_TABLE: Float64Array = buildMatchupTable();
 
-/** O(1) lookup into the composed table; the future combat rule. */
+/** O(1) lookup into the composed table; the live combat rule. */
 export function elementMultiplier(attacker: ElementId, defender: ElementId): number {
   return MATCHUP_TABLE[ELEMENT_INDEX[attacker] * ELEMENT_SPACE.length + ELEMENT_INDEX[defender]]!;
 }
 
+/** The bit each founding base occupies in a faction's baseMask. */
+export const FOUNDING_BASE_BIT: Record<FoundingElementId, number> = {
+  ember: 1,
+  tide: 2,
+  stone: 4,
+  gale: 8,
+};
+
+/** The 4-bit mask of founding bases a set of held elements covers. */
+export function baseMaskOf(elements: readonly ElementId[]): number {
+  let mask = 0;
+  for (const element of elements) {
+    const composition = compositionOf(element);
+    for (const founding of FOUNDING_ELEMENTS) {
+      if (composition[founding] > 0) mask |= FOUNDING_BASE_BIT[founding];
+    }
+  }
+  return mask;
+}
+
 /**
- * The live combat rule: the founding five's counter cycle, ± matchupEdge.
- * Both sums are float-exact, so moving the constant into ELEMENT_RULES
- * changed nothing the determinism digests can see.
+ * How much of each element's composition every possible baseMask covers,
+ * precomputed so history relief stays O(1) in the per-tile combat loop.
+ * Indexed element-major: element index * 16 + mask.
  */
-export function matchup(attacker: ElementId, defender: ElementId): number {
-  if (ELEMENTS[attacker].strongAgainst.includes(defender)) return 1 + ELEMENT_RULES.matchupEdge;
-  if (ELEMENTS[attacker].weakAgainst.includes(defender)) return 1 - ELEMENT_RULES.matchupEdge;
-  return 1;
-}
-
-export function matchupLabel(attacker: ElementId, defender: ElementId): string {
-  const value = matchup(attacker, defender);
-  if (value > 1) return "elemental edge";
-  if (value < 1) return "elemental risk";
-  return "even elements";
-}
+const BASE_COVERAGE: Float64Array = (() => {
+  const coverage = new Float64Array(ELEMENT_SPACE.length * 16);
+  for (const element of ELEMENT_SPACE) {
+    const composition = compositionOf(element);
+    for (let mask = 0; mask < 16; mask += 1) {
+      let covered = 0;
+      for (const founding of FOUNDING_ELEMENTS) {
+        if (mask & FOUNDING_BASE_BIT[founding]) covered += composition[founding];
+      }
+      coverage[ELEMENT_INDEX[element] * 16 + mask] = covered;
+    }
+  }
+  return coverage;
+})();
 
 /**
- * Matchup between two players, resolved through the elements each has absorbed.
- * Players rather than elements, because ten players share every element and a
- * conqueror carries whatever it has taken.
+ * Matchup between two players: the composed multiplier of their expressed
+ * elements, graded by history.
+ *
+ * Whichever side sits on the wrong end of the edge softens it with what it
+ * has absorbed — the share of the advantaged element's founding composition
+ * its baseMask covers grades the edge down, by at most absorbedBaseRelief.
+ * Matchups are therefore a continuum rather than three values, and history
+ * never buys immunity: the old maximin saturated to flat 1.0 once a defender
+ * held three well-chosen elements, and that failure mode is gone.
  */
 export function realmMatchup(
   state: WorldState,
   attacker: PlayerId,
   defender: PlayerId,
 ): number {
-  const attackElements = state.factions[attacker].absorbedElements;
-  const defenseElements = state.factions[defender].absorbedElements;
-  return Math.max(...attackElements.map((attackElement) =>
-    Math.min(...defenseElements.map((defenseElement) => matchup(attackElement, defenseElement))),
-  ));
+  const attackFaction = state.factions[attacker];
+  const defenseFaction = state.factions[defender];
+  const edge = elementMultiplier(attackFaction.expressedElement, defenseFaction.expressedElement) - 1;
+  if (edge === 0) return 1;
+  const advantaged = edge > 0 ? attackFaction.expressedElement : defenseFaction.expressedElement;
+  const reliefMask = edge > 0 ? defenseFaction.baseMask : attackFaction.baseMask;
+  const coverage = BASE_COVERAGE[ELEMENT_INDEX[advantaged] * 16 + (reliefMask & 15)]!;
+  return 1 + edge * (1 - ELEMENT_RULES.absorbedBaseRelief * coverage);
 }
 
 export function realmMatchupLabel(
@@ -697,11 +676,7 @@ export function realmMatchupLabel(
   defender: PlayerId,
 ): string {
   const value = realmMatchup(state, attacker, defender);
-  if (value > 1) {
-    return state.factions[attacker].absorbedElements.length > 1
-      ? "absorbed elemental edge"
-      : "elemental edge";
-  }
+  if (value > 1) return "elemental edge";
   if (value < 1) return "elemental risk";
   return "even elements";
 }
