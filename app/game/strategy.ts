@@ -127,7 +127,9 @@ export function recomputePriorities(
   id: PlayerId,
 ): { weights: Record<StrategicDomain, number>; focus: StrategicDomain; reason: string } {
   const faction = state.factions[id];
-  const profile = priorityProfileOf(faction.element);
+  // The expressed element, not the founding family: an ascended civilization's
+  // standing priorities lean the way of what it has become.
+  const profile = priorityProfileOf(faction.expressedElement);
   const weights = {} as Record<StrategicDomain, number>;
   STRATEGIC_DOMAINS.forEach((domain, index) => {
     weights[domain] = profile[domain] + personalityOffset(state.seed, id, index);
@@ -171,7 +173,7 @@ export function recomputePriorities(
             ? "War concentrates the mind."
             : focus === "trade" && wars === 0
               ? "Peace favors the merchants."
-              : `The ${ELEMENTS[faction.element].name} way.`;
+              : `The ${ELEMENTS[faction.expressedElement].name} way.`;
   return { weights: settled, focus, reason };
 }
 

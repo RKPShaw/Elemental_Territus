@@ -5,20 +5,23 @@ import {
   ELEMENT_INDEX,
   ELEMENT_ORDER,
   ELEMENT_SPACE,
+  FOUNDING_BASE_BIT,
   FOUNDING_ELEMENTS,
   MATCHUP_TABLE,
+  baseMaskOf,
   compositionOf,
   deriveDominantBase,
   elementMultiplier,
-  matchup,
+  realmMatchup,
 } from "../app/game/elements";
 import { ELEMENT_RULES } from "../app/game/rules";
-import type { ElementId, TradeForm } from "../app/game/types";
+import type { ElementId, TradeForm, WorldState } from "../app/game/types";
 
 /**
- * The composed matchup table is dormant: combat still runs the founding
- * counter cycle. These tests pin the table's contract now, so the later
- * combat switch changes a consumer rather than discovering the rules.
+ * The composed matchup table is the live combat rule, read per realm through
+ * its expressed element with graded relief for the founding bases its
+ * absorbed history covers. These tests pin both the table's contract and the
+ * relief arithmetic.
  */
 
 const BALANCED_TIER_THREE: readonly ElementId[] = ["mirage", "obsidian", "spirit"];
@@ -35,8 +38,10 @@ test("the element space is complete, closed and self-consistent", () => {
     assert.equal(ELEMENTS[element].id, element);
     assert.equal(ELEMENT_SPACE[ELEMENT_INDEX[element]], element);
   }
-  // The founding roster is untouched by the wider space.
-  assert.deepEqual([...ELEMENT_ORDER], ["ember", "tide", "grove", "stone", "gale"]);
+  // Four founding families seat the roster; grove is acquirable, not seatable.
+  assert.deepEqual([...ELEMENT_ORDER], ["ember", "tide", "stone", "gale"]);
+  assert.ok(!ELEMENT_ORDER.includes("grove"));
+  assert.equal(ELEMENTS.grove.tier, 2);
   const glyphs = ELEMENT_SPACE.map((element) => ELEMENTS[element].glyph);
   assert.equal(new Set(glyphs).size, glyphs.length, "element glyphs must be distinct");
 });
@@ -182,17 +187,81 @@ test("tier amplitude grades mixed matchups without exceeding the founding edge",
   }
 });
 
-test("the live combat rule is untouched by the dormant table", () => {
-  // The founding cycle still pays exactly the legacy numbers...
-  assert.equal(matchup("tide", "ember"), 1.12);
-  assert.equal(matchup("ember", "tide"), 0.88);
-  // ...including the legacy edges the composed cycle will later neutralize
-  // (ember over gale) and reverse (stone over ember).
-  assert.equal(matchup("ember", "gale"), 1.12);
-  assert.equal(matchup("stone", "ember"), 1.12);
-  assert.equal(matchup("ember", "stone"), 0.88);
-  // The wider space cannot reach combat: no realm holds it, and even asked
-  // directly the legacy rule reads it as even.
-  assert.equal(matchup("steam", "ember"), 1);
-  assert.equal(matchup("ember", "steam"), 1);
+/** A world reduced to what realmMatchup reads: expression and history. */
+function matchupWorld(
+  factions: Record<string, { expressedElement: ElementId; held: ElementId[] }>,
+): WorldState {
+  return {
+    factions: Object.fromEntries(
+      Object.entries(factions).map(([id, { expressedElement, held }]) => [
+        id,
+        { expressedElement, baseMask: baseMaskOf(held) },
+      ]),
+    ),
+  } as unknown as WorldState;
+}
+
+test("realm matchups read expressed elements and pay the composed edge", () => {
+  const state = matchupWorld({
+    "ember-1": { expressedElement: "ember", held: ["ember"] },
+    "stone-1": { expressedElement: "stone", held: ["stone"] },
+    "gale-1": { expressedElement: "gale", held: ["gale"] },
+    "steam-realm": { expressedElement: "steam", held: ["ember", "tide", "steam"] },
+  });
+  // The document's cycle is live: ember now counters stone — the flip from
+  // the legacy rule, where stone beat ember — at exactly the founding edge.
+  assert.equal(realmMatchup(state, "ember-1", "stone-1"), 1.12);
+  assert.equal(realmMatchup(state, "stone-1", "ember-1"), 0.88);
+  // Ember–gale sits outside the cycle now: neutral, where it was an edge.
+  assert.equal(realmMatchup(state, "ember-1", "gale-1"), 1);
+  // Expression decides the matchup: a steam realm meets stone at the graded
+  // compound edge, not at its founding family's full counter.
+  assert.equal(
+    realmMatchup(state, "steam-realm", "stone-1"),
+    elementMultiplier("steam", "stone"),
+  );
+});
+
+test("absorbed history grades an edge down by at most a third, never away", () => {
+  const relief = ELEMENT_RULES.absorbedBaseRelief;
+  const state = matchupWorld({
+    attacker: { expressedElement: "ember", held: ["ember"] },
+    bare: { expressedElement: "stone", held: ["stone"] },
+    covered: { expressedElement: "stone", held: ["stone", "ember"] },
+    saturated: { expressedElement: "stone", held: ["ember", "tide", "stone", "gale"] },
+  });
+  const fullEdge = realmMatchup(state, "attacker", "bare");
+  assert.equal(fullEdge, 1 + ELEMENT_RULES.matchupEdge);
+  // Holding the attacker's whole base grades the edge by exactly the relief
+  // share; holding everything grades it no further — the old total-immunity
+  // saturation is gone.
+  const graded = realmMatchup(state, "attacker", "covered");
+  assert.ok(Math.abs(graded - (1 + ELEMENT_RULES.matchupEdge * (1 - relief))) < 1e-12);
+  assert.equal(realmMatchup(state, "attacker", "saturated"), graded);
+  assert.ok(graded > 1, "history softens an edge, it never erases one");
+  // Relief is symmetric: the covered realm attacking uphill suffers the same
+  // graded risk its defense enjoys, so the pair stays antisymmetric.
+  const uphill = realmMatchup(state, "covered", "attacker");
+  assert.ok(Math.abs(uphill - (1 - ELEMENT_RULES.matchupEdge * (1 - relief))) < 1e-12);
+  // Coverage weights the advantaged side's composition: against a steam
+  // edge, a defender whose history knows ember but not tide relieves only
+  // the ember half of it.
+  const halfState = matchupWorld({
+    steamAttacker: { expressedElement: "steam", held: ["ember", "tide", "steam"] },
+    halfCovered: { expressedElement: "stone", held: ["stone", "ember"] },
+  });
+  const steamEdge = elementMultiplier("steam", "stone") - 1;
+  assert.ok(steamEdge > 0, "steam carries an edge into stone");
+  const halfGraded = realmMatchup(halfState, "steamAttacker", "halfCovered");
+  assert.ok(Math.abs(halfGraded - (1 + steamEdge * (1 - relief * 0.5))) < 1e-12);
+});
+
+test("base masks cover exactly the founding composition of what is held", () => {
+  assert.equal(baseMaskOf(["ember"]), FOUNDING_BASE_BIT.ember);
+  assert.equal(baseMaskOf(["grove"]), FOUNDING_BASE_BIT.tide | FOUNDING_BASE_BIT.stone);
+  assert.equal(
+    baseMaskOf(["steam", "sand"]),
+    FOUNDING_BASE_BIT.ember | FOUNDING_BASE_BIT.tide | FOUNDING_BASE_BIT.stone | FOUNDING_BASE_BIT.gale,
+  );
+  assert.equal(baseMaskOf([]), 0);
 });

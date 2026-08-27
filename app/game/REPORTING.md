@@ -56,3 +56,8 @@ Assassinations, marriages, revolts and other features should:
 
 The simulation test suite includes a future `dynasty.marriage` producer to
 ensure extension events flow through the existing report and story pipeline.
+
+The first live resident of an extension namespace is `dynasty.element-ascended`:
+the ascension system reports each realm's rise to a compound (`major`) or
+advanced (`historic`) element under the story key `ascension:<realm>`, so a
+realm's whole climb through the tiers reads as one arc.

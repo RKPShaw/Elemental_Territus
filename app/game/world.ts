@@ -1,4 +1,5 @@
 import { relationKey } from "./diplomacy";
+import { baseMaskOf } from "./elements";
 import { neighborIndices } from "./grid";
 import { PLAYERS, PLAYER_ORDER, playerElement } from "./players";
 import { SeededRandom, smoothCellNoise } from "./random";
@@ -138,6 +139,8 @@ function makeFaction(id: PlayerId, seed: number): FactionState {
   return {
     id,
     element,
+    expressedElement: element,
+    baseMask: baseMaskOf([element]),
     alive: true,
     territory: 0,
     previousTerritory: 0,
@@ -242,8 +245,8 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
       faction.structures.city,
       config.maximumTroops,
     );
-    // Fifty realms each open with a tenth of the land the old five did, so
-    // starting population is capped by what the realm can actually sustain.
+    // Dozens of realms each open with a sliver of the land the old five did,
+    // so starting population is capped by what the realm can actually sustain.
     faction.troops = Math.min(12_000, faction.troopCap);
   }
 
@@ -300,7 +303,7 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
         id: 1,
         tick: 0,
         tone: "world",
-        text: `${worldName} wakes mostly unclaimed. ${PLAYER_ORDER.length} players across five elemental families raise banners with 20K treasuries and no developed infrastructure.`,
+        text: `${worldName} wakes mostly unclaimed. ${PLAYER_ORDER.length} players across four founding families raise banners with 20K treasuries and no developed infrastructure.`,
         actor: null,
       },
     ],
@@ -323,7 +326,7 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
           landTiles,
           foundingRealms: PLAYER_ORDER.length,
         },
-        summary: `${worldName} wakes mostly unclaimed as ${PLAYER_ORDER.length} realms of five elemental families raise their first banners.`,
+        summary: `${worldName} wakes mostly unclaimed as ${PLAYER_ORDER.length} realms of four founding families raise their first banners.`,
       },
     ],
     stories: [],

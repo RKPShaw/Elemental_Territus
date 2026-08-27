@@ -2,9 +2,10 @@ import { PLAYER_ORDER } from "../players";
 import { allRelations, countRelationStatuses, otherParty } from "../diplomacy";
 import { relationKey } from "../diplomacy";
 import type { RelationCounts } from "../diplomacy";
+import { ascensionAppetite } from "../ascension";
 import { realmMatchup } from "../elements";
 import { borderLength } from "../grid";
-import { DIPLOMACY_RULES, clamp } from "../rules";
+import { DIPLOMACY_RULES, ELEMENT_RULES, clamp } from "../rules";
 import { strategyFactor } from "../strategy";
 import type { PlayerId, RelationState, SimulationContext, SimulationSystem } from "../types";
 
@@ -123,11 +124,16 @@ function warDesire(
   const exposedTraitor = state.tick < rival.traitorUntil ? 0.48 : 0;
   const longPeace = clamp((state.tick - relation.since) / 320, 0, 0.38);
   const existingWars = warCount(pass, actor);
+  // Element mastery is pursued here: a target whose absorption advances the
+  // realm's next tier is worth a war, scaled by how much the court cares.
+  const ascensionPull = ascensionAppetite(state, actor, target)
+    * ELEMENT_RULES.ascensionWarDesire
+    * strategyFactor(self.strategy, "ascension");
   // A conquest-minded realm wants the same war more; near the declaration
   // threshold the sum is positive, so the factor moves decisions exactly there.
   return (readiness * 0.88 + troopEdge * 0.38 + elementalEdge * 1.6
     + (border > 0 ? 0.14 : -0.05) + containLeader + finishVulnerable
-    + exposedTraitor + longPeace - self.warWeariness * 0.72
+    + exposedTraitor + longPeace + ascensionPull - self.warWeariness * 0.72
     - existingWars * 0.34 + random.next() * 0.16)
     * strategyFactor(self.strategy, "conquest");
 }

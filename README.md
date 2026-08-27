@@ -1,8 +1,12 @@
 # Elemental Frontiers
 
-A deterministic, self-playing pressure-front strategy simulation. Fifty players
-across five elemental families begin at peace, grow troops and economies, declare
-wars, commit armies, and push continuous political borders across land and sea.
+A deterministic, self-playing pressure-front strategy simulation. Forty-eight
+players across four founding elemental families begin at peace, grow troops and
+economies, declare wars, commit armies, and push continuous political borders
+across land and sea. Conquest accumulates elemental history: a realm that
+absorbs the right rivals ascends to compound and advanced elements from a
+25-element, three-tier space, changing its matchups and its strategic
+character.
 
 ## Run locally
 
@@ -30,15 +34,15 @@ outside itself:
 npm run sim -- watch --speed 8          # play a world in the terminal
 npm run sim -- map --tick 900 --mode regions
 npm run sim -- events --domain trade --limit 20
-npm run sim -- inspect trade --tick 900 # or diplomacy, campaigns, theaters, regions, economy, structures, stories
+npm run sim -- inspect trade --tick 900 # or diplomacy, campaigns, theaters, regions, economy, structures, elements, stories
 npm run sim -- systems                  # per-system timing profile
 npm run sim -- doctor                   # check every system is doing its job
 ```
 
-`doctor` runs a world and asserts each of the fourteen systems produced its
+`doctor` runs a world and asserts each of the seventeen systems produced its
 characteristic activity — trade completed journeys, campaigns concluded,
-theaters formed, the partition moved — and exits non-zero naming anything that
-has gone quiet. It is the fastest way to find a system that silently stopped
+ascensions expressed, theaters formed, the partition moved — and exits non-zero
+naming anything that has gone quiet. It is the fastest way to find a system that silently stopped
 working, which aggregate balance metrics tend to hide.
 
 `npm run sim -- help` lists every command and flag. Because none of this needs
@@ -68,12 +72,26 @@ server-authoritative simulation and save migration natural future extensions.
 
 ### Players and elements
 
-A player is not an element. Fifty players compete, ten sharing each of the five
-elements, so siblings inherit an element's matchups, favoured terrain and
-temperament while playing as separate powers with their own territory, treasury
-and diplomacy. `app/game/players.ts` holds the roster, the element behind each
-id, and a distinct colour per player; `ElementId` still means the elemental
-character, and `PlayerId` means the power.
+A player is not an element. Forty-eight players compete, twelve sharing each of
+the four founding elements — ember, tide, stone and gale — so siblings inherit
+an element's matchups, favoured terrain and temperament while playing as
+separate powers with their own territory, treasury and diplomacy.
+`app/game/players.ts` holds the roster, the element behind each id, and a
+distinct colour per player; `ElementId` still means the elemental character,
+and `PlayerId` means the power.
+
+The wider space is earned, not seated. Grove retired as a starting family and
+returns as the first acquirable compound: every element beyond the founding
+four — six tier-2 compounds and fifteen tier-3 advanced elements — is declared
+in `app/game/elements.ts` and expressed through ascension. Conquest transfers
+a fallen realm's element tallies to its conqueror; when those tallies cover a
+compound's founding bases deeply enough (or an advanced element's compounds,
+with a long enough conquest record), the realm ascends: `dynasty.element-ascended`
+enters the report, its priorities lean toward what it became, and its combat
+matchups read its expressed element. Expression only ever upgrades, and realm
+identity — name, family, colors — never changes. `app/game/ascension.ts` owns
+the arithmetic; combat resolves matchups through the composed 25×25 table with
+graded relief for the founding bases a disadvantaged realm's history covers.
 
 Starts are drafted rather than fixed. Terrain is generated first, then each
 player in turn takes the best site still available to it, scoring the shared
@@ -107,7 +125,8 @@ last. `app/game/spawn.ts` owns this; `SPAWN_RULES` in `rules.ts` tunes it.
 `app/game/systems/index.ts` is the composition root. Every shared clock tick runs:
 
 1. clock and pressure decay;
-2. neutral-land settlement, realm accounting and troop-cap recalculation;
+2. neutral-land settlement, realm accounting, elemental ascension and
+   troop-cap recalculation;
 3. economic growth and trade-vehicle resolution;
 4. truce timers plus diplomatic and military AI intent;
 5. construction intent;
@@ -174,8 +193,14 @@ drive the same simulation safely.
   capacity, with the realm total hard-capped at 1.5 million.
 - Fallen realms do not remain in active diplomacy or consume war planning.
 - The player taking a realm's final territory absorbs every element that realm
-  held. Absorbed elements expand its combat options through a best-attack versus
-  best-counter matchup rather than a permanent flat strength bonus.
+  held, and its conquest tallies with them. Matchups read each realm's
+  expressed element against its rival's, graded down by at most a third when
+  the disadvantaged side's absorbed history covers the advantaged element's
+  founding bases — history softens a matchup, it never erases one.
+- Ascension is the technology tree: tier 2 needs depth two in both founding
+  constituents, tier 3 needs both compound constituents formable and six realms
+  absorbed altogether. Expression upgrades once and never demotes, and an
+  ascended realm keeps its name and colors — titles, not rebrands.
 
 ## Extending the simulation
 

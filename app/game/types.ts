@@ -1,10 +1,10 @@
 /**
  * Every elemental identity a realm can hold or one day express.
  *
- * The first five are the founding families that seat the roster. The rest are
- * the compound (tier 2) and advanced (tier 3) elements of the wider space —
- * declared and fully described in elements.ts, but dormant until the systems
- * that award and express them arrive. Widening this union is deliberate: every
+ * Four founding families seat the roster; everything else — grove included —
+ * is a compound (tier 2) or advanced (tier 3) element of the wider space,
+ * expressible only through the ascension system once a realm's conquests
+ * assemble the right history. Widening this union is deliberate: every
  * Record<ElementId, …> site is then compiler-checked for the full space.
  */
 export type ElementId =
@@ -46,9 +46,9 @@ export type ElementTier = 1 | 2 | 3;
 export type TradeForm = "energy" | "waterway" | "land" | "airborne";
 
 /**
- * A competing power. Ten players share each element, so a player carries an
- * element without being one. Ids look like "ember-4"; the roster and the
- * element behind each id live in players.ts.
+ * A competing power. Twelve players share each founding element, so a player
+ * carries an element without being one. Ids look like "ember-4"; the roster
+ * and the element behind each id live in players.ts.
  */
 export type PlayerId = string;
 
@@ -119,13 +119,6 @@ export interface ElementDefinition {
   color: string;
   softColor: string;
   deepColor: string;
-  /**
-   * The founding five's legacy counter cycle, still the live combat rule.
-   * Empty for the wider space; retired entirely when the composed matchup
-   * table takes over combat.
-   */
-  strongAgainst: readonly ElementId[];
-  weakAgainst: readonly ElementId[];
   /** Where this element belongs in the three-tier space. */
   tier: ElementTier;
   /**
@@ -197,8 +190,23 @@ export interface StructureCounts {
 
 export interface FactionState {
   id: PlayerId;
-  /** The elemental character this player shares with its nine siblings. */
+  /** The founding family this player shares with its eleven siblings. */
   element: ElementId;
+  /**
+   * The element this realm currently expresses: its founding element until
+   * conquest assembles the history for a higher tier, then the compound or
+   * advanced element the ascension system awarded. Expression only ever
+   * upgrades — a realm never forgets what it has become — and it is what
+   * combat matchups and strategic character read.
+   */
+  expressedElement: ElementId;
+  /**
+   * Which founding bases this realm's absorbed history covers, as a 4-bit
+   * mask in FOUNDING_ELEMENTS order. Facing an elemental edge, covering the
+   * rival's bases grades the edge down — history softens a matchup without
+   * ever erasing one.
+   */
+  baseMask: number;
   alive: boolean;
   territory: number;
   previousTerritory: number;

@@ -5,7 +5,9 @@
  * no installed dependencies -- so a world can be played, inspected and checked
  * from a terminal. See `sim.ts help` for the commands.
  */
+import { ascensionTitle, baseDepthsOf, nextFormable, totalRealmsAbsorbed } from "../app/game/ascension";
 import { committedTroopsFor } from "../app/game/campaigns";
+import { ELEMENTS } from "../app/game/elements";
 import { PLAYERS, PLAYER_ORDER } from "../app/game/players";
 import { ElementalWarEngine } from "../app/game/engine";
 import { latestStories } from "../app/game/reporting";
@@ -270,6 +272,33 @@ function inspectStructures(state: WorldState): void {
   }
 }
 
+function inspectElements(state: WorldState): void {
+  write(heading("elements"));
+  const fallen = PLAYER_ORDER.filter((id) => !state.factions[id].alive).length;
+  if (fallen > 0) write(dim(`  ${fallen} realms have fallen and are not shown`, color));
+  for (const id of PLAYER_ORDER) {
+    const faction = state.factions[id];
+    if (!faction.alive) continue;
+    const expressed = ELEMENTS[faction.expressedElement];
+    const depths = baseDepthsOf(faction.elementCounts);
+    const next = nextFormable(faction);
+    const title = ascensionTitle(faction);
+    write(
+      `  ${paint(PLAYERS[id]!.name.padEnd(10), PLAYERS[id]!.color, color)} ` +
+      `${expressed.glyph} ${expressed.name.padEnd(9)} tier ${expressed.tier}  ` +
+      `depth E${String(depths.ember).padEnd(2)} T${String(depths.tide).padEnd(2)} ` +
+      `S${String(depths.stone).padEnd(2)} A${String(depths.gale).padEnd(2)} ` +
+      `absorbed ${String(totalRealmsAbsorbed(faction.elementCounts)).padStart(2)}  ` +
+      (next
+        ? next.progress > 0
+          ? `next ${ELEMENTS[next.element].name} ${(next.progress * 100).toFixed(0)}%`
+          : "next —"
+        : "apex") +
+      (title ? dim(`  ${title}`, color) : ""),
+    );
+  }
+}
+
 function inspectStories(state: WorldState): void {
   write(heading("story arcs"));
   for (const story of latestStories(state.stories).slice(0, 12)) {
@@ -286,6 +315,7 @@ const INSPECTORS: Record<string, (state: WorldState) => void> = {
   regions: inspectRegions,
   economy: inspectEconomy,
   structures: inspectStructures,
+  elements: inspectElements,
   stories: inspectStories,
 };
 

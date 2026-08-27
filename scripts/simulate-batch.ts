@@ -123,6 +123,12 @@ const checkpointSummary = checkpointTicks.map((tick) => {
     ).length,
     settledPct: rounded(mean(samples.map((sample) => sample.settledShare)) * 100),
     aliveRealms: rounded(mean(samples.map((sample) => sample.aliveRealms)), 2),
+    tier2RealmsAlive: rounded(mean(samples.map((sample) => sample.tierCounts["2"])), 2),
+    tier3RealmsAlive: rounded(mean(samples.map((sample) => sample.tierCounts["3"])), 2),
+    ascensionsPerWorld: rounded(mean(samples.map((sample) => PLAYER_ORDER.reduce(
+      (sum, id) => sum + sample.players[id].cumulative.ascensions,
+      0,
+    ))), 2),
     leaderLandSharePct: rounded(mean(samples.map((sample) => sample.leaderLandShare)) * 100),
     landConcentrationHhi: rounded(mean(samples.map((sample) => sample.landConcentrationHhi)), 3),
     treasuryGini: rounded(mean(samples.map((sample) => sample.treasuryGini)), 3),
@@ -197,6 +203,14 @@ const winnerCounts = Object.fromEntries(ELEMENT_ORDER.map((element) => [
     result.champion !== null && playerElement(result.champion) === element,
   ).length,
 ]));
+// What the winners had become: how many champions closed their age still
+// founding-expressed versus ascended to a compound or advanced element.
+const championTiers = { 1: 0, 2: 0, 3: 0 };
+for (const result of results) {
+  if (result.champion === null) continue;
+  const final = result.checkpoints.at(-1)!.snapshot;
+  championTiers[final.players[result.champion].expressedTier] += 1;
+}
 const summary = {
   games: results.length,
   exactRules: true,
@@ -215,6 +229,7 @@ const summary = {
     mean: rounded(mean(completionTicks) / 60, 1),
   } : null,
   winnerCounts,
+  championTiers,
   checkpoints: checkpointSummary,
 };
 

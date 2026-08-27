@@ -66,7 +66,11 @@ function initialHeadline(event: WorldReportEvent, kind: StoryKind): string {
   if (kind === "development") return `${initiator} builds for the future`;
   if (kind === "trade") return target ? `${initiator} trades with ${target}` : `${initiator} expands its trade`;
   if (kind === "intrigue") return `Intrigue within ${initiator}`;
-  if (kind === "dynasty") return `A new bond for ${initiator}`;
+  if (kind === "dynasty") {
+    return event.kind === "dynasty.element-ascended"
+      ? `${initiator} ascends`
+      : `A new bond for ${initiator}`;
+  }
   if (kind === "revolt") return `Revolt challenges ${target ?? initiator}`;
   return event.kind === "world.created" ? `${initiator} begins` : event.summary;
 }
