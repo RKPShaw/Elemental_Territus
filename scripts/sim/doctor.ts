@@ -197,6 +197,16 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     `${railRoutes} rail routes, ${journeys} journeys completed, ${stops} station stops`,
   );
 
+  // Focus changes are the system's characteristic activity: baselines differ
+  // by family from tick zero, but only situation ever moves a focus.
+  const strategyShifts = count("leadership.strategy-adopted");
+  add(
+    "strategic-planning",
+    "realms change strategic focus as situations change",
+    strategyShifts > 0,
+    `${strategyShifts} focus changes reported`,
+  );
+
   const wars = count("diplomacy.war-declared");
   const alliances = count("diplomacy.alliance-formed");
   add(

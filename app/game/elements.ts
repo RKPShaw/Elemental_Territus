@@ -82,6 +82,9 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: [],
     dominantBase: null,
     tradeForms: ["energy"],
+    priorityProfile: {
+      economy: 0.2, conquest: 0.28, ascension: 0.12, diplomacy: 0.08, defense: 0.12, trade: 0.2,
+    },
     favoredTerrain: "hills",
     temperament: "Mobilizes early and spends heavily when a border looks thin.",
   },
@@ -100,6 +103,9 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: [],
     dominantBase: null,
     tradeForms: ["waterway"],
+    priorityProfile: {
+      economy: 0.18, conquest: 0.14, ascension: 0.1, diplomacy: 0.18, defense: 0.12, trade: 0.28,
+    },
     favoredTerrain: "farmland",
     temperament: "Invests in harbors, trade and carefully timed naval landings.",
   },
@@ -118,6 +124,9 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: ["tide", "stone"],
     dominantBase: null,
     tradeForms: ["waterway", "land"],
+    priorityProfile: {
+      economy: 0.2, conquest: 0.08, ascension: 0.1, diplomacy: 0.16, defense: 0.24, trade: 0.22,
+    },
     favoredTerrain: "forest",
     temperament: "Values peaceful trade and builds a layered defensive frontier.",
   },
@@ -136,6 +145,9 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: [],
     dominantBase: null,
     tradeForms: ["land"],
+    priorityProfile: {
+      economy: 0.24, conquest: 0.14, ascension: 0.1, diplomacy: 0.1, defense: 0.28, trade: 0.14,
+    },
     favoredTerrain: "mountains",
     temperament: "Turns mountain approaches into forts before counterattacking.",
   },
@@ -154,6 +166,9 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: [],
     dominantBase: null,
     tradeForms: ["airborne"],
+    priorityProfile: {
+      economy: 0.14, conquest: 0.18, ascension: 0.14, diplomacy: 0.24, defense: 0.14, trade: 0.16,
+    },
     favoredTerrain: "plains",
     temperament: "Keeps a reserve and changes wars when the balance shifts.",
   },

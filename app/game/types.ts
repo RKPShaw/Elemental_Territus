@@ -80,6 +80,36 @@ export type RealmPosture =
   | "recovering"
   | "trading";
 
+/**
+ * What a realm can choose to be about. Ascension is this game's technology:
+ * the pursuit of higher elemental tiers through conquest of complementary
+ * powers.
+ */
+export type StrategicDomain =
+  | "economy"
+  | "conquest"
+  | "ascension"
+  | "diplomacy"
+  | "defense"
+  | "trade";
+
+/**
+ * A realm's standing priorities: what it is trying to be about, before any
+ * single decision. Element identity seeds the weights and situation bends
+ * them; the AI systems read them as bounded multipliers, so a priority
+ * influences behavior without ever gating it.
+ */
+export interface StrategicPriorities {
+  /** Normalized weights over the domains; always sums to one. */
+  weights: Record<StrategicDomain, number>;
+  /** The leading domain, for display and stories. */
+  focus: StrategicDomain;
+  /** Tick the current focus was adopted. */
+  adoptedAt: number;
+  /** Why, in the realm's own words — like AiIntent.reason. */
+  reason: string;
+}
+
 export interface ElementDefinition {
   id: ElementId;
   name: string;
@@ -108,6 +138,12 @@ export interface ElementDefinition {
   dominantBase: ElementId | null;
   /** Native trade forms: one for tier 1, two thereafter. */
   tradeForms: readonly TradeForm[];
+  /**
+   * Baseline strategic weights this element leans its civilization toward.
+   * Authored for the founding families; compounds inherit a blend of their
+   * bases (see strategy.ts), so omitting it here means "what I am made of".
+   */
+  priorityProfile?: Readonly<Record<StrategicDomain, number>>;
   favoredTerrain: LandTerrainId;
   temperament: string;
 }
@@ -183,6 +219,8 @@ export interface FactionState {
   warships: number;
   structures: StructureCounts;
   capitalIndex: number;
+  /** Standing priorities; seeded by element, bent by situation. */
+  strategy: StrategicPriorities;
   /** Distinct elemental powers held; drives terrain affinity and matchups. */
   absorbedElements: ElementId[];
   /**
@@ -618,6 +656,8 @@ export interface SimulationConfig {
   decisionInterval: number;
   diplomacyInterval: number;
   constructionInterval: number;
+  /** Ticks between strategic-priority recomputes. */
+  strategyInterval: number;
   minimumPeaceTicks: number;
   victoryShare: number;
   maximumTroops: number;

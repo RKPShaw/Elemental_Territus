@@ -309,6 +309,40 @@ export const ELEMENT_RULES = {
   resonantWindowTicks: 600,
 } as const;
 
+/**
+ * The strategic-priority surface.
+ *
+ * Every realm carries normalized weights over the strategic domains, seeded
+ * by its element and bent by situation. AI systems consume them only as
+ * multipliers inside the factor band, so a priority can never gate a
+ * behavior — a pacifist still defends itself, a warmonger still trades. The
+ * band is centred on 1: a realm weighting a domain at exactly the uniform
+ * share behaves as if the system did not exist.
+ */
+export const STRATEGY_RULES = {
+  /** Bounds on any weight-derived multiplier. */
+  factorFloor: 0.6,
+  factorCeiling: 1.6,
+  /** How far construction quotas may drift, as a share of the factor's drift. */
+  quotaDamping: 0.5,
+  /** Per-domain personality noise, so siblings of one family still differ. */
+  noiseAmplitude: 0.05,
+  /** Weight added to defense while campaigns press into the realm. */
+  threatDefenseSurge: 0.14,
+  /** Weight added to conquest while the realm has wars of its own. */
+  warConquestSurge: 0.08,
+  /** Weight added to diplomacy per point of war weariness. */
+  wearinessDiplomacySurge: 0.2,
+  /** Weight added to diplomacy while any rival holds this much of the land. */
+  hegemonDiplomacySurge: 0.12,
+  hegemonShareThreshold: 0.3,
+  /** Weight added to economy while the treasury outruns the works. */
+  richEconomySurge: 0.1,
+  richTreasuryFloor: 2_000_000,
+  /** Weight added to trade while the realm is entirely at peace. */
+  peacefulTradeSurge: 0.08,
+} as const;
+
 export const ECONOMY_RULES = {
   landIncomeScale: 2.4,
   cityIncome: 500,

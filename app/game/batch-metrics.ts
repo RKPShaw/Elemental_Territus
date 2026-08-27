@@ -7,8 +7,10 @@ import {
   ECONOMY_RULES,
   populationGrowthEfficiency,
 } from "./rules";
+import { STRATEGIC_DOMAINS } from "./strategy";
 import type {
   PlayerId,
+  StrategicDomain,
   StructureCounts,
   StructureType,
   WorldReportEvent,
@@ -60,6 +62,8 @@ export interface PlayerCumulativeMetrics {
   homeRatioTotal: number;
   committedRatioTotal: number;
   growthEfficiencyTotal: number;
+  strategyChanges: number;
+  ticksByFocus: Record<StrategicDomain, number>;
 }
 
 export interface PlayerBalanceSnapshot {
@@ -83,6 +87,7 @@ export interface PlayerBalanceSnapshot {
   warWeariness: number;
   casualties: number;
   absorbedElements: number;
+  strategicFocus: StrategicDomain;
   structuresOwned: StructureCounts;
   citySitesOwned: number;
   stackedCityLevelsOwned: number;
@@ -132,6 +137,8 @@ export interface WorldBalanceSnapshot {
   activeTrains: number;
   activeShips: number;
   railEdges: number;
+  /** Living realms by current strategic focus. */
+  focusCounts: Record<StrategicDomain, number>;
   eventCounts: Record<string, number>;
   firstEventTicks: Record<string, number>;
   milestones: Record<string, number>;
@@ -140,6 +147,12 @@ export interface WorldBalanceSnapshot {
 
 function emptyStructures(): StructureCounts {
   return { city: 0, fort: 0, factory: 0, harbor: 0 };
+}
+
+function emptyFocusCounts(): Record<StrategicDomain, number> {
+  return Object.fromEntries(
+    STRATEGIC_DOMAINS.map((domain) => [domain, 0]),
+  ) as Record<StrategicDomain, number>;
 }
 
 function emptyPlayerMetrics(): PlayerCumulativeMetrics {
@@ -188,6 +201,8 @@ function emptyPlayerMetrics(): PlayerCumulativeMetrics {
     homeRatioTotal: 0,
     committedRatioTotal: 0,
     growthEfficiencyTotal: 0,
+    strategyChanges: 0,
+    ticksByFocus: emptyFocusCounts(),
   };
 }
 
@@ -208,6 +223,7 @@ function cloneCumulative(metrics: PlayerCumulativeMetrics): PlayerCumulativeMetr
     structuresBuilt: { ...metrics.structuresBuilt },
     structuresCaptured: { ...metrics.structuresCaptured },
     structuresLost: { ...metrics.structuresLost },
+    ticksByFocus: { ...metrics.ticksByFocus },
   };
 }
 
@@ -287,6 +303,7 @@ export class BatchMetricsCollector {
     if (event.kind === "diplomacy.alliance-offered" && actor) this.players[actor].alliancesOffered += 1;
     if (event.kind === "diplomacy.alliance-formed" && actor) this.players[actor].alliancesFormed += 1;
     if (event.kind === "diplomacy.alliance-betrayed" && actor) this.players[actor].alliancesBetrayed += 1;
+    if (event.kind === "leadership.strategy-adopted" && actor) this.players[actor].strategyChanges += 1;
 
     if (event.kind === "trade.train-stop-served" && actor) {
       const ownerIncome = Number(event.facts.ownerIncome ?? 0);
@@ -336,6 +353,7 @@ export class BatchMetricsCollector {
         continue;
       }
       metrics.ticksAlive += 1;
+      metrics.ticksByFocus[faction.strategy.focus] += 1;
       const committed = committedTroopsFor(state, id);
       const homeRatio = faction.troops / Math.max(1, faction.troopCap);
       const committedRatio = committed / Math.max(1, faction.troopCap);
@@ -422,6 +440,7 @@ export class BatchMetricsCollector {
         warWeariness: faction.warWeariness,
         casualties: faction.casualties,
         absorbedElements: faction.absorbedElements.length,
+        strategicFocus: faction.strategy.focus,
         structuresOwned: { ...faction.structures },
         citySitesOwned: citySites[id],
         stackedCityLevelsOwned: Math.max(0, faction.structures.city - citySites[id]),
@@ -437,6 +456,8 @@ export class BatchMetricsCollector {
     }
 
     const alive = PLAYER_ORDER.filter((id) => state.factions[id].alive);
+    const focusCounts = emptyFocusCounts();
+    for (const id of alive) focusCounts[state.factions[id].strategy.focus] += 1;
     const leader = [...alive].sort(
       (first, second) => state.factions[second].territory - state.factions[first].territory,
     )[0] ?? null;
@@ -497,6 +518,7 @@ export class BatchMetricsCollector {
       activeTrains: state.tradeVehicles.filter((vehicle) => vehicle.kind === "train").length,
       activeShips: state.tradeVehicles.filter((vehicle) => vehicle.kind === "ship").length,
       railEdges: state.tradeRoutes.length,
+      focusCounts,
       eventCounts: { ...this.eventCounts },
       firstEventTicks: { ...this.firstEventTicks },
       milestones: { ...this.milestones },

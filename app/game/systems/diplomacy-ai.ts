@@ -5,6 +5,7 @@ import type { RelationCounts } from "../diplomacy";
 import { realmMatchup } from "../elements";
 import { borderLength } from "../grid";
 import { DIPLOMACY_RULES, clamp } from "../rules";
+import { strategyFactor } from "../strategy";
 import type { PlayerId, RelationState, SimulationContext, SimulationSystem } from "../types";
 
 /**
@@ -94,8 +95,11 @@ function truceValue(
   const commonThreat = largestThirdParty > 0.34 ? (largestThirdParty - 0.34) * 1.5 : 0;
   const conflictPenalty = (warCount(pass, actor) + warCount(pass, target)) * 0.18;
   const traitorPenalty = state.tick < rival.traitorUntil ? 0.32 : 0;
-  return parity * 0.48 + sharedBorder + tradePotential + commonThreat
-    - conflictPenalty - traitorPenalty + random.next() * 0.16;
+  // Priorities scale the whole appraisal: a diplomacy-minded court values the
+  // same alliance more, and the acceptance thresholds below stay put.
+  return (parity * 0.48 + sharedBorder + tradePotential + commonThreat
+    - conflictPenalty - traitorPenalty + random.next() * 0.16)
+    * strategyFactor(self.strategy, "diplomacy");
 }
 
 function warDesire(
@@ -119,10 +123,13 @@ function warDesire(
   const exposedTraitor = state.tick < rival.traitorUntil ? 0.48 : 0;
   const longPeace = clamp((state.tick - relation.since) / 320, 0, 0.38);
   const existingWars = warCount(pass, actor);
-  return readiness * 0.88 + troopEdge * 0.38 + elementalEdge * 1.6
+  // A conquest-minded realm wants the same war more; near the declaration
+  // threshold the sum is positive, so the factor moves decisions exactly there.
+  return (readiness * 0.88 + troopEdge * 0.38 + elementalEdge * 1.6
     + (border > 0 ? 0.14 : -0.05) + containLeader + finishVulnerable
     + exposedTraitor + longPeace - self.warWeariness * 0.72
-    - existingWars * 0.34 + random.next() * 0.16;
+    - existingWars * 0.34 + random.next() * 0.16)
+    * strategyFactor(self.strategy, "conquest");
 }
 
 function considerTradePolicy(
@@ -134,11 +141,13 @@ function considerTradePolicy(
   const { state, random } = context;
   const actorBlocked = relation.tradeDisabledBy.includes(actor);
   const powerRatio = state.factions[target].troops / Math.max(1, state.factions[actor].troops);
+  // A trading court reopens routes sooner and closes them more reluctantly.
+  const tradeFactor = strategyFactor(state.factions[actor].strategy, "trade");
   if (actorBlocked) {
-    if ((relation.status === "truce" || powerRatio < 1.45) && random.chance(0.2)) {
+    if ((relation.status === "truce" || powerRatio < 1.45) && random.chance(clamp(0.2 * tradeFactor, 0, 1))) {
       state.commands.push({ type: "set-trade", actor, target, enabled: true });
     }
-  } else if (relation.status === "peace" && powerRatio > 1.75 && random.chance(0.06)) {
+  } else if (relation.status === "peace" && powerRatio > 1.75 && random.chance(0.06 / tradeFactor)) {
     state.commands.push({ type: "set-trade", actor, target, enabled: false });
   }
 }
