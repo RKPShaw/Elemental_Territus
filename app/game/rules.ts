@@ -266,15 +266,15 @@ export const ENEMY_TERRAIN_COST: Record<LandTerrainId, number> = {
 /**
  * The elemental balance surface.
  *
- * matchupEdge is the whole of elemental combat today: the founding counter
- * cycle advances a front 1.12× faster with the edge and 0.88× slower against
- * it (1 ± matchupEdge — the sums are float-exact, which the element tests
- * pin). The rest of the block belongs to the wider 25-element space: the
- * composed matchup table (built and tested in elements.ts, not yet consulted
- * by combat), and the ascension, trade-form and infrastructure-memory
- * constants of the phases that will light it up. An elemental edge should
- * matter without ever deciding a battle by itself, so every multiplier here
- * lives inside the floor/ceiling band.
+ * matchupEdge anchors elemental combat: a founding counter advances a front
+ * 1.12× faster with the edge and 0.88× slower against it (1 ± matchupEdge —
+ * the sums are float-exact, which the element tests pin), and the composed
+ * 25×25 table grades every other pair from it. Combat reads that table live
+ * through each realm's expressed element; ascension arithmetic and the
+ * trade-form rewards below are live too. Only the infrastructure-memory
+ * constants still wait on their phase. An elemental edge should matter
+ * without ever deciding a battle by itself, so every multiplier here lives
+ * inside the floor/ceiling band.
  */
 export const ELEMENT_RULES = {
   /** Full counter advantage between two founding elements, as a share of 1. */
@@ -312,6 +312,43 @@ export const ELEMENT_RULES = {
   ascensionWarDesire: 0.45,
   /** The matching bonus when choosing which existing war to press. */
   ascensionTargetPreference: 0.6,
+  /**
+   * The trade-form reward, one rate for all three carriers and rewards only:
+   * an energy realm's trains earn it for their owner, a land realm's
+   * stations add it to what hosting a foreign stop pays, a waterway realm's
+   * ships add it to a voyage's payout. Airborne has no carrier yet — the
+   * information phase gives it a different identity entirely.
+   */
+  tradeFormIncomeBonus: 0.15,
+  /**
+   * Sea host shares when the trading realms' expressed elements share trade
+   * forms. Resonance pays a host more than a stranger's 0.18 but allied
+   * standing still pays best — the diplomatic bond outbids the elemental
+   * one, and a share never grades down: the best applicable rate wins.
+   */
+  resonantHostShareOne: 0.24,
+  resonantHostShareTwo: 0.3,
+  /**
+   * Construction affinity: how strongly a realm reaches for the carrier of a
+   * trade form it holds, multiplying the build-priority shortfalls its
+   * strategy quotas produce. An ordering lean, not a change in appetite —
+   * shortfalls converge to the same quota-driven totals, matched carriers
+   * are just reached for sooner. The city factor sits below 1 because a
+   * land realm's carrier is the rail network around its stations: it lets
+   * the factories that lay track jump the queue, it does not shrink the
+   * city program.
+   */
+  buildAffinity: { city: 0.8, factory: 1.2, harbor: 1.4 },
+  /**
+   * Harbor share of a realm's desired trade buildings, and the running cap
+   * on harbors as a fraction of trade buildings actually standing. Waterway
+   * realms reach for half again as many harbors; everyone else keeps the
+   * classic minority share.
+   */
+  harborTradeShare: 0.22,
+  harborTradeCap: 0.25,
+  waterwayHarborTradeShare: 0.34,
+  waterwayHarborTradeCap: 0.4,
   /** Captured-structure efficiency when only absorbed history covers its form. */
   legacyEfficiency: 0.9,
   /** Captured-structure efficiency when nothing in the realm's history does. */

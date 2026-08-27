@@ -2,6 +2,7 @@ import { PLAYER_ORDER } from "../players";
 import { getRelation, warsFor } from "../diplomacy";
 import { buildDistanceField, distanceAt } from "../distance-field";
 import type { DistanceField } from "../distance-field";
+import { buildAffinityOf } from "../elements";
 
 import {
   canPlaceStructureSite,
@@ -247,9 +248,14 @@ function desiredInfrastructure(
     + strategyQuotaFactor(faction.strategy, "trade")
   ) / 2;
   const fortQuota = strategyQuotaFactor(faction.strategy, "defense");
+  // Trade forms lean the same program toward their carriers: a waterway realm
+  // wants half again the harbor share, and matched carriers jump the build
+  // queue through the shortfall weights below without changing the totals the
+  // quotas ask for.
+  const affinity = buildAffinityOf(faction.expressedElement);
   const desiredCities = clamp(Math.ceil((physicalTerritory / 8) * cityQuota), 2, 90);
   const desiredTrade = clamp(Math.ceil(desiredCities * 0.8 * tradeQuota), 2, 100);
-  const desiredHarbors = Math.min(20, Math.ceil(desiredTrade * 0.22));
+  const desiredHarbors = Math.min(20, Math.ceil(desiredTrade * affinity.harborShare));
   const tradeBuildings = counts.factory + counts.harbor;
   const vulnerable = vulnerableBoundaryCells(context, owner);
   const desiredForts = Math.min(18, Math.max(0, Math.ceil((vulnerable.length / 18) * fortQuota)));
@@ -262,11 +268,11 @@ function desiredInfrastructure(
   const cityShortfall = Math.max(0, (desiredCities - counts.city) / desiredCities);
   const tradeShortfall = Math.max(0, (desiredTrade - tradeBuildings) / desiredTrade);
   if (cityShortfall <= 0 && tradeShortfall <= 0) return null;
-  if (cityShortfall >= tradeShortfall) return "city";
+  if (cityShortfall * affinity.city >= tradeShortfall * affinity.trade) return "city";
   if (
     counts.factory >= 3 &&
     counts.harbor < desiredHarbors &&
-    counts.harbor * 4 < tradeBuildings
+    counts.harbor < tradeBuildings * affinity.harborCap
   ) return "harbor";
   return "factory";
 }

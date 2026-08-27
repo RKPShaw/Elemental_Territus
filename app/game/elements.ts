@@ -1,10 +1,11 @@
-import { ELEMENT_RULES, clamp } from "./rules";
+import { ELEMENT_RULES, TRADE_RULES, clamp } from "./rules";
 import type {
   ElementDefinition,
   ElementId,
   ElementTier,
   FoundingElementId,
   PlayerId,
+  TradeForm,
   WorldState,
 } from "./types";
 
@@ -679,4 +680,96 @@ export function realmMatchupLabel(
   if (value > 1) return "elemental edge";
   if (value < 1) return "elemental risk";
   return "even elements";
+}
+
+/**
+ * Trade forms on their carriers.
+ *
+ * Every element trades through one or two of the four forms, and three of
+ * them already have a vehicle in the world: energy is the factory and its
+ * trains, land the rails and the stations they thread, waterway the harbors
+ * and their ships. Airborne has no carrier by design — no third vehicle
+ * network — so gale's trade identity waits for the information phase. The
+ * helpers below are the whole of how the simulation reads trade forms:
+ * income rides tradeFormIncomeMultiplier, sea hosting rides seaHostShare,
+ * and construction leans through buildAffinityOf.
+ */
+
+/** Whether an element's civilization trades by the given form. */
+export function tradesBy(element: ElementId, form: TradeForm): boolean {
+  return ELEMENTS[element].tradeForms.includes(form);
+}
+
+/** How many trade forms two elements share — the resonance between them. */
+export function sharedTradeForms(first: ElementId, second: ElementId): number {
+  let shared = 0;
+  for (const form of ELEMENTS[first].tradeForms) {
+    if (ELEMENTS[second].tradeForms.includes(form)) shared += 1;
+  }
+  return shared;
+}
+
+/**
+ * The income multiplier a realm's trade earns on a carrier: the flat bonus
+ * when the expressed element trades by that form, and exactly 1 otherwise.
+ * Rewards only — nothing a realm does not hold ever pays less than today.
+ */
+export function tradeFormIncomeMultiplier(element: ElementId, form: TradeForm): number {
+  return tradesBy(element, form) ? 1 + ELEMENT_RULES.tradeFormIncomeBonus : 1;
+}
+
+/**
+ * The host's share of a foreign sea voyage: the stranger's rate, raised by
+ * trade-form resonance between the parties, with allied standing still
+ * paying best. The best applicable rate wins, so resonance never costs a
+ * host what diplomacy already earned.
+ */
+export function seaHostShare(shared: number, allied: boolean): number {
+  const resonant = shared >= 2
+    ? ELEMENT_RULES.resonantHostShareTwo
+    : shared >= 1
+      ? ELEMENT_RULES.resonantHostShareOne
+      : TRADE_RULES.foreignHostShare;
+  return Math.max(allied ? TRADE_RULES.alliedHostShare : 0, resonant);
+}
+
+export interface BuildAffinity {
+  /** Multiplier on the city shortfall when choosing what to build next. */
+  city: number;
+  /** Multiplier on the trade-building shortfall in the same choice. */
+  trade: number;
+  /** Harbor share of the trade buildings a realm wants. */
+  harborShare: number;
+  /** Running cap on harbors as a fraction of trade buildings standing. */
+  harborCap: number;
+}
+
+const BUILD_AFFINITIES = new Map<ElementId, BuildAffinity>();
+
+/**
+ * How an element's trade forms lean its construction program, composed with
+ * the strategy quotas by the construction planner. A waterway realm reaches
+ * for harbors hardest and wants half again the harbor share; an energy realm
+ * reaches for factories; a land realm lets the rail-laying trade buildings
+ * jump the queue ahead of its cities without wanting fewer of either.
+ */
+export function buildAffinityOf(element: ElementId): BuildAffinity {
+  const cached = BUILD_AFFINITIES.get(element);
+  if (cached) return cached;
+  const waterway = tradesBy(element, "waterway");
+  const affinity: BuildAffinity = {
+    city: tradesBy(element, "land") ? ELEMENT_RULES.buildAffinity.city : 1,
+    trade: Math.max(
+      waterway ? ELEMENT_RULES.buildAffinity.harbor : 1,
+      tradesBy(element, "energy") ? ELEMENT_RULES.buildAffinity.factory : 1,
+    ),
+    harborShare: waterway
+      ? ELEMENT_RULES.waterwayHarborTradeShare
+      : ELEMENT_RULES.harborTradeShare,
+    harborCap: waterway
+      ? ELEMENT_RULES.waterwayHarborTradeCap
+      : ELEMENT_RULES.harborTradeCap,
+  };
+  BUILD_AFFINITIES.set(element, affinity);
+  return affinity;
 }

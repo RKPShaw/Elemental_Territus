@@ -178,16 +178,23 @@ drive the same simulation safely.
   seconds at each station that path actually passes through -- a city off the
   line is passed by -- and excludes its own launch factory from the payout.
   Domestic stops pay the train realm 50K; foreign stops pay both train and host
-  realms 100K, for 4× total value. The world supports up to 75 simultaneous
-  trains.
+  realms 100K, for 4× total value. Trade forms ride the carriers, rewards
+  only: a realm whose expressed element trades by energy earns 15% more from
+  its own trains, and one that trades by land hosts foreign stops for 15%
+  more. The world supports up to 75 simultaneous trains.
 - Every realm opens with its capital as a founded city. Capturing a capital
   annexes the defender's entire remaining territory on the spot: the realm
   falls to the captor along with its elements.
 - Merchant ships select random destination harbors and use contiguous water-only
   paths. Their fixed velocity makes long voyages last several world minutes;
-  payout is 4K per planned travel second and the world supports up to 1,000 ships.
-- Foreign destination players receive a host share. Either peaceful party may
-  close or reopen trade, while war always cancels it.
+  payout is 4K per planned travel second -- 15% more for a realm whose
+  expressed element trades by waterway -- and the world supports up to 1,000
+  ships.
+- Foreign destination players receive a host share: 18% between strangers,
+  24% or 30% when the parties' expressed elements share one or both trade
+  forms, and 35% between allies -- the best applicable rate wins, so
+  resonance never costs a host what diplomacy earned. Either peaceful party
+  may close or reopen trade, while war always cancels it.
 - Cities use a separate 25K / 50K / 100K / 250K+ construction ladder; factories
   and harbors share another. Every city level adds exactly 10,000 troop capacity on top of sustainable-land
   capacity, with the realm total hard-capped at 1.5 million.
@@ -201,6 +208,12 @@ drive the same simulation safely.
   constituents, tier 3 needs both compound constituents formable and six realms
   absorbed altogether. Expression upgrades once and never demotes, and an
   ascended realm keeps its name and colors — titles, not rebrands.
+- Trade forms lean construction through the same strategy quotas: a realm
+  whose expressed element trades by waterway wants harbors at a 34% share of
+  its trade buildings instead of 22% and reaches for them first; energy realms
+  reach for factories, and land realms let rail-laying trade buildings jump
+  the city queue without wanting fewer of either. Airborne has no trade
+  carrier — a gale realm's identity waits for the information mechanics.
 
 ## Extending the simulation
 

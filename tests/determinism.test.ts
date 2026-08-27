@@ -15,7 +15,18 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the four-family roster and the live element system. The
+ * Re-recorded when trade forms went live on their carriers. An energy realm's
+ * trains now earn more for their owner, a land realm's stations host foreign
+ * stops for more, a waterway realm's ships price the same voyage higher, sea
+ * hosting pays a resonant share between realms whose expressed elements trade
+ * the same ways, and construction leans toward the carriers a realm holds —
+ * a waterway realm wants a third of its trade buildings to be harbors and
+ * reaches for them first. Incomes and build choices shift from the first
+ * launches and construction windows, so every world digest moves, and the
+ * cell digests move with them: richer treasuries build sooner, and stations
+ * rise on different ground.
+ *
+ * Before that, re-recorded for the four-family roster and the live element system. The
  * founding roster reworked to twelve players in each of four families — grove
  * retired to an acquirable compound — so every draft, and with it every
  * world, differs from the first tick by construction. On top of that the
@@ -85,25 +96,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "3f123ac5fdda54614b213e1aa4d332f0", cells: "c24971694dce1b93" },
-      { tick: 200, world: "d13728c491da08890b00b9f240635725", cells: "e30b96cb799bd69c" },
-      { tick: 600, world: "241df4c92eded5bbfeb802da0aeba40d", cells: "b3ca53b7b9ca77a5", deep: true },
+      { tick: 60, world: "8dd3111b174769b3aa8a801681232d03", cells: "1b5951d693443dc3" },
+      { tick: 200, world: "bd862d0391bfa667dbd8cd59b50c5a12", cells: "ca1200acd15454c1" },
+      { tick: 600, world: "b0e4835ad861dc82012d1022fc0d67f5", cells: "490190e5f1fd303e", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "9054d816b5b85eca8eba4a86d6c773c2", cells: "ff00923fee2521fb" },
-      { tick: 200, world: "364e992e375ed67accedd0c8da10e772", cells: "7393d90096ffc881" },
-      { tick: 600, world: "f47b5a628043c6ad00b5ee2d70d2e997", cells: "38b4c76390cd473b", deep: true },
+      { tick: 60, world: "5c981faad9aca4645f4f857b865c9ae2", cells: "f229054926890556" },
+      { tick: 200, world: "e4a4ff35600dae3e031acbdc83b7b0e9", cells: "3dbcf1a12739a699" },
+      { tick: 600, world: "9d57908868be1e388046828ccba9526d", cells: "b5f8f1cb9be0cdc6", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "d8866144a90bd191a78f600b8694f4e9", cells: "80036d574520dcd9" },
-      { tick: 200, world: "5769757d4db6007064981b94517b64e7", cells: "bc810ed304aef7e3" },
-      { tick: 600, world: "ec11f79a16a7369552b17462d15090b5", cells: "6fd69fdd40a98e5c", deep: true },
+      { tick: 60, world: "ce2a32e02619877e1d8e3cbc741512f4", cells: "952d20dafddadc3f" },
+      { tick: 200, world: "b5ee0e21722ed8fc90662d3810cfa9c8", cells: "441770fdd7af70fc" },
+      { tick: 600, world: "61c7c2f2674ca06ea758cd2094605f01", cells: "50a5ef2c65c657b2", deep: true },
     ],
   },
 ];

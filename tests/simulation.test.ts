@@ -4,6 +4,7 @@ import { ElementalWarEngine } from "../app/game/engine";
 import { runBatchGame } from "../app/game/batch";
 import { PLAYER_ORDER } from "../app/game/players";
 import {
+  ELEMENT_RULES,
   ENEMY_TERRAIN_COST,
   STRUCTURE_MIN_SPACING,
   STRATEGIC_REGION_RULES,
@@ -467,7 +468,7 @@ test("each trade building respects its berths and its launch cooldown", () => {
   }
 });
 
-test("train stops pay fixed domestic and four-times-total foreign value with stack scaling", () => {
+test("train stops pay the fixed values, scaled by stacks and trade-form rewards", () => {
   // Adaptive theaters alter the deterministic diplomatic frontier enough that
   // this seed's first international railway matures later than its first line.
   const state = new ElementalWarEngine(0x240823).step(900);
@@ -476,16 +477,33 @@ test("train stops pay fixed domestic and four-times-total foreign value with sta
   const foreign = stops.find((event) => event.facts.foreign === true);
   assert.ok(domestic, "the calibration world should serve a domestic station");
   assert.ok(foreign, "the calibration world should serve a foreign station");
+  // Trains are the energy carrier and stations the land carrier, so each
+  // side's income is its base value times the station stack times its own
+  // form's reward -- and only a realm holding the form ever earns it.
+  const formBonus = 1 + ELEMENT_RULES.tradeFormIncomeBonus;
   for (const event of stops) {
     const multiplier = Number(event.facts.stationMultiplier);
+    const ownerBonus = event.facts.energyBonus === true ? formBonus : 1;
+    const hostBonus = event.facts.landBonus === true ? formBonus : 1;
     if (event.facts.foreign) {
-      assert.equal(event.facts.ownerIncome, TRADE_RULES.foreignTrainStopPayout * multiplier);
-      assert.equal(event.facts.hostIncome, TRADE_RULES.foreignTrainStopPayout * multiplier);
+      assert.equal(event.facts.ownerIncome, TRADE_RULES.foreignTrainStopPayout * multiplier * ownerBonus);
+      assert.equal(event.facts.hostIncome, TRADE_RULES.foreignTrainStopPayout * multiplier * hostBonus);
     } else {
-      assert.equal(event.facts.ownerIncome, TRADE_RULES.domesticTrainStopPayout * multiplier);
+      assert.equal(event.facts.ownerIncome, TRADE_RULES.domesticTrainStopPayout * multiplier * ownerBonus);
       assert.equal(event.facts.hostIncome, 0);
     }
   }
+  // The calibration world genuinely exercises both sides of the reward: an
+  // energy realm's train earned it, and a stop at a non-energy realm's did
+  // not.
+  assert.ok(
+    stops.some((event) => event.facts.energyBonus === true),
+    "an energy realm's train should have served a stop by now",
+  );
+  assert.ok(
+    stops.some((event) => event.facts.energyBonus === false),
+    "a non-energy realm's train should have served a stop by now",
+  );
   assert.equal(
     TRADE_RULES.foreignTrainStopPayout * 2,
     TRADE_RULES.domesticTrainStopPayout * 4,

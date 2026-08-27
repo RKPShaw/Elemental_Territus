@@ -161,6 +161,24 @@ const checkpointSummary = checkpointTicks.map((tick) => {
     nominalPassiveIncomePerWorld: rounded(mean(samples.map((sample) => sample.nominalPassiveIncome))),
     trainIncomePerWorld: rounded(mean(samples.map((sample) => sample.trainIncome))),
     shipIncomePerWorld: rounded(mean(samples.map((sample) => sample.shipIncome))),
+    resonantShipVoyagesPerWorld: rounded(mean(samples.map((sample) => PLAYER_ORDER.reduce(
+      (sum, id) => sum + sample.players[id].cumulative.resonantVoyagesHosted,
+      0,
+    )))),
+    // The per-family income split: whether the trade-form rewards actually
+    // land on the families that hold the forms.
+    tradeIncomePerRealmByFamily: Object.fromEntries(ELEMENT_ORDER.map((element) => [
+      ELEMENTS[element].name,
+      rounded(mean(samples.map((sample) => {
+        const members = PLAYER_ORDER.filter((id) => playerElement(id) === element);
+        return members.reduce((sum, id) => {
+          const trade = sample.players[id].cumulative;
+          return sum
+            + trade.trainIncomeEarned + trade.trainIncomeHosted
+            + trade.shipIncomeEarned + trade.shipIncomeHosted;
+        }, 0) / Math.max(1, members.length);
+      }))),
+    ])),
     tradeToStructureSpendRatio: structureSpend > 0 ? rounded(tradeIncome / structureSpend, 2) : 0,
     domesticTrainStopsPerWorld: rounded(domesticStops),
     foreignTrainStopsPerWorld: rounded(foreignStops),

@@ -35,6 +35,8 @@ export interface PlayerCumulativeMetrics {
   trainIncomeHosted: number;
   shipIncomeEarned: number;
   shipIncomeHosted: number;
+  /** Foreign voyages this realm hosted at a trade-form-resonant share. */
+  resonantVoyagesHosted: number;
   domesticStopsServed: number;
   foreignStopsServed: number;
   foreignStopsHosted: number;
@@ -180,6 +182,7 @@ function emptyPlayerMetrics(): PlayerCumulativeMetrics {
     trainIncomeHosted: 0,
     shipIncomeEarned: 0,
     shipIncomeHosted: 0,
+    resonantVoyagesHosted: 0,
     domesticStopsServed: 0,
     foreignStopsServed: 0,
     foreignStopsHosted: 0,
@@ -340,6 +343,9 @@ export class BatchMetricsCollector {
           const hostIncome = Number(event.facts.hostIncome ?? 0);
           this.players[target].shipIncomeHosted += hostIncome;
           this.tradeIncomeThisTick[target] += hostIncome;
+          if (Number(event.facts.sharedForms ?? 0) > 0) {
+            this.players[target].resonantVoyagesHosted += 1;
+          }
         }
       }
     }

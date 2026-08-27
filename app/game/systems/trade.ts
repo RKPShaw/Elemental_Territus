@@ -8,6 +8,7 @@ import {
   surroundingIndices,
 } from "../grid";
 import { cellRevision } from "../structure-index";
+import { seaHostShare, sharedTradeForms, tradeFormIncomeMultiplier } from "../elements";
 import { recordEarned } from "../economics";
 import { realmSubject } from "../reporting";
 import {
@@ -616,17 +617,29 @@ function payTrainStop(
   const stationMultiplier = stop.structure === "city"
     ? cityStationMultiplier(stop.structureLevel)
     : 1;
+  // Trains are the energy carrier and stations the land carrier, so each side
+  // of a stop earns its own form's reward: an energy realm's train pays its
+  // owner more, a land realm's station hosts for more.
+  const energyMultiplier = tradeFormIncomeMultiplier(
+    state.factions[vehicle.owner].expressedElement,
+    "energy",
+  );
   const ownerIncome = (
     foreign
       ? TRADE_RULES.foreignTrainStopPayout
       : TRADE_RULES.domesticTrainStopPayout
-  ) * stationMultiplier;
+  ) * stationMultiplier * energyMultiplier;
   addIncome(state, vehicle.owner, ownerIncome);
   // The train came from a factory, so the factory is what earned this.
   recordEarned(state, vehicle.owner, "factory", ownerIncome, 1);
   let hostIncome = 0;
+  let landMultiplier = 1;
   if (foreign) {
-    hostIncome = TRADE_RULES.foreignTrainStopPayout * stationMultiplier;
+    landMultiplier = tradeFormIncomeMultiplier(
+      state.factions[hostOwner].expressedElement,
+      "land",
+    );
+    hostIncome = TRADE_RULES.foreignTrainStopPayout * stationMultiplier * landMultiplier;
     addIncome(state, hostOwner, hostIncome);
     // The host earned it by having somewhere worth stopping, so it belongs to
     // the station that took the stop rather than to the visitor's factory.
@@ -650,6 +663,8 @@ function payTrainStop(
       hostIncome,
       foreign,
       allied,
+      energyBonus: energyMultiplier > 1,
+      landBonus: landMultiplier > 1,
       stationLevel: stop.structure === "city" ? stop.structureLevel : 1,
       stationMultiplier,
       stopNumber: vehicle.completedStops,
@@ -770,10 +785,17 @@ function updateVehicles(context: SimulationContext): void {
       const sender = vehicle.kind === "ship" ? "harbor" : "factory";
       recordEarned(state, vehicle.owner, sender, vehicle.payout, 1);
       vehicle.earnedIncome += vehicle.payout;
+      // Resonance is read at arrival: two civilizations that trade the same
+      // ways make hosting worth more, and an ascension mid-voyage counts.
+      const sharedForms = vehicle.foreign
+        ? sharedTradeForms(
+          state.factions[vehicle.owner].expressedElement,
+          state.factions[vehicle.destinationOwner].expressedElement,
+        )
+        : 0;
+      const hostShare = vehicle.foreign ? seaHostShare(sharedForms, vehicle.allied) : 0;
       if (vehicle.foreign) {
-        const hostIncome = vehicle.payout * (
-          vehicle.allied ? TRADE_RULES.alliedHostShare : TRADE_RULES.foreignHostShare
-        );
+        const hostIncome = vehicle.payout * hostShare;
         vehicle.hostIncome += hostIncome;
         addIncome(state, vehicle.destinationOwner, hostIncome);
         // The receiving end earned it through the same kind of building.
@@ -798,6 +820,8 @@ function updateVehicles(context: SimulationContext): void {
           payoutPerTravelTick: TRADE_RULES.shipPayoutPerTravelTick,
           foreign: vehicle.foreign,
           allied: vehicle.allied,
+          sharedForms,
+          hostShare,
           sourceIndex: vehicle.sourceIndex,
           nextDepartureAt,
         },
@@ -920,7 +944,14 @@ function spawnShips(context: SimulationContext): void {
     const allied = foreign && getRelation(state, owner, destinationOwner).status === "truce";
     const totalDistance = routeDistance(state, path);
     const plannedTravelTicks = totalDistance / TRADE_RULES.shipVelocity;
-    const payout = plannedTravelTicks * TRADE_RULES.shipPayoutPerTravelTick;
+    // Ships are the waterway carrier: a realm whose expressed element trades
+    // by water sails the same voyage for more, priced at launch so the
+    // expected payout below is the payout the voyage delivers.
+    const waterwayMultiplier = tradeFormIncomeMultiplier(
+      state.factions[owner].expressedElement,
+      "waterway",
+    );
+    const payout = plannedTravelTicks * TRADE_RULES.shipPayoutPerTravelTick * waterwayMultiplier;
     const vehicleId = `ship:${state.tick}:${source}:${destination}`;
     const vehicle: TradeVehicle = {
       id: vehicleId,
@@ -966,6 +997,7 @@ function spawnShips(context: SimulationContext): void {
         expectedPayout: payout,
         plannedTravelTicks,
         payoutPerTravelTick: TRADE_RULES.shipPayoutPerTravelTick,
+        waterwayBonus: waterwayMultiplier > 1,
         foreign,
         allied,
       },
