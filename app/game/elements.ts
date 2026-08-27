@@ -98,8 +98,15 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: [],
     dominantBase: null,
     tradeForms: ["waterway"],
+    // Armed patience. The four-family cycle leaves tide countered by gale and
+    // countering ember alone, and the first hundred-game sweep saw a
+    // trade-first tide eaten before its economy matured — zero wins in
+    // twenty-nine. Its priorities lean further into conquest, defense and
+    // mastery than the old five-family roster asked of it, with trade still
+    // the leading domain: the Ripple Court stays a merchant power that now
+    // keeps its blades wet.
     priorityProfile: {
-      economy: 0.18, conquest: 0.14, ascension: 0.1, diplomacy: 0.18, defense: 0.12, trade: 0.28,
+      economy: 0.18, conquest: 0.17, ascension: 0.15, diplomacy: 0.14, defense: 0.15, trade: 0.21,
     },
     favoredTerrain: "farmland",
     temperament: "Invests in harbors, trade and carefully timed naval landings.",
