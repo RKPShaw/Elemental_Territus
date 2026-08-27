@@ -116,6 +116,7 @@ function bestBuildTile(
   reserved: ReadonlySet<number>,
   sites: BuildIndex,
   railField: DistanceField,
+  requireRail = false,
 ): number | null {
   const { state } = context;
   let bestIndex: number | null = null;
@@ -173,6 +174,9 @@ function bestBuildTile(
         if (nearestThreat() < 8) score += 4.2 - nearestThreat() * 0.35;
         if (cell.capitalOf === owner) score += 1.2;
       } else {
+        // Cities belong on the line itself: a station the trains pass through,
+        // not a town beside the track that every journey skips.
+        if (requireRail && nearestRail !== 0) continue;
         score += TERRAIN_RULES[cell.terrain].sustain * 2.4;
         score += Number.isFinite(nearestRail) ? Math.max(0, 5.5 - nearestRail * 1.15) : 0;
         const citySpacing = nearestDistance(context, index, ownCities);
@@ -275,6 +279,17 @@ export class ConstructionAiSystem implements SimulationSystem {
       const reserved = new Set<number>();
       let budget = faction.gold;
 
+      // New cities go on laid track first, so stations sit on the line the
+      // trains actually run. Only a realm the rails have not reached yet may
+      // found a city on open ground.
+      const findTile = (structure: StructureType): number | null => {
+        if (structure === "city") {
+          const onRail = bestBuildTile(context, id, structure, reserved, sites, railField, true);
+          if (onRail !== null) return onRail;
+        }
+        return bestBuildTile(context, id, structure, reserved, sites, railField);
+      };
+
       // Mature trade economies may place several projects in one planning
       // window, while the cost ladders naturally throttle young realms.
       for (let project = 0; project < 4; project += 1) {
@@ -287,13 +302,13 @@ export class ConstructionAiSystem implements SimulationSystem {
           cost = nextStructureCost(desired, shadowCounts);
         }
         if (budget < cost) break;
-        let tileIndex = bestBuildTile(context, id, desired, reserved, sites, railField);
+        let tileIndex = findTile(desired);
 
         if (tileIndex === null && desired === "fort") {
           desired = desiredInfrastructure(context, id, shadowCounts, false);
           if (!desired) break;
           cost = nextStructureCost(desired, shadowCounts);
-          tileIndex = budget >= cost ? bestBuildTile(context, id, desired, reserved, sites, railField) : null;
+          tileIndex = budget >= cost ? findTile(desired) : null;
         }
 
         // An inland realm should not stall its whole program because no harbor
@@ -301,7 +316,7 @@ export class ConstructionAiSystem implements SimulationSystem {
         if (tileIndex === null && desired === "harbor") {
           desired = "factory";
           cost = nextStructureCost(desired, shadowCounts);
-          tileIndex = budget >= cost ? bestBuildTile(context, id, desired, reserved, sites, railField) : null;
+          tileIndex = budget >= cost ? findTile(desired) : null;
         }
         if (tileIndex === null) break;
 

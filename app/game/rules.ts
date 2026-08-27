@@ -276,7 +276,7 @@ export const TRADE_RULES = {
   railStationCost: 0.2,
   railMaximumNewLinksPerRebuild: 10,
   networkRebuildTicks: 120,
-  trainSpawnIntervalTicks: 8,
+  trainSpawnIntervalTicks: 24,
   shipSpawnIntervalTicks: 12,
   vehicleTurnaroundTicks: 30,
   /**
@@ -303,7 +303,7 @@ export const TRADE_RULES = {
    * the map, so trade leaves port in a steady trickle rather than in waves.
    */
   launchIntervalTicks: 7,
-  trainLimit: 300,
+  trainLimit: 75,
   shipLimit: 1_000,
   trainVelocity: 0.12,
   shipVelocity: 0.38,

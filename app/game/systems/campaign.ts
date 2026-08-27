@@ -22,7 +22,7 @@ import {
   targetSubject,
   theaterSubject,
 } from "../reporting";
-import type { Campaign, SimulationContext, SimulationSystem, Theater } from "../types";
+import type { Campaign, PlayerId, SimulationContext, SimulationSystem, Theater } from "../types";
 import { campaignBoundaryTargets, conquestCostAt, theaterFrontWeights } from "./theaters";
 
 function trackPressure(state: SimulationContext["state"], index: number): void {
@@ -30,6 +30,35 @@ function trackPressure(state: SimulationContext["state"], index: number): void {
   if (cell.pressureTracked) return;
   cell.pressureTracked = true;
   state.activePressureCells.push(index);
+}
+
+/**
+ * A realm falls with its capital: every tile still flying the defender's
+ * banner passes to the captor at once. The accounting system sees the empty
+ * realm on its next pass and handles the conquest itself -- absorption,
+ * the realm-conquered report -- through the same path as any other fall.
+ */
+function annexRealm(
+  context: SimulationContext,
+  attacker: PlayerId,
+  defender: PlayerId,
+): number {
+  const { state } = context;
+  let annexed = 0;
+  for (const cell of state.cells) {
+    if (cell.owner !== defender) continue;
+    cell.owner = attacker;
+    cell.pressure = 0;
+    cell.pressureBy = null;
+    cell.capturedAt = state.tick;
+    annexed += 1;
+  }
+  if (annexed === 0) return 0;
+  markCellsChanged(state);
+  state.factions[attacker].territory += annexed;
+  state.factions[attacker].capturedTiles += annexed;
+  state.factions[defender].territory = 0;
+  return annexed;
 }
 
 function captureEnemyTile(
@@ -88,6 +117,9 @@ function captureEnemyTile(
   }
 
   if (capturedCapital) {
+    // The capital is the realm: taking it hands the captor everything that
+    // still stood under the defender's banner.
+    const annexedTiles = annexRealm(context, campaign.attacker, defender);
     context.report({
       domain: "territory",
       kind: "territory.capital-captured",
@@ -100,14 +132,14 @@ function captureEnemyTile(
         campaign: campaign.id,
         ...(theater ? { theater: theater.id } : {}),
       },
-      facts: { tileIndex, campaignCaptures: campaign.captures },
-      summary: `${PLAYERS[campaign.attacker].realmName} captured the capital of ${PLAYERS[defender].realmName}.`,
+      facts: { tileIndex, campaignCaptures: campaign.captures, annexedTiles },
+      summary: `${PLAYERS[campaign.attacker].realmName} captured the capital of ${PLAYERS[defender].realmName} and the rest of the realm fell with it.`,
     });
   }
 
   if (capturedCapital) {
     context.emit(
-      `${PLAYERS[campaign.attacker].realmName} pushes through the capital of ${PLAYERS[defender].realmName}!`,
+      `${PLAYERS[campaign.attacker].realmName} storms the capital of ${PLAYERS[defender].realmName} -- the whole realm falls with it!`,
       "battle",
       campaign.attacker,
     );
