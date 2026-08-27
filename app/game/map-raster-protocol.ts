@@ -1,6 +1,15 @@
-import type { ElementId, TerrainId } from "./types";
+import { PLAYER_ORDER } from "./players";
+import type { PlayerId, TerrainId } from "./types";
 
-export const RASTER_ELEMENT_ORDER: readonly ElementId[] = ["ember", "tide", "grove", "stone", "gale"];
+/**
+ * Owner codes on the wire, one per player.
+ *
+ * It was one per element back when a player was an element; with ten players to
+ * an element that made every realm of a family paint the same colour and the
+ * war matrix meaningless. Owners are signed bytes, so this holds up to a
+ * hundred and twenty-seven realms.
+ */
+export const RASTER_PLAYER_ORDER: readonly PlayerId[] = PLAYER_ORDER;
 export const RASTER_TERRAIN_ORDER: readonly TerrainId[] = [
   "water",
   "farmland",

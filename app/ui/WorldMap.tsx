@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getRelation } from "../game/diplomacy";
-import { ELEMENT_ORDER, ELEMENTS } from "../game/elements";
+import { ELEMENTS } from "../game/elements";
+import { PLAYERS, PLAYER_ORDER, playerElement } from "../game/players";
 import {
   cellCoordinates,
   frontTargets,
@@ -21,19 +22,19 @@ import {
 } from "../game/theater-intelligence";
 import type { TheaterCellMaps, TheaterIntelligence, TheaterLayer } from "../game/theater-intelligence";
 import {
-  RASTER_ELEMENT_ORDER,
+  RASTER_PLAYER_ORDER,
   RASTER_TERRAIN_ORDER,
 } from "../game/map-raster-protocol";
 import type { MapRasterRequest, MapRasterResult } from "../game/map-raster-protocol";
-import type { ElementId, WorldState } from "../game/types";
+import type { PlayerId, WorldState } from "../game/types";
 import { isValidWaterPath } from "../game/water-navigation";
 
 export type MapMode = "political" | "theaters";
 
 interface WorldMapProps {
   state: WorldState;
-  selected: ElementId;
-  onSelect: (element: ElementId) => void;
+  selected: PlayerId;
+  onSelect: (player: PlayerId) => void;
   showAllTheaters?: boolean;
   renderMarker?: string;
   mapMode?: MapMode;
@@ -134,8 +135,8 @@ function drawTerrainTexture(
   context.restore();
 }
 
-const NEUTRAL_FIELD = ELEMENT_ORDER.length;
-const WATER_FIELD = ELEMENT_ORDER.length + 1;
+const NEUTRAL_FIELD = PLAYER_ORDER.length;
+const WATER_FIELD = PLAYER_ORDER.length + 1;
 
 interface PoliticalField {
   fill: HTMLCanvasElement;
@@ -144,13 +145,13 @@ interface PoliticalField {
 
 const CAMPAIGN_LABEL_POSITIONS = new Map<string, { x: number; y: number }>();
 
-function fieldIndex(owner: ElementId | null, terrain: WorldState["cells"][number]["terrain"]): number {
-  if (owner) return ELEMENT_ORDER.indexOf(owner);
+function fieldIndex(owner: PlayerId | null, terrain: WorldState["cells"][number]["terrain"]): number {
+  if (owner) return PLAYER_ORDER.indexOf(owner);
   return terrain === "water" ? WATER_FIELD : NEUTRAL_FIELD;
 }
 
 function blurOwnershipField(source: Float32Array, width: number, height: number): Float32Array {
-  const channels = ELEMENT_ORDER.length + 2;
+  const channels = PLAYER_ORDER.length + 2;
   const horizontal = new Float32Array(source.length);
   const output = new Float32Array(source.length);
   for (let y = 0; y < height; y += 1) {
@@ -178,12 +179,12 @@ function blurOwnershipField(source: Float32Array, width: number, height: number)
 
 function renderPoliticalField(
   state: WorldState,
-  selected: ElementId,
+  selected: PlayerId,
   rasterWidth: number,
   rasterHeight: number,
 ): PoliticalField {
   const { width, height } = state.config;
-  const channels = ELEMENT_ORDER.length + 2;
+  const channels = PLAYER_ORDER.length + 2;
   const raw = new Float32Array(width * height * channels);
   for (let index = 0; index < state.cells.length; index += 1) {
     const cell = state.cells[index]!;
@@ -237,10 +238,10 @@ function renderPoliticalField(
       const nearestX = Math.max(0, Math.min(width - 1, Math.round(gridX)));
       const nearestY = Math.max(0, Math.min(height - 1, Math.round(gridY)));
       const nearestCell = state.cells[nearestY * width + nearestX]!;
-      const winner = first < ELEMENT_ORDER.length ? ELEMENT_ORDER[first]! : null;
+      const winner = first < PLAYER_ORDER.length ? PLAYER_ORDER[first]! : null;
       const terrain = rgb(TERRAIN_RULES[first === WATER_FIELD ? "water" : nearestCell.terrain].fill);
       const fillColor = winner
-        ? mix(terrain, rgb(ELEMENTS[winner].color), winner === selected ? 0.76 : 0.66)
+        ? mix(terrain, rgb(PLAYERS[winner]!.color), winner === selected ? 0.76 : 0.66)
         : first === NEUTRAL_FIELD
           ? mix(terrain, rgb("#d8cfb1"), 0.16)
           : terrain;
@@ -254,8 +255,8 @@ function renderPoliticalField(
       const gap = sampled[first]! - sampled[second]!;
       const strength = Math.max(0, Math.min(1, 1 - gap / 0.25));
       if (strength <= 0) continue;
-      const firstOwner = first < ELEMENT_ORDER.length ? ELEMENT_ORDER[first]! : null;
-      const secondOwner = second < ELEMENT_ORDER.length ? ELEMENT_ORDER[second]! : null;
+      const firstOwner = first < PLAYER_ORDER.length ? PLAYER_ORDER[first]! : null;
+      const secondOwner = second < PLAYER_ORDER.length ? PLAYER_ORDER[second]! : null;
       const core = gap <= 0.16;
       const atWar = firstOwner && secondOwner
         ? getRelation(state, firstOwner, secondOwner).status === "war"
@@ -429,7 +430,7 @@ function drawStructure(
   const cell = state.cells[index]!;
   if (!cell.structure || !cell.owner) return;
   const [x, y] = centerFor(index, state, shape);
-  const element = ELEMENTS[cell.owner];
+  const element = PLAYERS[cell.owner]!;
   const radius = Math.max(5, Math.min(shape.cellWidth, shape.cellHeight) * 0.63);
   context.save();
   context.shadowColor = "rgba(14, 27, 35, 0.28)";
@@ -534,7 +535,7 @@ function drawTradeVehicles(
     context.save();
     context.translate(x, y);
     context.rotate(angle);
-    context.fillStyle = ELEMENTS[vehicle.owner].deepColor;
+    context.fillStyle = ELEMENTS[playerElement(vehicle.owner)].deepColor;
     context.strokeStyle = "rgba(255,250,226,.95)";
     context.lineWidth = 1;
     context.beginPath();
@@ -553,8 +554,8 @@ function drawTradeVehicles(
 
 function allianceBorderAnchors(
   state: WorldState,
-  first: ElementId,
-  second: ElementId,
+  first: PlayerId,
+  second: PlayerId,
   shape: MapGeometry,
 ): Array<[number, number]> {
   const targets = frontTargets(state, first, second);
@@ -655,13 +656,13 @@ function drawCampaigns(
   context: CanvasRenderingContext2D,
   state: WorldState,
   shape: MapGeometry,
-  selected: ElementId,
+  selected: PlayerId,
   showAllTheaters: boolean,
   extrapolatedTicks = 0,
 ) {
   const activeLabels = new Set<string>();
   for (const campaign of state.campaigns) {
-    const element = ELEMENTS[campaign.attacker];
+    const element = PLAYERS[campaign.attacker]!;
     if (campaign.mode === "naval" && campaign.originIndex !== null && campaign.targetIndex !== null) {
       if (!isValidWaterPath(state, campaign.pathIndices)) continue;
       const points = campaign.pathIndices.map((index) => centerFor(index, state, shape));
@@ -751,7 +752,7 @@ function drawWarships(
   shape: MapGeometry,
   visualTick = state.tick,
 ) {
-  for (const id of ELEMENT_ORDER) {
+  for (const id of PLAYER_ORDER) {
     const faction = state.factions[id];
     if (faction.warships < 1) continue;
     const ports = structureCells(state, id, "harbor");
@@ -761,7 +762,7 @@ function drawWarships(
       const angle = visualTick * 0.025 + ship * 2.1;
       const x = px + Math.cos(angle) * (13 + ship * 3);
       const y = py + Math.sin(angle) * (9 + ship * 2);
-      context.fillStyle = ELEMENTS[id].deepColor;
+      context.fillStyle = ELEMENTS[playerElement(id)].deepColor;
       context.beginPath();
       context.moveTo(x + 5, y);
       context.lineTo(x - 4, y - 3);
@@ -802,7 +803,7 @@ function canvasFromPixels(
 
 function composeStaticWorld(
   state: WorldState,
-  selected: ElementId,
+  selected: PlayerId,
   mapMode: MapMode,
   raster: MapRasterResult,
   width: number,
@@ -846,7 +847,7 @@ function composeStaticWorld(
 interface RasterJob {
   request: MapRasterRequest;
   state: WorldState;
-  selected: ElementId;
+  selected: PlayerId;
   mapMode: MapMode;
   canvasWidth: number;
   canvasHeight: number;
@@ -855,7 +856,7 @@ interface RasterJob {
 function createRasterRequest(
   requestId: number,
   state: WorldState,
-  selected: ElementId,
+  selected: PlayerId,
   mapMode: MapMode,
   maps: TheaterCellMaps | null,
   theaterLayer: TheaterLayer,
@@ -886,22 +887,22 @@ function createRasterRequest(
   pressureOwners.fill(-1);
   for (let index = 0; index < state.cells.length; index += 1) {
     const cell = state.cells[index]!;
-    if (cell.owner) owners[index] = RASTER_ELEMENT_ORDER.indexOf(cell.owner);
-    if (cell.pressureBy) pressureOwners[index] = RASTER_ELEMENT_ORDER.indexOf(cell.pressureBy);
+    if (cell.owner) owners[index] = RASTER_PLAYER_ORDER.indexOf(cell.owner);
+    if (cell.pressureBy) pressureOwners[index] = RASTER_PLAYER_ORDER.indexOf(cell.pressureBy);
     pressures[index] = cell.pressure;
   }
-  const warMatrix = new Uint8Array(RASTER_ELEMENT_ORDER.length ** 2);
+  const warMatrix = new Uint8Array(RASTER_PLAYER_ORDER.length ** 2);
   for (const relation of Object.values(state.relations)) {
     if (relation.status !== "war") continue;
-    const first = RASTER_ELEMENT_ORDER.indexOf(relation.parties[0]);
-    const second = RASTER_ELEMENT_ORDER.indexOf(relation.parties[1]);
-    warMatrix[first * RASTER_ELEMENT_ORDER.length + second] = 1;
-    warMatrix[second * RASTER_ELEMENT_ORDER.length + first] = 1;
+    const first = RASTER_PLAYER_ORDER.indexOf(relation.parties[0]);
+    const second = RASTER_PLAYER_ORDER.indexOf(relation.parties[1]);
+    warMatrix[first * RASTER_PLAYER_ORDER.length + second] = 1;
+    warMatrix[second * RASTER_PLAYER_ORDER.length + first] = 1;
   }
   return {
     ...common,
     mode: "political",
-    selected: RASTER_ELEMENT_ORDER.indexOf(selected),
+    selected: RASTER_PLAYER_ORDER.indexOf(selected),
     owners,
     pressureOwners,
     pressures,
@@ -1175,7 +1176,7 @@ export function WorldMap({
         onPointerMove={handlePointerMove}
         onPointerLeave={() => setHoveredCell(null)}
         aria-label={mapMode === "theaters"
-          ? `${ELEMENTS[selected].name} interpretation of the world's strategic theaters. Green is high value and red is low value.`
+          ? `${PLAYERS[selected]!.name} interpretation of the world's strategic theaters. Green is high value and red is low value.`
           : `Live political and terrain map of ${state.worldName}. Select a colored player to inspect it.`}
       />
       {mapMode === "theaters" && hoveredValue !== null && hoveredBreakdown && tooltipPosition && (
@@ -1195,7 +1196,7 @@ export function WorldMap({
       <div className={`map-status ${wars > 0 ? "at-war" : "at-peace"}`} aria-hidden="true">
         <span className="live-pip" />
         {mapMode === "theaters"
-          ? `${ELEMENTS[selected].name} · ${THEATER_LAYER_LABELS[theaterLayer]} · tick ${state.tick}`
+          ? `${PLAYERS[selected]!.name} · ${THEATER_LAYER_LABELS[theaterLayer]} · tick ${state.tick}`
           : <>{wars === 0 ? "All players at peace" : `${wars} active ${wars === 1 ? "war" : "wars"}`}
               {truces > 0 ? ` · ${truces} ${truces === 1 ? "alliance" : "alliances"}` : ""} · live tick {state.tick}</>}
       </div>

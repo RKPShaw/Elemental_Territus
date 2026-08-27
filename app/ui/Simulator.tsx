@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { getRelation, otherParty, warsFor } from "../game/diplomacy";
 import { committedTroopsFor } from "../game/campaigns";
 import { ELEMENT_ORDER, ELEMENTS, realmMatchupLabel } from "../game/elements";
+import { PLAYERS, PLAYER_ORDER, playerElement } from "../game/players";
 import { latestStories } from "../game/reporting";
 import {
   STRUCTURE_RULES,
@@ -17,7 +18,7 @@ import {
   normalizedCellArea,
   populationGrowthEfficiency,
 } from "../game/rules";
-import type { ElementId, WorldState } from "../game/types";
+import type { ElementId, PlayerId, WorldState } from "../game/types";
 import {
   THEATER_LAYERS,
   THEATER_LAYER_LABELS,
@@ -47,7 +48,7 @@ const POSTURE_LABEL = {
   trading: "Growing through trade",
 } as const;
 
-function shareOf(state: WorldState, id: ElementId) {
+function shareOf(state: WorldState, id: PlayerId) {
   return (state.factions[id].territory / state.landTiles) * 100;
 }
 
@@ -119,7 +120,7 @@ export function Simulator() {
   const [running, setRunning] = useState(true);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const [temper, setTemper] = useState(1);
-  const [selected, setSelected] = useState<ElementId>("ember");
+  const [selected, setSelected] = useState<PlayerId>(PLAYER_ORDER[0]!);
   const [historyView, setHistoryView] = useState<"stories" | "report">("stories");
   const [mapMode, setMapMode] = useState<"political" | "theaters">("political");
   const [theaterLayer, setTheaterLayer] = useState<TheaterLayer>("composite");
@@ -171,10 +172,11 @@ export function Simulator() {
   }
 
   const chosen = world.factions[selected];
-  const chosenElement = ELEMENTS[selected];
-  const target = chosen.intent.target ? ELEMENTS[chosen.intent.target] : null;
+  const chosenElement = ELEMENTS[playerElement(selected)];
+  const chosenPlayer = PLAYERS[selected]!;
+  const target = chosen.intent.target ? PLAYERS[chosen.intent.target] : null;
   const targetRelation = target ? getRelation(world, selected, target.id) : null;
-  const leader = ELEMENT_ORDER.filter((id) => world.factions[id].alive).sort(
+  const leader = PLAYER_ORDER.filter((id) => world.factions[id].alive).sort(
     (a, b) => world.factions[b].territory - world.factions[a].territory,
   )[0];
   const selectedRelations = Object.values(world.relations)
@@ -295,17 +297,17 @@ export function Simulator() {
       </header>
 
       <section className="world-balance" aria-label="Share of sustainable land">
-        {ELEMENT_ORDER.map((id) => {
+        {PLAYER_ORDER.map((id) => {
           const share = shareOf(world, id);
           return (
             <button
               type="button"
               key={id}
               className={`balance-slice ${selected === id ? "selected" : ""}`}
-              style={{ width: `${Math.max(0.5, share)}%`, background: ELEMENTS[id].color }}
+              style={{ width: `${Math.max(0.5, share)}%`, background: PLAYERS[id]!.color }}
               onClick={() => setSelected(id)}
-              aria-label={`${ELEMENTS[id].name}: ${share.toFixed(1)} percent of sustainable land`}
-              title={`${ELEMENTS[id].name} · ${share.toFixed(1)}%`}
+              aria-label={`${PLAYERS[id]!.name}: ${share.toFixed(1)} percent of sustainable land`}
+              title={`${PLAYERS[id]!.name} · ${share.toFixed(1)}%`}
             />
           );
         })}
@@ -318,7 +320,7 @@ export function Simulator() {
               <span aria-hidden="true">♛</span>
               <div>
                 <small>{world.worldName} is united</small>
-                <strong>{ELEMENTS[world.champion].realmName} wins the age!</strong>
+                <strong>{PLAYERS[world.champion]!.realmName} wins the age!</strong>
               </div>
               <button type="button" onClick={createNewWorld}>Grow another world</button>
             </div>
@@ -363,9 +365,10 @@ export function Simulator() {
           />
 
           <div className="realm-strip" aria-label="Realm standings">
-            {ELEMENT_ORDER.map((id) => {
+            {PLAYER_ORDER.map((id) => {
               const faction = world.factions[id];
-              const element = ELEMENTS[id];
+              const element = ELEMENTS[playerElement(id)];
+              const player = PLAYERS[id]!;
               const share = shareOf(world, id);
               const realmWars = warsFor(world, id).length;
               const committed = committedTroopsFor(world, id);
@@ -384,7 +387,7 @@ export function Simulator() {
                     {element.glyph}
                   </span>
                   <span className="realm-pill-copy">
-                    <strong>{element.name}</strong>
+                    <strong>{player.name}</strong>
                     <small>
                       {faction.alive
                         ? `${compactNumber(faction.troops)} home${committed ? ` + ${compactNumber(committed)} away` : ""} · ${realmWars ? `${realmWars} war${realmWars > 1 ? "s" : ""}` : "peace"}`
@@ -402,14 +405,14 @@ export function Simulator() {
         </section>
 
         <aside className="war-room" aria-label="Realm intelligence">
-          <section className="panel council-panel" style={{ "--realm": chosenElement.color } as React.CSSProperties}>
+          <section className="panel council-panel" style={{ "--realm": chosenPlayer.color } as React.CSSProperties}>
             <div className="panel-heading">
               <div className="selected-emblem" style={{ background: chosenElement.softColor, color: chosenElement.deepColor }}>
                 {chosenElement.glyph}
               </div>
               <div>
-                <p className="eyebrow">Council of {chosenElement.name}</p>
-                <h2>{chosenElement.realmName}</h2>
+                <p className="eyebrow">Council of {chosenPlayer.name}</p>
+                <h2>{chosenPlayer.realmName}</h2>
                 <span className="realm-status">{chosen.alive ? chosenElement.title : "Its banner has fallen"}</span>
               </div>
               <strong className="share-number">
@@ -434,7 +437,7 @@ export function Simulator() {
                     <b><SmoothNumber value={chosen.troopCap} suffix=" cap" /></b>
                   </div>
                   <div className="capacity-meter population-meter" aria-label={`${Math.round(filled)} percent of population capacity alive; peak growth is near 65 percent at home`}>
-                    <i style={{ width: `${homeFilled}%`, background: chosenElement.color }} />
+                    <i style={{ width: `${homeFilled}%`, background: chosenPlayer.color }} />
                     <i className="committed-share" style={{ width: `${committedFilled}%` }} />
                     <b className="growth-peak-marker" title="Peak population growth at 65%">65%</b>
                   </div>
@@ -489,10 +492,10 @@ export function Simulator() {
                         );
                         const targetName = campaign.target === "wilderness"
                           ? "Wilderness"
-                          : ELEMENTS[campaign.target].name;
+                          : PLAYERS[campaign.target]!.name;
                         return (
                           <p key={campaign.id}>
-                            <i style={{ background: campaign.target === "wilderness" ? "#b7aa79" : ELEMENTS[campaign.target].color }} />
+                            <i style={{ background: campaign.target === "wilderness" ? "#b7aa79" : PLAYERS[campaign.target]!.color }} />
                             <strong>{targetName}</strong>
                             <small>{compactNumber(campaign.remaining)} committed · {theaters.length} automatic {theaters.length === 1 ? "theater" : "theaters"}</small>
                           </p>
@@ -550,7 +553,7 @@ export function Simulator() {
             <div className="relation-list">
               {selectedRelations.map((relation) => {
                 const other = otherParty(relation, selected);
-                const rival = ELEMENTS[other];
+                const rival = PLAYERS[other]!;
                 const rivalAlive = world.factions[other].alive;
                 const rivalTraitorTime = world.factions[other].traitorUntil - world.tick;
                 const campaign = selectedCampaigns.find(
@@ -568,7 +571,7 @@ export function Simulator() {
                   : relation.status === "truce"
                     ? `${formatWorldTime(relation.truceUntil - world.tick)} alliance · trade ${relation.tradeActive ? "open" : "closed"}`
                     : relation.truceOfferBy
-                      ? `${ELEMENTS[relation.truceOfferBy].name} offered a truce`
+                      ? `${PLAYERS[relation.truceOfferBy]!.name} offered a truce`
                       : `ordinary peace · trade ${relation.tradeActive ? "open" : "closed"}`;
                 const badge = relation.status === "peace" && relation.truceOfferBy ? "offer" : relation.status;
                 return (
@@ -636,8 +639,11 @@ export function Simulator() {
                             key={participant.id}
                             onClick={() => setSelected(participant.realmId!)}
                             title={participant.label}
-                            style={{ background: ELEMENTS[participant.realmId!].softColor, color: ELEMENTS[participant.realmId!].deepColor }}
-                          >{ELEMENTS[participant.realmId!].glyph}</button>
+                            style={{
+                              background: ELEMENTS[playerElement(participant.realmId!)].softColor,
+                              color: ELEMENTS[playerElement(participant.realmId!)].deepColor,
+                            }}
+                          >{ELEMENTS[playerElement(participant.realmId!)].glyph}</button>
                         ))}
                       </div>
                     </li>
@@ -650,7 +656,7 @@ export function Simulator() {
                   const realm = event.initiator?.realmId;
                   return (
                     <li key={event.id} className={`report-event ${event.importance}`}>
-                      <span className="event-mark" style={{ background: realm ? ELEMENTS[realm].color : "#f1c46d" }} />
+                      <span className="event-mark" style={{ background: realm ? PLAYERS[realm]!.color : "#f1c46d" }} />
                       <div>
                         <small>#{event.id} · tick {event.tick} · {event.kind.replaceAll(".", " / ")}</small>
                         <p>{event.summary}</p>

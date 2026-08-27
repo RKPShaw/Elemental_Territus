@@ -1,9 +1,9 @@
 /// <reference lib="webworker" />
 
-import { ELEMENTS } from "./elements";
+import { PLAYERS } from "./players";
 import { TERRAIN_RULES } from "./rules";
 import {
-  RASTER_ELEMENT_ORDER,
+  RASTER_PLAYER_ORDER,
   RASTER_TERRAIN_ORDER,
 } from "./map-raster-protocol";
 import type {
@@ -20,8 +20,8 @@ interface RgbColor {
 }
 
 const COLOR_CACHE = new Map<string, RgbColor>();
-const NEUTRAL_FIELD = RASTER_ELEMENT_ORDER.length;
-const WATER_FIELD = RASTER_ELEMENT_ORDER.length + 1;
+const NEUTRAL_FIELD = RASTER_PLAYER_ORDER.length;
+const WATER_FIELD = RASTER_PLAYER_ORDER.length + 1;
 
 function rgb(hex: string): RgbColor {
   const cached = COLOR_CACHE.get(hex);
@@ -45,7 +45,7 @@ function mix(base: RgbColor, overlay: RgbColor, amount: number): RgbColor {
 }
 
 function blurOwnershipField(source: Float32Array, width: number, height: number): Float32Array {
-  const channels = RASTER_ELEMENT_ORDER.length + 2;
+  const channels = RASTER_PLAYER_ORDER.length + 2;
   const horizontal = new Float32Array(source.length);
   const output = new Float32Array(source.length);
   for (let y = 0; y < height; y += 1) {
@@ -78,7 +78,7 @@ function fieldIndex(owner: number, terrain: number): number {
 
 function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
   const { gridWidth, gridHeight, rasterWidth, rasterHeight } = request;
-  const channels = RASTER_ELEMENT_ORDER.length + 2;
+  const channels = RASTER_PLAYER_ORDER.length + 2;
   const raw = new Float32Array(gridWidth * gridHeight * channels);
   for (let index = 0; index < request.owners.length; index += 1) {
     const owner = fieldIndex(request.owners[index]!, request.terrains[index]!);
@@ -127,10 +127,10 @@ function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
       const nearestX = Math.max(0, Math.min(gridWidth - 1, Math.round(gridX)));
       const nearestY = Math.max(0, Math.min(gridHeight - 1, Math.round(gridY)));
       const terrainId = RASTER_TERRAIN_ORDER[request.terrains[nearestY * gridWidth + nearestX]!]!;
-      const winner = first < RASTER_ELEMENT_ORDER.length ? RASTER_ELEMENT_ORDER[first]! : null;
+      const winner = first < RASTER_PLAYER_ORDER.length ? RASTER_PLAYER_ORDER[first]! : null;
       const terrain = rgb(TERRAIN_RULES[first === WATER_FIELD ? "water" : terrainId].fill);
       const fillColor = winner
-        ? mix(terrain, rgb(ELEMENTS[winner].color), first === request.selected ? 0.76 : 0.66)
+        ? mix(terrain, rgb(PLAYERS[winner]!.color), first === request.selected ? 0.76 : 0.66)
         : first === NEUTRAL_FIELD
           ? mix(terrain, rgb("#d8cfb1"), 0.16)
           : terrain;
@@ -144,11 +144,11 @@ function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
       const gap = sampled[first]! - sampled[second]!;
       const strength = Math.max(0, Math.min(1, 1 - gap / 0.25));
       if (strength <= 0) continue;
-      const firstOwner = first < RASTER_ELEMENT_ORDER.length ? first : -1;
-      const secondOwner = second < RASTER_ELEMENT_ORDER.length ? second : -1;
+      const firstOwner = first < RASTER_PLAYER_ORDER.length ? first : -1;
+      const secondOwner = second < RASTER_PLAYER_ORDER.length ? second : -1;
       const core = gap <= 0.16;
       const atWar = firstOwner >= 0 && secondOwner >= 0
-        ? request.warMatrix[firstOwner * RASTER_ELEMENT_ORDER.length + secondOwner] === 1
+        ? request.warMatrix[firstOwner * RASTER_PLAYER_ORDER.length + secondOwner] === 1
         : false;
       const line = core
         ? { red: 12, green: 16, blue: 18 }
