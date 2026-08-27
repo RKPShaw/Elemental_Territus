@@ -29,11 +29,13 @@ import { cellDigest, worldDigest } from "./world-digest";
  * the first hundred games saw trade-first tide eaten before its economy
  * matured (zero wins in twenty-nine), and with tide armed the second
  * hundred watched ember and gale run to 41% of crowns each while a passive
- * stone left gale unhunted. Tide and stone lean further into conquest,
- * defense and mastery; ember and gale each give a shade of fury back to
- * their homes. The digests carry that tuning. Cell digests and world
- * digests both move everywhere, and that is the point: this is the phase
- * where the element space stops being dormant.
+ * stone left gale unhunted. The cycle's two enforcement arms — tide against
+ * ember, stone against gale — lean further into conquest, defense and
+ * mastery, while ember and gale keep their original fury: tempering the
+ * aggressors instead was tried and rejected, because with every court
+ * cautious worlds stopped resolving at all. The digests carry that tuning.
+ * Cell digests and world digests both move everywhere, and that is the
+ * point: this is the phase where the element space stops being dormant.
  *
  * Before that, re-recorded when realms gained strategic priorities: element-seeded,
  * situation-bent weights that scale war desire, alliance appetite, trade
@@ -91,25 +93,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "1f3d057012eb0bcf7d61915a7b1602cb", cells: "c24971694dce1b93" },
-      { tick: 200, world: "b3437eb75e1c21fcdb339af9031456fa", cells: "799d4104ed900954" },
-      { tick: 600, world: "911af7a2bf1086e41706e6ccc1dbbf9e", cells: "12834e277f55508a", deep: true },
+      { tick: 60, world: "080a7cbc43797aa9c011247ca9547c56", cells: "c24971694dce1b93" },
+      { tick: 200, world: "ef2e99a355846dc76225f66c6593a9c7", cells: "5be79208711c11c7" },
+      { tick: 600, world: "b7c95a94cd402169aef6f4c053717432", cells: "ee3432785baf89db", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "909d86bec58932ae23c5aac9f37c9e84", cells: "c48ac0e305a72a12" },
-      { tick: 200, world: "31ec405fa3c2df4349a916f20064fedd", cells: "a1f489637db774b2" },
-      { tick: 600, world: "13fd58e538ec210e48218daaca25d2e0", cells: "5943b778f8c28ed8", deep: true },
+      { tick: 60, world: "8371d5ecbcfc9a4437a2795eacde850c", cells: "c48ac0e305a72a12" },
+      { tick: 200, world: "5a2b180140306bfbdac52f98152e9774", cells: "14b8bef0d7b02946" },
+      { tick: 600, world: "748c8800389336b50d0df6315ec20d14", cells: "d524f7bff4cd98ae", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "d14af883ca9b59536a54a58aab460e35", cells: "8dd0ae5739eb00e6" },
-      { tick: 200, world: "13446b89e46f2807f00d33d347af9a0d", cells: "59a08dd697d16ed4" },
-      { tick: 600, world: "a1cdaf07c5c73f86d844977e75dc993c", cells: "7288b10865f6729f", deep: true },
+      { tick: 60, world: "7b2420567d1abcdbac019db23d45bb4f", cells: "8dd0ae5739eb00e6" },
+      { tick: 200, world: "2ec8313ebf44b86038b033046c9c365a", cells: "76ac5e959f1aba9c" },
+      { tick: 600, world: "278364eb0c798d4e54548d70a3d2813b", cells: "7437b04b1358173c", deep: true },
     ],
   },
 ];
