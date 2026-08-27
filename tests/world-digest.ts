@@ -136,7 +136,7 @@ function normalizeCellValue(field: (typeof CELL_FIELDS)[number], raw: unknown): 
 // map against ELEMENT_SPACE order instead.
 const ELEMENT_CODES = ["ember", "tide", "grove", "stone", "gale"] as const;
 const TERRAIN_CODES = ["water", "farmland", "plains", "forest", "hills", "mountains"] as const;
-const STRUCTURE_CODES = ["city", "fort", "factory", "harbor"] as const;
+const STRUCTURE_CODES = ["city", "fort", "factory", "harbor", "plant", "skyport"] as const;
 
 /** Everything outside the cell grid, hashed with sorted keys. */
 const WORLD_FIELDS = [

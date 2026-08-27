@@ -62,7 +62,7 @@ export type TerrainId =
 
 export type LandTerrainId = Exclude<TerrainId, "water">;
 
-export type StructureType = "city" | "fort" | "factory" | "harbor";
+export type StructureType = "city" | "fort" | "factory" | "harbor" | "plant" | "skyport";
 
 export type RelationStatus = "peace" | "truce" | "war";
 
@@ -186,6 +186,8 @@ export interface StructureCounts {
   fort: number;
   factory: number;
   harbor: number;
+  plant: number;
+  skyport: number;
 }
 
 export interface FactionState {
@@ -391,7 +393,7 @@ export interface TradeRoute {
   id: string;
   owner: PlayerId;
   parties: readonly [PlayerId, PlayerId];
-  kind: "rail" | "sea";
+  kind: "rail" | "sea" | "conduit";
   startIndex: number;
   endIndex: number;
   pathIndices: number[];
@@ -401,10 +403,18 @@ export interface TradeRoute {
   destinationOwner: PlayerId;
 }
 
+/**
+ * Every carrier's traveller is one shape. A train is any land convoy over the
+ * road-and-rail network -- wagons, cars, trains, whatever the land carries; a
+ * ship sails the sea lanes; a pulse runs a power conduit; a flyer crosses
+ * anything in a straight line between skyports.
+ */
+export type TradeVehicleKind = "train" | "ship" | "pulse" | "flyer";
+
 export interface TradeVehicle {
   id: string;
   owner: PlayerId;
-  kind: "train" | "ship";
+  kind: TradeVehicleKind;
   startIndex: number;
   endIndex: number;
   pathIndices: number[];
@@ -428,9 +438,9 @@ export interface TradeVehicle {
   dwellRemaining: number;
 }
 
-/** One physical factory or harbor may dispatch only one vehicle at a time. */
+/** Per-site dispatch: berths, cooldowns and the launch stagger. */
 export interface TradeDispatchState {
-  kind: "train" | "ship";
+  kind: TradeVehicleKind;
   sourceIndex: number;
   /** Vehicles currently out from this site; a site may run several at once. */
   activeVehicleIds: string[];

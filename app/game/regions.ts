@@ -198,6 +198,8 @@ export function buildStrategicMetaMap(
     if (cell.structure === "city") infrastructureRaw[index] += 4.8 + cell.structureLevel * 2.4;
     else if (cell.structure === "factory") infrastructureRaw[index] += 6.4;
     else if (cell.structure === "harbor") infrastructureRaw[index] += 5.8;
+    else if (cell.structure === "plant") infrastructureRaw[index] += 6;
+    else if (cell.structure === "skyport") infrastructureRaw[index] += 5.4;
     else if (cell.structure === "fort") infrastructureRaw[index] += 1.8;
   }
   for (const route of state.tradeRoutes ?? []) {

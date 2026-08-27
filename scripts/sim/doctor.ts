@@ -199,6 +199,32 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     `${railRoutes} rail routes, ${journeys} journeys completed, ${stops} station stops`,
   );
 
+  // The exclusive carriers get their own proofs: with a dozen energy realms
+  // and a dozen airborne realms seated in every world, silence from either
+  // network means the carrier is broken, not merely unlucky.
+  const journeysByKind = (kind: string) => state.reports.filter(
+    (event) => event.kind === "trade.journey-completed" && event.facts.vehicleKind === kind,
+  ).length;
+  const conduits = state.tradeRoutes.filter((route) => route.kind === "conduit").length;
+  const plants = PLAYER_ORDER.reduce((sum, id) => sum + state.factions[id].structures.plant, 0);
+  const pulses = journeysByKind("pulse");
+  add(
+    "energy-conduits",
+    "plants string conduits and deliver pulses",
+    conduits > 0 && pulses > 0,
+    `${plants} plants, ${conduits} conduits, ${pulses} pulses delivered`,
+    plants === 0,
+  );
+  const skyports = PLAYER_ORDER.reduce((sum, id) => sum + state.factions[id].structures.skyport, 0);
+  const flights = journeysByKind("flyer");
+  add(
+    "air-transport",
+    "skyports fly freight between each other",
+    flights > 0,
+    `${skyports} skyports, ${flights} flights completed`,
+    skyports < 2,
+  );
+
   // Focus changes are the system's characteristic activity: baselines differ
   // by family from tick zero, but only situation ever moves a focus.
   const strategyShifts = count("leadership.strategy-adopted");

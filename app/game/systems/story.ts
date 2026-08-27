@@ -235,6 +235,8 @@ function summarizeDevelopment(story: StoryArc, event: WorldReportEvent): void {
     ["fort", "forts"],
     ["factory", "factories"],
     ["harbor", "harbors"],
+    ["plant", "plants"],
+    ["skyport", "skyports"],
     ["warships", "warships"],
   ] as const;
   const built = labels

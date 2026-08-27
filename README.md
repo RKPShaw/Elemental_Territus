@@ -173,23 +173,46 @@ drive the same simulation safely.
 - Factory catchments generate a sparse minimum-link rail graph rather than an
   all-to-all mesh. New cities are founded directly on laid track whenever the
   rails have reached a realm's territory, so stations sit on the line itself.
-- Each factory may operate one train at a time. A train runs the shortest
-  physical path over laid track from its factory to its destination, dwells two
-  seconds at each station that path actually passes through -- a city off the
-  line is passed by -- and excludes its own launch factory from the payout.
-  Domestic stops pay the train realm 50K; foreign stops pay both train and host
-  realms 100K, for 4× total value. The world supports up to 75 simultaneous
-  trains.
+- Every trade form owns its own carrier network: land is the road-and-rail
+  graph and whatever rolls over it — wagons, cars, trains, any convoy; the
+  waterway is the harbors and their ships; energy is the power plants and the
+  straight conduits they string; airborne is the skyports flying freight
+  point to point. A realm whose expressed element trades by a form earns 15%
+  more on that carrier's income, rewards only.
+- Each factory may operate one land convoy at a time. A convoy runs the
+  shortest physical path over the laid network from its factory to its
+  destination, dwells two seconds at each station that path actually passes
+  through -- a city off the line is passed by -- and excludes its own launch
+  factory from the payout. Domestic stops pay the convoy realm 50K; foreign
+  stops pay both convoy and host realms 100K, for 4× total value; a land
+  realm's stations host foreign stops for 15% more. The world supports up to
+  75 simultaneous convoys.
+- Power plants rise only for realms whose expressed element trades by
+  energy. A plant strings straight conduits to up to three stations within
+  reach and sends paying pulses down them — a flat 45K per delivery, so
+  energy trade is frequency, not distance. Captured plants keep pulsing for
+  their captor, who earns no energy bonus without the form.
+- Skyports rise only for realms whose expressed element trades by air, and
+  fly freight in a straight line to any other skyport in the world — no
+  network to lay, no ground to answer to — paying 5.5K per planned travel
+  second, with a minimum worthwhile hop.
 - Every realm opens with its capital as a founded city. Capturing a capital
   annexes the defender's entire remaining territory on the spot: the realm
   falls to the captor along with its elements.
 - Merchant ships select random destination harbors and use contiguous water-only
   paths. Their fixed velocity makes long voyages last several world minutes;
-  payout is 4K per planned travel second and the world supports up to 1,000 ships.
-- Foreign destination players receive a host share. Either peaceful party may
-  close or reopen trade, while war always cancels it.
-- Cities use a separate 25K / 50K / 100K / 250K+ construction ladder; factories
-  and harbors share another. Every city level adds exactly 10,000 troop capacity on top of sustainable-land
+  payout is 4K per planned travel second -- 15% more for a realm whose
+  expressed element trades by waterway -- and the world supports up to 1,000
+  ships.
+- On every carrier that pays a host on arrival — ships, pulses and flyers —
+  the foreign destination receives a host share: 18% between strangers, 24%
+  or 30% when the parties' expressed elements share one or both trade forms,
+  and 35% between allies -- the best applicable rate wins, so resonance never
+  costs a host what diplomacy earned. Either peaceful party may close or
+  reopen trade, while war always cancels it.
+- Cities use a separate 25K / 50K / 100K / 250K+ construction ladder; every
+  trade building — factories, harbors, plants and skyports — advances one
+  shared ladder. Every city level adds exactly 10,000 troop capacity on top of sustainable-land
   capacity, with the realm total hard-capped at 1.5 million.
 - Fallen realms do not remain in active diplomacy or consume war planning.
 - The player taking a realm's final territory absorbs every element that realm
@@ -201,6 +224,12 @@ drive the same simulation safely.
   constituents, tier 3 needs both compound constituents formable and six realms
   absorbed altogether. Expression upgrades once and never demotes, and an
   ascended realm keeps its name and colors — titles, not rebrands.
+- Trade forms lean construction through the same strategy quotas: a realm
+  whose expressed element trades by waterway wants harbors at a 34% share of
+  its trade buildings instead of 22% and reaches for them first; energy
+  realms reach for their plants, airborne realms for their skyports, and
+  land realms let road-laying trade buildings jump the city queue without
+  wanting fewer of either.
 
 ## Extending the simulation
 

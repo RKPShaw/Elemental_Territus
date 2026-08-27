@@ -8,6 +8,7 @@ import {
   surroundingIndices,
 } from "../grid";
 import { cellRevision } from "../structure-index";
+import { sharedTradeForms, tradeFormIncomeMultiplier, tradeHostShare } from "../elements";
 import { recordEarned } from "../economics";
 import { realmSubject } from "../reporting";
 import {
@@ -22,6 +23,7 @@ import type {
   LandTerrainId,
   SimulationContext,
   SimulationSystem,
+  StructureType,
   TradeRoute,
   TradeDispatchState,
   TradeVehicle,
@@ -79,6 +81,8 @@ function dispatchCapacity(
   sourceIndex: number,
 ): number {
   if (kind === "train") return TRADE_RULES.trainsPerFactory;
+  if (kind === "pulse") return TRADE_RULES.pulsesPerPlant;
+  if (kind === "flyer") return TRADE_RULES.flyersPerSkyport;
   const level = state.cells[sourceIndex]?.structureLevel ?? 1;
   return TRADE_RULES.shipsPerHarbor
     + Math.max(0, level - 1) * TRADE_RULES.shipsPerHarborLevel;
@@ -162,7 +166,9 @@ function railNetworkSignature(state: WorldState): string {
   const stations: string[] = [];
   for (let index = 0; index < state.cells.length; index += 1) {
     const cell = state.cells[index]!;
-    if (cell.structure !== "city" && cell.structure !== "factory") continue;
+    // Plants are in the signature because conduits redraw when they move;
+    // skyports are not, because flights need no routes at all.
+    if (cell.structure !== "city" && cell.structure !== "factory" && cell.structure !== "plant") continue;
     stations.push(`${index}:${cell.owner ?? "none"}:${cell.structure}:${cell.structureLevel}`);
   }
   const diplomacy = Object.values(state.relations)
@@ -616,17 +622,30 @@ function payTrainStop(
   const stationMultiplier = stop.structure === "city"
     ? cityStationMultiplier(stop.structureLevel)
     : 1;
+  // Convoys and the stations they call at are both halves of the land
+  // carrier, so each side of a stop earns the land reward on its own leg: a
+  // land realm's convoy pays its owner more, a land realm's station hosts
+  // for more.
+  const convoyMultiplier = tradeFormIncomeMultiplier(
+    state.factions[vehicle.owner].expressedElement,
+    "land",
+  );
   const ownerIncome = (
     foreign
       ? TRADE_RULES.foreignTrainStopPayout
       : TRADE_RULES.domesticTrainStopPayout
-  ) * stationMultiplier;
+  ) * stationMultiplier * convoyMultiplier;
   addIncome(state, vehicle.owner, ownerIncome);
   // The train came from a factory, so the factory is what earned this.
   recordEarned(state, vehicle.owner, "factory", ownerIncome, 1);
   let hostIncome = 0;
+  let stationMultiplierBonus = 1;
   if (foreign) {
-    hostIncome = TRADE_RULES.foreignTrainStopPayout * stationMultiplier;
+    stationMultiplierBonus = tradeFormIncomeMultiplier(
+      state.factions[hostOwner].expressedElement,
+      "land",
+    );
+    hostIncome = TRADE_RULES.foreignTrainStopPayout * stationMultiplier * stationMultiplierBonus;
     addIncome(state, hostOwner, hostIncome);
     // The host earned it by having somewhere worth stopping, so it belongs to
     // the station that took the stop rather than to the visitor's factory.
@@ -650,6 +669,8 @@ function payTrainStop(
       hostIncome,
       foreign,
       allied,
+      convoyBonus: convoyMultiplier > 1,
+      stationBonus: stationMultiplierBonus > 1,
       stationLevel: stop.structure === "city" ? stop.structureLevel : 1,
       stationMultiplier,
       stopNumber: vehicle.completedStops,
@@ -659,7 +680,9 @@ function payTrainStop(
 }
 
 function journeyAllowed(state: WorldState, vehicle: TradeVehicle): boolean {
-  if (vehicle.kind === "ship") return canTrade(state, vehicle.owner, vehicle.destinationOwner);
+  // Only land convoys cross ground owned by third parties; every other
+  // carrier answers to its destination alone.
+  if (vehicle.kind !== "train") return canTrade(state, vehicle.owner, vehicle.destinationOwner);
   const owners = new Set(
     vehicle.pathIndices
       .map((index) => state.cells[index]!.owner)
@@ -765,43 +788,76 @@ function updateVehicles(context: SimulationContext): void {
       }
     } else if (vehicle.progress >= 1) {
       addIncome(state, vehicle.owner, vehicle.payout);
-      // Ships sail from harbours and trains from factories, so a completed
-      // voyage credits whichever kind of building sent it.
-      const sender = vehicle.kind === "ship" ? "harbor" : "factory";
+      // Every point-to-point carrier credits the building that sent it:
+      // ships sail from harbours, pulses run from plants, flyers lift from
+      // skyports.
+      const sender: StructureType = vehicle.kind === "pulse"
+        ? "plant"
+        : vehicle.kind === "flyer"
+          ? "skyport"
+          : "harbor";
       recordEarned(state, vehicle.owner, sender, vehicle.payout, 1);
       vehicle.earnedIncome += vehicle.payout;
+      // Resonance is read at arrival: two civilizations that trade the same
+      // ways make hosting worth more, and an ascension mid-voyage counts.
+      const sharedForms = vehicle.foreign
+        ? sharedTradeForms(
+          state.factions[vehicle.owner].expressedElement,
+          state.factions[vehicle.destinationOwner].expressedElement,
+        )
+        : 0;
+      const hostShare = vehicle.foreign ? tradeHostShare(sharedForms, vehicle.allied) : 0;
       if (vehicle.foreign) {
-        const hostIncome = vehicle.payout * (
-          vehicle.allied ? TRADE_RULES.alliedHostShare : TRADE_RULES.foreignHostShare
-        );
+        const hostIncome = vehicle.payout * hostShare;
         vehicle.hostIncome += hostIncome;
         addIncome(state, vehicle.destinationOwner, hostIncome);
-        // The receiving end earned it through the same kind of building.
-        recordEarned(state, vehicle.destinationOwner, sender, hostIncome, 0);
+        // The receiving end earned it through whatever the delivery reached:
+        // a harbour berth, a powered station, a skyport apron.
+        recordEarned(
+          state,
+          vehicle.destinationOwner,
+          state.cells[vehicle.endIndex]?.structure ?? sender,
+          hostIncome,
+          0,
+        );
       }
       const nextDepartureAt = releaseDispatch(state, vehicle);
+      const journeyName = vehicle.kind === "ship"
+        ? "sea voyage"
+        : vehicle.kind === "pulse"
+          ? "conduit delivery"
+          : "air freight run";
       context.report({
         domain: "trade",
         kind: "trade.journey-completed",
-        importance: vehicle.foreign ? "major" : "notable",
+        // Pulses are the high-frequency carrier, so each one matters less.
+        importance: vehicle.kind === "pulse"
+          ? (vehicle.foreign ? "notable" : "routine")
+          : (vehicle.foreign ? "major" : "notable"),
         storyKey: vehicle.storyKey,
         initiator: realmSubject(vehicle.owner),
         targets: [realmSubject(vehicle.destinationOwner)],
         participants: [realmSubject(vehicle.owner), realmSubject(vehicle.destinationOwner)],
         links: { vehicle: vehicle.id },
         facts: {
-          vehicleKind: "ship",
+          vehicleKind: vehicle.kind,
           income: vehicle.earnedIncome,
           hostIncome: vehicle.hostIncome,
           distance: vehicle.totalDistance,
           journeyTicks: state.tick - vehicle.launchedAt,
-          payoutPerTravelTick: TRADE_RULES.shipPayoutPerTravelTick,
+          payoutPerTravelTick: vehicle.kind === "ship"
+            ? TRADE_RULES.shipPayoutPerTravelTick
+            : vehicle.kind === "flyer"
+              ? TRADE_RULES.airPayoutPerTravelTick
+              : null,
           foreign: vehicle.foreign,
           allied: vehicle.allied,
+          sharedForms,
+          hostShare,
           sourceIndex: vehicle.sourceIndex,
           nextDepartureAt,
         },
-        summary: `${vehicle.id} completed its sea voyage and generated ${Math.round(vehicle.earnedIncome + vehicle.hostIncome)} gold.`,
+        summary: `${vehicle.id} completed its ${journeyName} and generated ${Math.round(vehicle.earnedIncome + vehicle.hostIncome)} gold.`,
       });
     }
   }
@@ -812,7 +868,11 @@ function spawnTrains(context: SimulationContext): void {
   const { state, random } = context;
   const trains = state.tradeVehicles.filter((vehicle) => vehicle.kind === "train");
   if (trains.length >= TRADE_RULES.trainLimit) return;
-  const stations = new Set(state.tradeRoutes.flatMap((route) => [route.startIndex, route.endIndex]));
+  const stations = new Set(
+    state.tradeRoutes
+      .filter((route) => route.kind === "rail")
+      .flatMap((route) => [route.startIndex, route.endIndex]),
+  );
   const factories = PLAYER_ORDER.flatMap((owner) => structureCells(state, owner, "factory"))
     .filter((factory) => stations.has(factory) && dispatchReady(state, "train", factory));
   // One track set per owner, shared by that owner's factories and by every
@@ -920,7 +980,14 @@ function spawnShips(context: SimulationContext): void {
     const allied = foreign && getRelation(state, owner, destinationOwner).status === "truce";
     const totalDistance = routeDistance(state, path);
     const plannedTravelTicks = totalDistance / TRADE_RULES.shipVelocity;
-    const payout = plannedTravelTicks * TRADE_RULES.shipPayoutPerTravelTick;
+    // Ships are the waterway carrier: a realm whose expressed element trades
+    // by water sails the same voyage for more, priced at launch so the
+    // expected payout below is the payout the voyage delivers.
+    const waterwayMultiplier = tradeFormIncomeMultiplier(
+      state.factions[owner].expressedElement,
+      "waterway",
+    );
+    const payout = plannedTravelTicks * TRADE_RULES.shipPayoutPerTravelTick * waterwayMultiplier;
     const vehicleId = `ship:${state.tick}:${source}:${destination}`;
     const vehicle: TradeVehicle = {
       id: vehicleId,
@@ -966,12 +1033,246 @@ function spawnShips(context: SimulationContext): void {
         expectedPayout: payout,
         plannedTravelTicks,
         payoutPerTravelTick: TRADE_RULES.shipPayoutPerTravelTick,
+        waterwayBonus: waterwayMultiplier > 1,
         foreign,
         allied,
       },
       summary: `${vehicle.id} departed on a ${totalDistance.toFixed(1)}-unit water-only voyage.`,
     });
     shipCount += 1;
+  }
+}
+
+function conduitKey(first: number, second: number): string {
+  return `conduit:${Math.min(first, second)}:${Math.max(first, second)}`;
+}
+
+/**
+ * The energy carrier's network: every plant strings straight conduits to the
+ * nearest few stations in reach whose owner it can trade with. Conduits are
+ * lines, not laid track — they are recomputed whole from the plants,
+ * stations and diplomacy standing today, and a redraw costs plants times
+ * stations, which stays trivial beside one rail sweep.
+ */
+function buildConduitNetwork(state: WorldState): TradeRoute[] {
+  const routes: TradeRoute[] = [];
+  const stations: number[] = [];
+  for (const owner of PLAYER_ORDER) {
+    if (!state.factions[owner].alive) continue;
+    stations.push(
+      ...structureCells(state, owner, "city"),
+      ...structureCells(state, owner, "factory"),
+    );
+  }
+  for (const owner of PLAYER_ORDER) {
+    if (!state.factions[owner].alive) continue;
+    for (const plantIndex of structureCells(state, owner, "plant")) {
+      const candidates: Array<{ index: number; distance: number }> = [];
+      for (const stationIndex of stations) {
+        const stationHolder = state.cells[stationIndex]!.owner;
+        if (stationHolder === null || !canTrade(state, owner, stationHolder)) continue;
+        const distance = distanceBetween(state, plantIndex, stationIndex);
+        if (distance <= TRADE_RULES.conduitRadius) candidates.push({ index: stationIndex, distance });
+      }
+      candidates.sort((a, b) => a.distance - b.distance || a.index - b.index);
+      for (const candidate of candidates.slice(0, TRADE_RULES.conduitLinksPerPlant)) {
+        const destinationOwner = state.cells[candidate.index]!.owner!;
+        const foreign = destinationOwner !== owner;
+        routes.push({
+          id: conduitKey(plantIndex, candidate.index),
+          owner,
+          parties: [owner, destinationOwner],
+          kind: "conduit",
+          startIndex: plantIndex,
+          endIndex: candidate.index,
+          pathIndices: [plantIndex, candidate.index],
+          value: candidate.distance,
+          foreign,
+          allied: foreign && getRelation(state, owner, destinationOwner).status === "truce",
+          destinationOwner,
+        });
+      }
+    }
+  }
+  return routes;
+}
+
+/**
+ * Pulses run the conduits: each plant sends one down a random link, and the
+ * delivery pays a flat value at the far station — energy trade is
+ * frequency, not distance. A realm whose expressed element trades by energy
+ * built the only plants there are, so the reward multiplier prices every
+ * pulse it sends; a captured plant keeps pulsing for its captor, who simply
+ * earns no bonus on what it was never theirs to master.
+ */
+function spawnPulses(context: SimulationContext): void {
+  const { state, random } = context;
+  let pulseCount = state.tradeVehicles.filter((vehicle) => vehicle.kind === "pulse").length;
+  if (pulseCount >= TRADE_RULES.pulseLimit) return;
+  const linksBySource = new Map<number, TradeRoute[]>();
+  for (const route of state.tradeRoutes) {
+    if (route.kind !== "conduit") continue;
+    const links = linksBySource.get(route.startIndex);
+    if (links) links.push(route);
+    else linksBySource.set(route.startIndex, [route]);
+  }
+  for (const [source, links] of linksBySource) {
+    if (pulseCount >= TRADE_RULES.pulseLimit) break;
+    if (!dispatchReady(state, "pulse", source)) continue;
+    const owner = state.cells[source]!.owner;
+    if (!owner) continue;
+    const pool = links.filter((link) => {
+      const destinationOwner = state.cells[link.endIndex]!.owner;
+      return destinationOwner !== null && canTrade(state, owner, destinationOwner);
+    });
+    if (pool.length === 0) continue;
+    const link = random.pick(pool);
+    const destinationOwner = state.cells[link.endIndex]!.owner!;
+    const foreign = destinationOwner !== owner;
+    const allied = foreign && getRelation(state, owner, destinationOwner).status === "truce";
+    const totalDistance = distanceBetween(state, source, link.endIndex);
+    const energyMultiplier = tradeFormIncomeMultiplier(
+      state.factions[owner].expressedElement,
+      "energy",
+    );
+    const payout = TRADE_RULES.energyDeliveryPayout * energyMultiplier;
+    const vehicle: TradeVehicle = {
+      id: `pulse:${state.tick}:${source}:${link.endIndex}`,
+      owner,
+      kind: "pulse",
+      startIndex: source,
+      endIndex: link.endIndex,
+      pathIndices: [source, link.endIndex],
+      stopIndices: [source, link.endIndex],
+      progress: 0,
+      velocity: TRADE_RULES.pulseVelocity,
+      distanceTravelled: 0,
+      totalDistance,
+      nextStop: 0,
+      sourceIndex: source,
+      payout,
+      foreign,
+      allied,
+      destinationOwner,
+      storyKey: tradeStoryKey(owner, destinationOwner, state.tick),
+      earnedIncome: 0,
+      hostIncome: 0,
+      completedStops: 0,
+      launchedAt: state.tick,
+      dwellRemaining: 0,
+    };
+    state.tradeVehicles.push(vehicle);
+    pulseCount += 1;
+    reserveDispatch(state, vehicle);
+    context.report({
+      domain: "trade",
+      kind: "trade.journey-started",
+      importance: foreign ? "notable" : "routine",
+      storyKey: vehicle.storyKey,
+      initiator: realmSubject(owner),
+      targets: [realmSubject(destinationOwner)],
+      participants: [realmSubject(owner), realmSubject(destinationOwner)],
+      links: { vehicle: vehicle.id },
+      facts: {
+        vehicleKind: "pulse",
+        sourceIndex: source,
+        destinationIndex: link.endIndex,
+        distance: totalDistance,
+        expectedPayout: payout,
+        energyBonus: energyMultiplier > 1,
+        foreign,
+        allied,
+      },
+      summary: `${vehicle.id} left its plant down a ${totalDistance.toFixed(1)}-unit conduit.`,
+    });
+  }
+}
+
+/**
+ * Flyers cross anything in a straight line between skyports. There is no
+ * network to lay and no ground to answer to — only the pair of aprons and
+ * whether their owners trade — so air freight is priced like a voyage, by
+ * the distance it buys, at the airborne premium.
+ */
+function spawnFlyers(context: SimulationContext): void {
+  const { state, random } = context;
+  let flyerCount = state.tradeVehicles.filter((vehicle) => vehicle.kind === "flyer").length;
+  if (flyerCount >= TRADE_RULES.flyerLimit) return;
+  const skyports = PLAYER_ORDER.flatMap((owner) => structureCells(state, owner, "skyport"));
+  for (const source of skyports) {
+    if (flyerCount >= TRADE_RULES.flyerLimit) break;
+    if (!dispatchReady(state, "flyer", source)) continue;
+    const owner = state.cells[source]!.owner;
+    if (!owner) continue;
+    const pool = skyports.filter((destination) => {
+      if (destination === source) return false;
+      const destinationOwner = state.cells[destination]!.owner;
+      if (destinationOwner === null || !canTrade(state, owner, destinationOwner)) return false;
+      return distanceBetween(state, source, destination) >= TRADE_RULES.minimumFlightDistance;
+    });
+    if (pool.length === 0) continue;
+    const destination = random.pick(pool);
+    const destinationOwner = state.cells[destination]!.owner!;
+    const foreign = destinationOwner !== owner;
+    const allied = foreign && getRelation(state, owner, destinationOwner).status === "truce";
+    const totalDistance = distanceBetween(state, source, destination);
+    const plannedTravelTicks = totalDistance / TRADE_RULES.flyerVelocity;
+    const airborneMultiplier = tradeFormIncomeMultiplier(
+      state.factions[owner].expressedElement,
+      "airborne",
+    );
+    const payout = plannedTravelTicks * TRADE_RULES.airPayoutPerTravelTick * airborneMultiplier;
+    const vehicle: TradeVehicle = {
+      id: `flyer:${state.tick}:${source}:${destination}`,
+      owner,
+      kind: "flyer",
+      startIndex: source,
+      endIndex: destination,
+      pathIndices: [source, destination],
+      stopIndices: [source, destination],
+      progress: 0,
+      velocity: TRADE_RULES.flyerVelocity,
+      distanceTravelled: 0,
+      totalDistance,
+      nextStop: 0,
+      sourceIndex: source,
+      payout,
+      foreign,
+      allied,
+      destinationOwner,
+      storyKey: tradeStoryKey(owner, destinationOwner, state.tick),
+      earnedIncome: 0,
+      hostIncome: 0,
+      completedStops: 0,
+      launchedAt: state.tick,
+      dwellRemaining: 0,
+    };
+    state.tradeVehicles.push(vehicle);
+    flyerCount += 1;
+    reserveDispatch(state, vehicle);
+    context.report({
+      domain: "trade",
+      kind: "trade.journey-started",
+      importance: foreign ? "notable" : "routine",
+      storyKey: vehicle.storyKey,
+      initiator: realmSubject(owner),
+      targets: [realmSubject(destinationOwner)],
+      participants: [realmSubject(owner), realmSubject(destinationOwner)],
+      links: { vehicle: vehicle.id },
+      facts: {
+        vehicleKind: "flyer",
+        sourceIndex: source,
+        destinationIndex: destination,
+        distance: totalDistance,
+        expectedPayout: payout,
+        plannedTravelTicks,
+        payoutPerTravelTick: TRADE_RULES.airPayoutPerTravelTick,
+        airborneBonus: airborneMultiplier > 1,
+        foreign,
+        allied,
+      },
+      summary: `${vehicle.id} lifted off on a ${totalDistance.toFixed(1)}-unit straight flight.`,
+    });
   }
 }
 
@@ -990,13 +1291,18 @@ export class TradeNetworkSystem implements SimulationSystem {
       state.tick % TRADE_RULES.networkRebuildTicks === 0
     ) {
       const previous = new Set(state.tradeRoutes.map((route) => route.id));
-      const next = buildRailNetwork(state);
+      const rail = buildRailNetwork(state);
+      const conduits = buildConduitNetwork(state);
+      const next = [...rail, ...conduits];
       const nextIds = new Set(next.map((route) => route.id));
       const added = next.filter((route) => !previous.has(route.id)).map((route) => route.id);
       const removed = [...previous].filter((id) => !nextIds.has(id));
       state.tradeRoutes = next;
       state.railNetworkSignature = signature;
-      state.railNetworkNeedsExpansion = added.length >= TRADE_RULES.railMaximumNewLinksPerRebuild;
+      // Only rail grows link by link; conduits redraw whole, so expansion
+      // pressure is a rail question alone.
+      state.railNetworkNeedsExpansion = added.filter((id) => id.startsWith("rail:")).length
+        >= TRADE_RULES.railMaximumNewLinksPerRebuild;
       if (added.length > 0 || removed.length > 0) {
         const realmIds = [...new Set(next.flatMap((route) => [...route.parties]))];
         context.report({
@@ -1009,21 +1315,25 @@ export class TradeNetworkSystem implements SimulationSystem {
           participants: realmIds.map(realmSubject),
           links: {},
           facts: {
-            edges: next.length,
+            edges: rail.length,
+            conduitEdges: conduits.length,
             foreignEdges: next.filter((route) => route.foreign).length,
             alliedEdges: next.filter((route) => route.allied).length,
             added,
             removed,
           },
-          summary: `The rail network changed by ${added.length} added and ${removed.length} removed connections, reaching ${next.length} total tracks.`,
+          summary: `The trade network changed by ${added.length} added and ${removed.length} removed connections, reaching ${rail.length} tracks and ${conduits.length} conduits.`,
         });
       }
     }
     if (state.tick % TRADE_RULES.trainSpawnIntervalTicks === 0) spawnTrains(context);
-    // Ships are paced by their harbours, not by a world clock. The global
-    // cadence that used to gate this made every port in the world sail on the
-    // same tick and sit idle between, which no per-site timer could undo while
-    // it stood: a harbour ready on tick nine simply was not asked until twelve.
+    // Ships, pulses and flyers are paced by their sites, not by a world
+    // clock. The global cadence that used to gate ships made every port in
+    // the world sail on the same tick and sit idle between, which no
+    // per-site timer could undo while it stood: a harbour ready on tick
+    // nine simply was not asked until twelve.
     spawnShips(context);
+    spawnPulses(context);
+    spawnFlyers(context);
   }
 }

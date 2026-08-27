@@ -131,7 +131,7 @@ function terrainAt(
 }
 
 function emptyStructures(): StructureCounts {
-  return { city: 0, fort: 0, factory: 0, harbor: 0 };
+  return { city: 0, fort: 0, factory: 0, harbor: 0, plant: 0, skyport: 0 };
 }
 
 function makeFaction(id: PlayerId, seed: number): FactionState {

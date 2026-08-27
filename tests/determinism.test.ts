@@ -15,7 +15,28 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the four-family roster and the live element system. The
+ * Re-recorded when every trade form gained a carrier of its own. Land keeps
+ * the road-and-rail network — its vehicles are convoys now, and the land
+ * form's reward rides them; the waterway keeps its ships; energy realms
+ * raise power plants that string straight conduits and pulse flat-value
+ * deliveries down them; airborne realms raise skyports and fly freight
+ * point to point over anything. Two new structures enter the shared trade
+ * ladder and the exclusive carriers gate on the expressed form, so
+ * construction programs, treasuries and the map itself all diverge from the
+ * first planning window — every digest moves, and gale finally trades.
+ * Tuned after the first hundred-game sweep of the carriers: air freight now
+ * pays slightly under sea freight per travel tick (gale had taken nearly
+ * half of all wins on flight income alone), and waterway realms open their
+ * first harbor a factory earlier, because tide's coastal identity kept
+ * arriving after its wars did.
+ *
+ * Before that, re-recorded when trade forms first went live riding the then-existing
+ * carriers: trains earned the energy reward, stations the land reward, ships
+ * the waterway reward, sea hosting paid a resonant share between realms
+ * whose expressed elements trade the same ways, and construction leaned
+ * toward the carriers a realm holds.
+ *
+ * Before that, re-recorded for the four-family roster and the live element system. The
  * founding roster reworked to twelve players in each of four families — grove
  * retired to an acquirable compound — so every draft, and with it every
  * world, differs from the first tick by construction. On top of that the
@@ -85,25 +106,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "3f123ac5fdda54614b213e1aa4d332f0", cells: "c24971694dce1b93" },
-      { tick: 200, world: "d13728c491da08890b00b9f240635725", cells: "e30b96cb799bd69c" },
-      { tick: 600, world: "241df4c92eded5bbfeb802da0aeba40d", cells: "b3ca53b7b9ca77a5", deep: true },
+      { tick: 60, world: "4452b3ed11210df52a492352249e3330", cells: "1b5951d693443dc3" },
+      { tick: 200, world: "c892b4cfa4738ea852a3cec51c8e8e61", cells: "051476656c69d348" },
+      { tick: 600, world: "0e7584e13feeaac15b9b7a57d9281d84", cells: "15e235474cc82db9", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "9054d816b5b85eca8eba4a86d6c773c2", cells: "ff00923fee2521fb" },
-      { tick: 200, world: "364e992e375ed67accedd0c8da10e772", cells: "7393d90096ffc881" },
-      { tick: 600, world: "f47b5a628043c6ad00b5ee2d70d2e997", cells: "38b4c76390cd473b", deep: true },
+      { tick: 60, world: "0362f855f9e798abe2582fc59d7580d4", cells: "ae4878a1aa128779" },
+      { tick: 200, world: "fc967620a786a40482ec3f5634e3dfc4", cells: "0da3cb89f82aeb9f" },
+      { tick: 600, world: "d1a6bd8e3a6209fd6afa17de7f7fb132", cells: "04715bf665fc614e", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "d8866144a90bd191a78f600b8694f4e9", cells: "80036d574520dcd9" },
-      { tick: 200, world: "5769757d4db6007064981b94517b64e7", cells: "bc810ed304aef7e3" },
-      { tick: 600, world: "ec11f79a16a7369552b17462d15090b5", cells: "6fd69fdd40a98e5c", deep: true },
+      { tick: 60, world: "ca23bb9a7bb1d7da4b0ce3af260000e5", cells: "503f482935f15882" },
+      { tick: 200, world: "e056c0b3eb1e90eab8f7fd576293d305", cells: "663c88f0e88eaa3a" },
+      { tick: 600, world: "e537a72c74cc07aa0e62a172db658f53", cells: "bf954ebabe5fe12e", deep: true },
     ],
   },
 ];

@@ -188,12 +188,15 @@ function inspectDiplomacy(state: WorldState): void {
 function inspectTrade(state: WorldState): void {
   const rail = state.tradeRoutes.filter((route) => route.kind === "rail");
   const sea = state.tradeRoutes.filter((route) => route.kind === "sea");
+  const conduits = state.tradeRoutes.filter((route) => route.kind === "conduit");
   const trains = state.tradeVehicles.filter((vehicle) => vehicle.kind === "train");
   const ships = state.tradeVehicles.filter((vehicle) => vehicle.kind === "ship");
+  const pulses = state.tradeVehicles.filter((vehicle) => vehicle.kind === "pulse");
+  const flyers = state.tradeVehicles.filter((vehicle) => vehicle.kind === "flyer");
   write(heading("trade network"));
-  write(`  ${rail.length} rail routes (${rail.filter((route) => route.foreign).length} foreign, ${rail.filter((route) => route.allied).length} allied), ${sea.length} sea routes`);
+  write(`  ${rail.length} rail routes (${rail.filter((route) => route.foreign).length} foreign, ${rail.filter((route) => route.allied).length} allied), ${conduits.length} conduits (${conduits.filter((route) => route.foreign).length} foreign), ${sea.length} sea routes`);
   write(`  ${new Set(rail.flatMap((route) => route.pathIndices)).size} track cells`);
-  write(`  ${trains.length} trains and ${ships.length} ships in motion`);
+  write(`  ${trains.length} convoys, ${ships.length} ships, ${pulses.length} pulses and ${flyers.length} flyers in motion`);
   write(heading("longest rail routes"));
   for (const route of [...rail].sort((a, b) => b.value - a.value).slice(0, 10)) {
     write(

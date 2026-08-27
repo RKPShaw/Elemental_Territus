@@ -1,4 +1,5 @@
 import { markCellsChanged } from "../structure-index";
+import { tradesBy } from "../elements";
 import { recordSpend } from "../economics";
 import { PLAYERS } from "../players";
 import { getRelation } from "../diplomacy";
@@ -516,7 +517,13 @@ export class CommandExecutionSystem implements SimulationSystem {
           cell.terrain === "water" ||
           actor.gold < cost ||
           (!stackingCity && !canPlaceStructureSite(state, command.tileIndex)) ||
-          (command.structure === "harbor" && !cell.coastal)
+          (command.structure === "harbor" && !cell.coastal) ||
+          // The exclusive carriers: a plant rises only for a realm whose
+          // expressed element trades by energy, a skyport only for one that
+          // trades by air. Captured ones keep working — building new ones is
+          // what the form gates.
+          (command.structure === "plant" && !tradesBy(actor.expressedElement, "energy")) ||
+          (command.structure === "skyport" && !tradesBy(actor.expressedElement, "airborne"))
         ) {
           continue;
         }

@@ -1,10 +1,12 @@
-import { ELEMENT_RULES, clamp } from "./rules";
+import { ELEMENT_RULES, TRADE_RULES, clamp } from "./rules";
 import type {
   ElementDefinition,
   ElementId,
   ElementTier,
   FoundingElementId,
   PlayerId,
+  TradeForm,
+  TradeVehicleKind,
   WorldState,
 } from "./types";
 
@@ -679,4 +681,116 @@ export function realmMatchupLabel(
   if (value > 1) return "elemental edge";
   if (value < 1) return "elemental risk";
   return "even elements";
+}
+
+/**
+ * Trade forms on their carriers.
+ *
+ * Every element trades through one or two of the four forms, and every form
+ * owns a distinct carrier: land is the road-and-rail network and whatever
+ * rolls over it — wagons, cars, trains, any convoy the land carries;
+ * waterway is the harbors and their ships; energy is the power plants and
+ * the straight conduits they string to nearby stations; airborne is the
+ * skyports flying freight point to point over anything. The helpers below
+ * are the whole of how the simulation reads trade forms: income rides
+ * tradeFormIncomeMultiplier, foreign hosting rides tradeHostShare, and
+ * construction leans through buildAffinityOf.
+ */
+
+/** The form each carrier's vehicle trades by. */
+export const VEHICLE_FORM: Record<TradeVehicleKind, TradeForm> = {
+  train: "land",
+  ship: "waterway",
+  pulse: "energy",
+  flyer: "airborne",
+};
+
+/** Whether an element's civilization trades by the given form. */
+export function tradesBy(element: ElementId, form: TradeForm): boolean {
+  return ELEMENTS[element].tradeForms.includes(form);
+}
+
+/** How many trade forms two elements share — the resonance between them. */
+export function sharedTradeForms(first: ElementId, second: ElementId): number {
+  let shared = 0;
+  for (const form of ELEMENTS[first].tradeForms) {
+    if (ELEMENTS[second].tradeForms.includes(form)) shared += 1;
+  }
+  return shared;
+}
+
+/**
+ * The income multiplier a realm's trade earns on a carrier: the flat bonus
+ * when the expressed element trades by that form, and exactly 1 otherwise.
+ * Rewards only — nothing a realm does not hold ever pays less than today.
+ */
+export function tradeFormIncomeMultiplier(element: ElementId, form: TradeForm): number {
+  return tradesBy(element, form) ? 1 + ELEMENT_RULES.tradeFormIncomeBonus : 1;
+}
+
+/**
+ * The host's share of a foreign delivery, on every carrier that pays a host
+ * on arrival: the stranger's rate, raised by trade-form resonance between
+ * the parties, with allied standing still paying best. The best applicable
+ * rate wins, so resonance never costs a host what diplomacy already earned.
+ */
+export function tradeHostShare(shared: number, allied: boolean): number {
+  const resonant = shared >= 2
+    ? ELEMENT_RULES.resonantHostShareTwo
+    : shared >= 1
+      ? ELEMENT_RULES.resonantHostShareOne
+      : TRADE_RULES.foreignHostShare;
+  return Math.max(allied ? TRADE_RULES.alliedHostShare : 0, resonant);
+}
+
+export interface BuildAffinity {
+  /** Multiplier on the city shortfall when choosing what to build next. */
+  city: number;
+  /** Multiplier on the factory-and-harbor shortfall in the same choice. */
+  trade: number;
+  /** Weight on the plant shortfall; zero for realms without the energy form. */
+  plant: number;
+  /** Weight on the skyport shortfall; zero without the airborne form. */
+  skyport: number;
+  /** Harbor share of the trade buildings a realm wants. */
+  harborShare: number;
+  /** Running cap on harbors as a fraction of trade buildings standing. */
+  harborCap: number;
+  /** Factories a realm must run before it reaches for a harbor. */
+  harborPrerequisite: number;
+}
+
+const BUILD_AFFINITIES = new Map<ElementId, BuildAffinity>();
+
+/**
+ * How an element's trade forms lean its construction program, composed with
+ * the strategy quotas by the construction planner. A waterway realm reaches
+ * for harbors hardest and wants half again the harbor share; an energy realm
+ * reaches for the power plants only it may raise, an airborne realm for its
+ * skyports; a land realm lets the road-laying trade buildings jump the queue
+ * ahead of its cities without wanting fewer of either. A zero plant or
+ * skyport weight is the gate itself: a realm without the form never reaches
+ * for the carrier.
+ */
+export function buildAffinityOf(element: ElementId): BuildAffinity {
+  const cached = BUILD_AFFINITIES.get(element);
+  if (cached) return cached;
+  const waterway = tradesBy(element, "waterway");
+  const affinity: BuildAffinity = {
+    city: tradesBy(element, "land") ? ELEMENT_RULES.buildAffinity.city : 1,
+    trade: waterway ? ELEMENT_RULES.buildAffinity.harbor : 1,
+    plant: tradesBy(element, "energy") ? ELEMENT_RULES.buildAffinity.plant : 0,
+    skyport: tradesBy(element, "airborne") ? ELEMENT_RULES.buildAffinity.skyport : 0,
+    harborShare: waterway
+      ? ELEMENT_RULES.waterwayHarborTradeShare
+      : ELEMENT_RULES.harborTradeShare,
+    harborCap: waterway
+      ? ELEMENT_RULES.waterwayHarborTradeCap
+      : ELEMENT_RULES.harborTradeCap,
+    harborPrerequisite: waterway
+      ? ELEMENT_RULES.waterwayHarborFactoryPrerequisite
+      : ELEMENT_RULES.harborFactoryPrerequisite,
+  };
+  BUILD_AFFINITIES.set(element, affinity);
+  return affinity;
 }

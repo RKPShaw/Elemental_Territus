@@ -22,7 +22,7 @@ export interface StructureIndex {
 }
 
 const NO_SITES: Record<StructureType, number[]> = {
-  city: [], fort: [], factory: [], harbor: [],
+  city: [], fort: [], factory: [], harbor: [], plant: [], skyport: [],
 };
 const NO_CELLS: readonly number[] = [];
 
@@ -53,7 +53,7 @@ function build(state: WorldState): StructureIndex {
     if (cell.structure) {
       let sites = byOwner.get(owner);
       if (!sites) {
-        sites = { city: [], fort: [], factory: [], harbor: [] };
+        sites = { city: [], fort: [], factory: [], harbor: [], plant: [], skyport: [] };
         byOwner.set(owner, sites);
       }
       sites[cell.structure].push(index);

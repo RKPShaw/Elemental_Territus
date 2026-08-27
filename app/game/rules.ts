@@ -1,6 +1,7 @@
 import type {
   ElementTier,
   LandTerrainId,
+  StructureCounts,
   StructureRule,
   StructureType,
   TerrainId,
@@ -111,6 +112,20 @@ export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
     cost: 25_000,
     description: "Shares the trade-building ladder and earns 4K for every second of its completed water voyage.",
   },
+  plant: {
+    id: "plant",
+    name: "Power plant",
+    glyph: "⌁",
+    cost: 25_000,
+    description: "Energy realms only. Strings straight conduits to nearby stations and sends paying pulses down them.",
+  },
+  skyport: {
+    id: "skyport",
+    name: "Skyport",
+    glyph: "✈",
+    cost: 25_000,
+    description: "Airborne realms only. Flies freight in a straight line to any other skyport in the world.",
+  },
 };
 
 export const WARSHIP_COST = 165_000;
@@ -120,13 +135,15 @@ export const STRUCTURE_MIN_SPACING = 2.2;
 
 export const STRUCTURE_COST_LADDER = [25_000, 50_000, 100_000] as const;
 
-/** Cities have one ladder; factories and harbors advance a shared trade ladder. */
+/** Cities have one ladder; every trade building advances one shared ladder. */
 export function nextStructureCost(
   structure: StructureType,
-  counts: { city: number; fort: number; factory: number; harbor: number },
+  counts: StructureCounts,
 ): number {
   if (structure === "fort") return STRUCTURE_RULES.fort.cost;
-  const count = structure === "city" ? counts.city : counts.factory + counts.harbor;
+  const count = structure === "city"
+    ? counts.city
+    : counts.factory + counts.harbor + counts.plant + counts.skyport;
   return STRUCTURE_COST_LADDER[count] ?? 250_000;
 }
 
@@ -266,15 +283,15 @@ export const ENEMY_TERRAIN_COST: Record<LandTerrainId, number> = {
 /**
  * The elemental balance surface.
  *
- * matchupEdge is the whole of elemental combat today: the founding counter
- * cycle advances a front 1.12× faster with the edge and 0.88× slower against
- * it (1 ± matchupEdge — the sums are float-exact, which the element tests
- * pin). The rest of the block belongs to the wider 25-element space: the
- * composed matchup table (built and tested in elements.ts, not yet consulted
- * by combat), and the ascension, trade-form and infrastructure-memory
- * constants of the phases that will light it up. An elemental edge should
- * matter without ever deciding a battle by itself, so every multiplier here
- * lives inside the floor/ceiling band.
+ * matchupEdge anchors elemental combat: a founding counter advances a front
+ * 1.12× faster with the edge and 0.88× slower against it (1 ± matchupEdge —
+ * the sums are float-exact, which the element tests pin), and the composed
+ * 25×25 table grades every other pair from it. Combat reads that table live
+ * through each realm's expressed element; ascension arithmetic and the
+ * trade-form rewards below are live too. Only the infrastructure-memory
+ * constants still wait on their phase. An elemental edge should matter
+ * without ever deciding a battle by itself, so every multiplier here lives
+ * inside the floor/ceiling band.
  */
 export const ELEMENT_RULES = {
   /** Full counter advantage between two founding elements, as a share of 1. */
@@ -312,6 +329,62 @@ export const ELEMENT_RULES = {
   ascensionWarDesire: 0.45,
   /** The matching bonus when choosing which existing war to press. */
   ascensionTargetPreference: 0.6,
+  /**
+   * The trade-form reward, one rate on every carrier and rewards only. Each
+   * form owns a distinct vehicle network — land the road-and-rail convoys,
+   * waterway the ships, energy the conduit pulses, airborne the skyport
+   * flyers — and a realm whose expressed element trades by a form earns the
+   * bonus on that carrier's income. Land realms also host foreign convoy
+   * stops at the same bonus: their stations are the carrier's other half.
+   */
+  tradeFormIncomeBonus: 0.15,
+  /**
+   * Foreign host shares when the trading realms' expressed elements share
+   * trade forms, applied on every carrier that pays a host on arrival.
+   * Resonance pays a host more than a stranger's 0.18 but allied standing
+   * still pays best — the diplomatic bond outbids the elemental one, and a
+   * share never grades down: the best applicable rate wins.
+   */
+  resonantHostShareOne: 0.24,
+  resonantHostShareTwo: 0.3,
+  /**
+   * Construction affinity: how strongly a realm reaches for the carrier of a
+   * trade form it holds, multiplying the build-priority shortfalls its
+   * strategy quotas produce. The city factor sits below 1 because a land
+   * realm's carrier is the road-and-rail network around its stations: it
+   * lets the factories that lay track jump the queue, it does not shrink
+   * the city program. Plants and skyports exist only for realms holding
+   * their form, so their weights double as the gate — a zero weight is a
+   * structure never reached for.
+   */
+  buildAffinity: { city: 0.8, harbor: 1.4, plant: 1.2, skyport: 1.3 },
+  /**
+   * Harbor share of a realm's desired trade buildings, and the running cap
+   * on harbors as a fraction of trade buildings actually standing. Waterway
+   * realms reach for half again as many harbors; everyone else keeps the
+   * classic minority share.
+   */
+  harborTradeShare: 0.22,
+  harborTradeCap: 0.25,
+  waterwayHarborTradeShare: 0.34,
+  waterwayHarborTradeCap: 0.4,
+  /**
+   * Factories a realm must run before it reaches for a harbor. Waterway
+   * realms open their ports a factory earlier — the coast is their
+   * identity, and waiting for a full land program kept it theoretical.
+   */
+  harborFactoryPrerequisite: 3,
+  waterwayHarborFactoryPrerequisite: 2,
+  /**
+   * How many plants an energy realm wants, as a share of its desired trade
+   * program, and the hard cap on them; skyports scale with the city count
+   * instead, with a floor of two because one skyport flies nowhere.
+   */
+  plantTradeShare: 0.3,
+  plantCap: 12,
+  skyportCityDivisor: 6,
+  skyportFloor: 2,
+  skyportCap: 6,
   /** Captured-structure efficiency when only absorbed history covers its form. */
   legacyEfficiency: 0.9,
   /** Captured-structure efficiency when nothing in the realm's history does. */
@@ -392,6 +465,8 @@ export const TRADE_RULES = {
   shipsPerHarbor: 3,
   shipsPerHarborLevel: 1,
   trainsPerFactory: 1,
+  pulsesPerPlant: 2,
+  flyersPerSkyport: 2,
   /**
    * Ticks a site waits between launches.
    *
@@ -403,12 +478,36 @@ export const TRADE_RULES = {
   launchIntervalTicks: 7,
   trainLimit: 75,
   shipLimit: 1_000,
+  pulseLimit: 150,
+  flyerLimit: 150,
   trainVelocity: 0.12,
   shipVelocity: 0.38,
+  /** Energy moves fast; a pulse spends little time on the wire. */
+  pulseVelocity: 0.85,
+  flyerVelocity: 0.5,
   trainStopDwellTicks: 2,
   domesticTrainStopPayout: 50_000,
   foreignTrainStopPayout: 100_000,
   shipPayoutPerTravelTick: 4_000,
+  /**
+   * The energy carrier. A power plant strings straight conduits to the
+   * nearest few stations within reach, and each delivered pulse pays a flat
+   * value — energy trade is frequency, not distance.
+   */
+  conduitRadius: 5.5,
+  conduitLinksPerPlant: 3,
+  energyDeliveryPayout: 45_000,
+  /**
+   * The airborne carrier. Skyports fly straight to any other skyport, so
+   * the payout is bought with distance like a voyage. Air's premium is
+   * reach, not rate: it pays slightly under sea freight per travel tick —
+   * every flight the whole world over is a straight line — because the
+   * first sweep priced it above and gale realms took nearly half of all
+   * wins on flight income alone. A hop shorter than the minimum is not
+   * worth wings.
+   */
+  airPayoutPerTravelTick: 3_600,
+  minimumFlightDistance: 4,
   foreignHostShare: 0.18,
   alliedHostShare: 0.35,
 } as const;

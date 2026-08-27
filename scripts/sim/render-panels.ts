@@ -67,7 +67,7 @@ export function renderStandings(state: WorldState, color: boolean, limit = 12): 
     const share = (faction.territory / state.landTiles) * 100;
     const committed = committedTroopsFor(state, faction.id);
     const wars = warsFor(state, faction.id).length;
-    const structures = `${faction.structures.city}c ${faction.structures.factory}f ${faction.structures.harbor}h ${faction.structures.fort}F`;
+    const structures = `${faction.structures.city}c ${faction.structures.factory}f ${faction.structures.harbor}h ${faction.structures.plant}p ${faction.structures.skyport}s ${faction.structures.fort}F`;
     return [
       padVisible(paint(definition.name, definition.color, color), 12),
       padVisible(`${share.toFixed(1)}%`, 6),

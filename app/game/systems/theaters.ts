@@ -98,9 +98,13 @@ function infrastructureValue(state: WorldState, index: number): number {
       ? 27
       : cell.structure === "harbor"
         ? 25
-        : cell.structure === "fort"
-          ? 5
-          : 0;
+        : cell.structure === "plant"
+          ? 26
+          : cell.structure === "skyport"
+            ? 24
+            : cell.structure === "fort"
+              ? 5
+              : 0;
   return structure + (cell.capitalOf ? 70 : 0);
 }
 
