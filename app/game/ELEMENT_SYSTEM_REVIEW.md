@@ -20,6 +20,32 @@ Two decisions were made during this review and are baked into the roadmap:
    connective tissue between "elements describe complete civilizational
    behavior" and the three AI systems that actually behave.
 
+**Addendum (Phase 4, revised).** The original Phase 4 plan below — trade
+forms riding the existing carriers, factories reinterpreted as the Energy
+carrier, no Airborne vehicle network — was overturned by design direction
+during implementation: every trade form owns a carrier unique to it.
+
+1. **Land** is the road-and-rail network and *any* vehicle over it — wagons,
+   cars, trains, whatever the land carries. The factory-dispatched network
+   stays; the vehicles are convoys, not specifically trains, and land is
+   their form.
+2. **Waterway** stays the harbors and their ships.
+3. **Energy** gets its own infrastructure: **power plants** that string
+   straight **conduits** to nearby stations and send paying pulses down
+   them. Factories are no longer the Energy carrier.
+4. **Airborne** gets real air transport: **skyports** flying freight in a
+   straight line to any other skyport — the "no third vehicle network" cut
+   below is repealed.
+
+Plants and skyports are exclusive: only a realm whose expressed element
+trades by the form may raise them, though captured ones keep working for
+their captor. The income rewards (+15% on a realm's own carriers, plus the
+land station-host bonus), the resonant host-share ladder (0.24 / 0.30 under
+the allied 0.35, now on every carrier that pays a host on arrival) and the
+construction-affinity lean survive from the original plan unchanged in
+spirit. Phase 7's information identities for airborne realms stack on top of
+the carrier rather than replacing it.
+
 ---
 
 ## 1. Verdict
@@ -372,11 +398,12 @@ rationale the test header requires). Sizes: S/M/L.
 
 ### Explicitly not built
 
-Scorched-earth denial · an Airborne vehicle network · goods/commodities ·
-specialist/guild population entities · literal decoy armies and market
-manipulation · twenty-five bespoke mechanic kits (five + three information
-elements; the rest are profiles) · demotion or element loss · per-cell
-fog of war.
+Scorched-earth denial · goods/commodities · specialist/guild population
+entities · literal decoy armies and market manipulation · twenty-five
+bespoke mechanic kits (five + three information elements; the rest are
+profiles) · demotion or element loss · per-cell fog of war. (An Airborne
+vehicle network was originally cut here; the Phase 4 addendum above
+repealed that cut — skyports fly.)
 
 ## 9. Verification protocol
 

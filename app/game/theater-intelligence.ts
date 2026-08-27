@@ -52,6 +52,8 @@ const INFRASTRUCTURE_VALUE = {
   city: 24,
   factory: 21,
   harbor: 19,
+  plant: 20,
+  skyport: 18,
   fort: 7,
 } as const;
 

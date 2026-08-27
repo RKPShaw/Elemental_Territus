@@ -34,7 +34,9 @@ test("realms begin with 20K and a capital city on their founding site", () => {
   const state = new ElementalWarEngine(0x240823).snapshot();
   for (const faction of Object.values(state.factions)) {
     assert.equal(faction.gold, 20_000);
-    assert.deepEqual(faction.structures, { city: 1, fort: 0, factory: 0, harbor: 0 });
+    assert.deepEqual(faction.structures, {
+      city: 1, fort: 0, factory: 0, harbor: 0, plant: 0, skyport: 0,
+    });
     const capital = state.cells[faction.capitalIndex]!;
     assert.equal(capital.capitalOf, faction.id);
     assert.equal(capital.structure, "city");
@@ -95,13 +97,17 @@ test("batch snapshots distinguish city construction, sites, captures, and losses
 });
 
 test("structure ladders, spacing, and stacked-city capacity share one rule boundary", () => {
-  const empty = { city: 0, fort: 0, factory: 0, harbor: 0 };
+  const empty = { city: 0, fort: 0, factory: 0, harbor: 0, plant: 0, skyport: 0 };
   assert.equal(nextStructureCost("city", empty), 25_000);
   assert.equal(nextStructureCost("city", { ...empty, city: 1 }), 50_000);
   assert.equal(nextStructureCost("city", { ...empty, city: 2 }), 100_000);
   assert.equal(nextStructureCost("city", { ...empty, city: 3 }), 250_000);
   assert.equal(nextStructureCost("harbor", { ...empty, factory: 2 }), 100_000);
   assert.equal(nextStructureCost("factory", { ...empty, factory: 2, harbor: 1 }), 250_000);
+  // Every trade building rides one ladder: a plant or skyport counts toward
+  // the next one's price exactly as a factory or harbor does.
+  assert.equal(nextStructureCost("plant", { ...empty, factory: 1 }), 50_000);
+  assert.equal(nextStructureCost("factory", { ...empty, plant: 1, skyport: 1 }), 100_000);
   assert.equal(TROOP_CAP_RULES.troopsPerCity, 10_000);
 
   const state = createWorld(7);
@@ -409,7 +415,12 @@ test("each trade building respects its berths and its launch cooldown", () => {
   let previousRailIds = new Set<string>();
   for (let tick = 0; tick < 520; tick += 1) {
     state = engine.step();
-    const railIds = new Set(state.tradeRoutes.map((route) => route.id));
+    // Laid rail is permanent world memory; conduits are strung lines that
+    // redraw whole as plants, stations and diplomacy move, so only the
+    // rail-kind routes carry the persistence invariant.
+    const railIds = new Set(
+      state.tradeRoutes.filter((route) => route.kind === "rail").map((route) => route.id),
+    );
     assert.ok([...previousRailIds].every((id) => railIds.has(id)), "physical rail must persist");
     previousRailIds = railIds;
     const activeBySource = new Map<string, number>();
@@ -424,9 +435,13 @@ test("each trade building respects its berths and its launch cooldown", () => {
     for (const [key, dispatch] of Object.entries(state.tradeDispatches)) {
       const berths = dispatch.kind === "train"
         ? TRADE_RULES.trainsPerFactory
-        : TRADE_RULES.shipsPerHarbor
-          + Math.max(0, (state.cells[dispatch.sourceIndex]?.structureLevel ?? 1) - 1)
-            * TRADE_RULES.shipsPerHarborLevel;
+        : dispatch.kind === "pulse"
+          ? TRADE_RULES.pulsesPerPlant
+          : dispatch.kind === "flyer"
+            ? TRADE_RULES.flyersPerSkyport
+            : TRADE_RULES.shipsPerHarbor
+              + Math.max(0, (state.cells[dispatch.sourceIndex]?.structureLevel ?? 1) - 1)
+                * TRADE_RULES.shipsPerHarborLevel;
       assert.ok(
         dispatch.activeVehicleIds.length <= berths,
         `${key} ran ${dispatch.activeVehicleIds.length} vehicles from ${berths} berths`,
@@ -451,9 +466,12 @@ test("each trade building respects its berths and its launch cooldown", () => {
 
   const completed = state.reports.filter((event) => event.kind === "trade.journey-completed");
   assert.ok(completed.length > 0);
-  assert.ok(state.tradeRoutes.some((route) => route.pathIndices.length > 2), "rail should follow a path, not a vector");
-  const railStations = new Set(state.tradeRoutes.flatMap((route) => [route.startIndex, route.endIndex]));
-  assert.ok(state.tradeRoutes.length < railStations.size, "the durable rail graph should remain sparse");
+  // Sparseness is a rail invariant: conduits are straight strung lines, up
+  // to a few per plant, and legitimately outnumber their endpoints.
+  const railRoutes = state.tradeRoutes.filter((route) => route.kind === "rail");
+  assert.ok(railRoutes.some((route) => route.pathIndices.length > 2), "rail should follow a path, not a vector");
+  const railStations = new Set(railRoutes.flatMap((route) => [route.startIndex, route.endIndex]));
+  assert.ok(railRoutes.length < railStations.size, "the durable rail graph should remain sparse");
   for (const event of completed) {
     // At least the turnaround: a site that launched moments before a return
     // may already be holding a later window than the turnaround alone implies.
@@ -477,14 +495,15 @@ test("train stops pay the fixed values, scaled by stacks and trade-form rewards"
   const foreign = stops.find((event) => event.facts.foreign === true);
   assert.ok(domestic, "the calibration world should serve a domestic station");
   assert.ok(foreign, "the calibration world should serve a foreign station");
-  // Trains are the energy carrier and stations the land carrier, so each
-  // side's income is its base value times the station stack times its own
-  // form's reward -- and only a realm holding the form ever earns it.
+  // Convoys and the stations they call at are both halves of the land
+  // carrier, so each side's income is its base value times the station
+  // stack times the land reward -- and only a realm holding the form ever
+  // earns it.
   const formBonus = 1 + ELEMENT_RULES.tradeFormIncomeBonus;
   for (const event of stops) {
     const multiplier = Number(event.facts.stationMultiplier);
-    const ownerBonus = event.facts.energyBonus === true ? formBonus : 1;
-    const hostBonus = event.facts.landBonus === true ? formBonus : 1;
+    const ownerBonus = event.facts.convoyBonus === true ? formBonus : 1;
+    const hostBonus = event.facts.stationBonus === true ? formBonus : 1;
     if (event.facts.foreign) {
       assert.equal(event.facts.ownerIncome, TRADE_RULES.foreignTrainStopPayout * multiplier * ownerBonus);
       assert.equal(event.facts.hostIncome, TRADE_RULES.foreignTrainStopPayout * multiplier * hostBonus);
@@ -493,16 +512,16 @@ test("train stops pay the fixed values, scaled by stacks and trade-form rewards"
       assert.equal(event.facts.hostIncome, 0);
     }
   }
-  // The calibration world genuinely exercises both sides of the reward: an
-  // energy realm's train earned it, and a stop at a non-energy realm's did
-  // not.
+  // The calibration world genuinely exercises both sides of the reward: a
+  // land realm's convoy earned it, and a convoy of a realm without the land
+  // form did not.
   assert.ok(
-    stops.some((event) => event.facts.energyBonus === true),
-    "an energy realm's train should have served a stop by now",
+    stops.some((event) => event.facts.convoyBonus === true),
+    "a land realm's convoy should have served a stop by now",
   );
   assert.ok(
-    stops.some((event) => event.facts.energyBonus === false),
-    "a non-energy realm's train should have served a stop by now",
+    stops.some((event) => event.facts.convoyBonus === false),
+    "a non-land realm's convoy should have served a stop by now",
   );
   assert.equal(
     TRADE_RULES.foreignTrainStopPayout * 2,

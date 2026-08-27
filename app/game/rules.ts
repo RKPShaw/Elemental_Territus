@@ -1,6 +1,7 @@
 import type {
   ElementTier,
   LandTerrainId,
+  StructureCounts,
   StructureRule,
   StructureType,
   TerrainId,
@@ -111,6 +112,20 @@ export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
     cost: 25_000,
     description: "Shares the trade-building ladder and earns 4K for every second of its completed water voyage.",
   },
+  plant: {
+    id: "plant",
+    name: "Power plant",
+    glyph: "⌁",
+    cost: 25_000,
+    description: "Energy realms only. Strings straight conduits to nearby stations and sends paying pulses down them.",
+  },
+  skyport: {
+    id: "skyport",
+    name: "Skyport",
+    glyph: "✈",
+    cost: 25_000,
+    description: "Airborne realms only. Flies freight in a straight line to any other skyport in the world.",
+  },
 };
 
 export const WARSHIP_COST = 165_000;
@@ -120,13 +135,15 @@ export const STRUCTURE_MIN_SPACING = 2.2;
 
 export const STRUCTURE_COST_LADDER = [25_000, 50_000, 100_000] as const;
 
-/** Cities have one ladder; factories and harbors advance a shared trade ladder. */
+/** Cities have one ladder; every trade building advances one shared ladder. */
 export function nextStructureCost(
   structure: StructureType,
-  counts: { city: number; fort: number; factory: number; harbor: number },
+  counts: StructureCounts,
 ): number {
   if (structure === "fort") return STRUCTURE_RULES.fort.cost;
-  const count = structure === "city" ? counts.city : counts.factory + counts.harbor;
+  const count = structure === "city"
+    ? counts.city
+    : counts.factory + counts.harbor + counts.plant + counts.skyport;
   return STRUCTURE_COST_LADDER[count] ?? 250_000;
 }
 
@@ -313,32 +330,34 @@ export const ELEMENT_RULES = {
   /** The matching bonus when choosing which existing war to press. */
   ascensionTargetPreference: 0.6,
   /**
-   * The trade-form reward, one rate for all three carriers and rewards only:
-   * an energy realm's trains earn it for their owner, a land realm's
-   * stations add it to what hosting a foreign stop pays, a waterway realm's
-   * ships add it to a voyage's payout. Airborne has no carrier yet — the
-   * information phase gives it a different identity entirely.
+   * The trade-form reward, one rate on every carrier and rewards only. Each
+   * form owns a distinct vehicle network — land the road-and-rail convoys,
+   * waterway the ships, energy the conduit pulses, airborne the skyport
+   * flyers — and a realm whose expressed element trades by a form earns the
+   * bonus on that carrier's income. Land realms also host foreign convoy
+   * stops at the same bonus: their stations are the carrier's other half.
    */
   tradeFormIncomeBonus: 0.15,
   /**
-   * Sea host shares when the trading realms' expressed elements share trade
-   * forms. Resonance pays a host more than a stranger's 0.18 but allied
-   * standing still pays best — the diplomatic bond outbids the elemental
-   * one, and a share never grades down: the best applicable rate wins.
+   * Foreign host shares when the trading realms' expressed elements share
+   * trade forms, applied on every carrier that pays a host on arrival.
+   * Resonance pays a host more than a stranger's 0.18 but allied standing
+   * still pays best — the diplomatic bond outbids the elemental one, and a
+   * share never grades down: the best applicable rate wins.
    */
   resonantHostShareOne: 0.24,
   resonantHostShareTwo: 0.3,
   /**
    * Construction affinity: how strongly a realm reaches for the carrier of a
    * trade form it holds, multiplying the build-priority shortfalls its
-   * strategy quotas produce. An ordering lean, not a change in appetite —
-   * shortfalls converge to the same quota-driven totals, matched carriers
-   * are just reached for sooner. The city factor sits below 1 because a
-   * land realm's carrier is the rail network around its stations: it lets
-   * the factories that lay track jump the queue, it does not shrink the
-   * city program.
+   * strategy quotas produce. The city factor sits below 1 because a land
+   * realm's carrier is the road-and-rail network around its stations: it
+   * lets the factories that lay track jump the queue, it does not shrink
+   * the city program. Plants and skyports exist only for realms holding
+   * their form, so their weights double as the gate — a zero weight is a
+   * structure never reached for.
    */
-  buildAffinity: { city: 0.8, factory: 1.2, harbor: 1.4 },
+  buildAffinity: { city: 0.8, harbor: 1.4, plant: 1.2, skyport: 1.3 },
   /**
    * Harbor share of a realm's desired trade buildings, and the running cap
    * on harbors as a fraction of trade buildings actually standing. Waterway
@@ -349,6 +368,16 @@ export const ELEMENT_RULES = {
   harborTradeCap: 0.25,
   waterwayHarborTradeShare: 0.34,
   waterwayHarborTradeCap: 0.4,
+  /**
+   * How many plants an energy realm wants, as a share of its desired trade
+   * program, and the hard cap on them; skyports scale with the city count
+   * instead, with a floor of two because one skyport flies nowhere.
+   */
+  plantTradeShare: 0.3,
+  plantCap: 12,
+  skyportCityDivisor: 6,
+  skyportFloor: 2,
+  skyportCap: 6,
   /** Captured-structure efficiency when only absorbed history covers its form. */
   legacyEfficiency: 0.9,
   /** Captured-structure efficiency when nothing in the realm's history does. */
@@ -429,6 +458,8 @@ export const TRADE_RULES = {
   shipsPerHarbor: 3,
   shipsPerHarborLevel: 1,
   trainsPerFactory: 1,
+  pulsesPerPlant: 2,
+  flyersPerSkyport: 2,
   /**
    * Ticks a site waits between launches.
    *
@@ -440,12 +471,33 @@ export const TRADE_RULES = {
   launchIntervalTicks: 7,
   trainLimit: 75,
   shipLimit: 1_000,
+  pulseLimit: 150,
+  flyerLimit: 150,
   trainVelocity: 0.12,
   shipVelocity: 0.38,
+  /** Energy moves fast; a pulse spends little time on the wire. */
+  pulseVelocity: 0.85,
+  flyerVelocity: 0.5,
   trainStopDwellTicks: 2,
   domesticTrainStopPayout: 50_000,
   foreignTrainStopPayout: 100_000,
   shipPayoutPerTravelTick: 4_000,
+  /**
+   * The energy carrier. A power plant strings straight conduits to the
+   * nearest few stations within reach, and each delivered pulse pays a flat
+   * value — energy trade is frequency, not distance.
+   */
+  conduitRadius: 5.5,
+  conduitLinksPerPlant: 3,
+  energyDeliveryPayout: 45_000,
+  /**
+   * The airborne carrier. Skyports fly straight to any other skyport, so
+   * the payout is bought with distance like a voyage — priced above sea
+   * freight because the line is straight and crosses anything — and a hop
+   * shorter than the minimum is not worth wings.
+   */
+  airPayoutPerTravelTick: 5_500,
+  minimumFlightDistance: 4,
   foreignHostShare: 0.18,
   alliedHostShare: 0.35,
 } as const;

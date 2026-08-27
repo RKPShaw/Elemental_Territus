@@ -6,6 +6,7 @@ import type {
   FoundingElementId,
   PlayerId,
   TradeForm,
+  TradeVehicleKind,
   WorldState,
 } from "./types";
 
@@ -685,15 +686,24 @@ export function realmMatchupLabel(
 /**
  * Trade forms on their carriers.
  *
- * Every element trades through one or two of the four forms, and three of
- * them already have a vehicle in the world: energy is the factory and its
- * trains, land the rails and the stations they thread, waterway the harbors
- * and their ships. Airborne has no carrier by design — no third vehicle
- * network — so gale's trade identity waits for the information phase. The
- * helpers below are the whole of how the simulation reads trade forms:
- * income rides tradeFormIncomeMultiplier, sea hosting rides seaHostShare,
- * and construction leans through buildAffinityOf.
+ * Every element trades through one or two of the four forms, and every form
+ * owns a distinct carrier: land is the road-and-rail network and whatever
+ * rolls over it — wagons, cars, trains, any convoy the land carries;
+ * waterway is the harbors and their ships; energy is the power plants and
+ * the straight conduits they string to nearby stations; airborne is the
+ * skyports flying freight point to point over anything. The helpers below
+ * are the whole of how the simulation reads trade forms: income rides
+ * tradeFormIncomeMultiplier, foreign hosting rides tradeHostShare, and
+ * construction leans through buildAffinityOf.
  */
+
+/** The form each carrier's vehicle trades by. */
+export const VEHICLE_FORM: Record<TradeVehicleKind, TradeForm> = {
+  train: "land",
+  ship: "waterway",
+  pulse: "energy",
+  flyer: "airborne",
+};
 
 /** Whether an element's civilization trades by the given form. */
 export function tradesBy(element: ElementId, form: TradeForm): boolean {
@@ -719,12 +729,12 @@ export function tradeFormIncomeMultiplier(element: ElementId, form: TradeForm): 
 }
 
 /**
- * The host's share of a foreign sea voyage: the stranger's rate, raised by
- * trade-form resonance between the parties, with allied standing still
- * paying best. The best applicable rate wins, so resonance never costs a
- * host what diplomacy already earned.
+ * The host's share of a foreign delivery, on every carrier that pays a host
+ * on arrival: the stranger's rate, raised by trade-form resonance between
+ * the parties, with allied standing still paying best. The best applicable
+ * rate wins, so resonance never costs a host what diplomacy already earned.
  */
-export function seaHostShare(shared: number, allied: boolean): number {
+export function tradeHostShare(shared: number, allied: boolean): number {
   const resonant = shared >= 2
     ? ELEMENT_RULES.resonantHostShareTwo
     : shared >= 1
@@ -736,8 +746,12 @@ export function seaHostShare(shared: number, allied: boolean): number {
 export interface BuildAffinity {
   /** Multiplier on the city shortfall when choosing what to build next. */
   city: number;
-  /** Multiplier on the trade-building shortfall in the same choice. */
+  /** Multiplier on the factory-and-harbor shortfall in the same choice. */
   trade: number;
+  /** Weight on the plant shortfall; zero for realms without the energy form. */
+  plant: number;
+  /** Weight on the skyport shortfall; zero without the airborne form. */
+  skyport: number;
   /** Harbor share of the trade buildings a realm wants. */
   harborShare: number;
   /** Running cap on harbors as a fraction of trade buildings standing. */
@@ -750,8 +764,11 @@ const BUILD_AFFINITIES = new Map<ElementId, BuildAffinity>();
  * How an element's trade forms lean its construction program, composed with
  * the strategy quotas by the construction planner. A waterway realm reaches
  * for harbors hardest and wants half again the harbor share; an energy realm
- * reaches for factories; a land realm lets the rail-laying trade buildings
- * jump the queue ahead of its cities without wanting fewer of either.
+ * reaches for the power plants only it may raise, an airborne realm for its
+ * skyports; a land realm lets the road-laying trade buildings jump the queue
+ * ahead of its cities without wanting fewer of either. A zero plant or
+ * skyport weight is the gate itself: a realm without the form never reaches
+ * for the carrier.
  */
 export function buildAffinityOf(element: ElementId): BuildAffinity {
   const cached = BUILD_AFFINITIES.get(element);
@@ -759,10 +776,9 @@ export function buildAffinityOf(element: ElementId): BuildAffinity {
   const waterway = tradesBy(element, "waterway");
   const affinity: BuildAffinity = {
     city: tradesBy(element, "land") ? ELEMENT_RULES.buildAffinity.city : 1,
-    trade: Math.max(
-      waterway ? ELEMENT_RULES.buildAffinity.harbor : 1,
-      tradesBy(element, "energy") ? ELEMENT_RULES.buildAffinity.factory : 1,
-    ),
+    trade: waterway ? ELEMENT_RULES.buildAffinity.harbor : 1,
+    plant: tradesBy(element, "energy") ? ELEMENT_RULES.buildAffinity.plant : 0,
+    skyport: tradesBy(element, "airborne") ? ELEMENT_RULES.buildAffinity.skyport : 0,
     harborShare: waterway
       ? ELEMENT_RULES.waterwayHarborTradeShare
       : ELEMENT_RULES.harborTradeShare,

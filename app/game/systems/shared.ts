@@ -18,7 +18,7 @@ export interface RealmAccountingDraft {
 }
 
 export function emptyStructureCounts(): StructureCounts {
-  return { city: 0, fort: 0, factory: 0, harbor: 0 };
+  return { city: 0, fort: 0, factory: 0, harbor: 0, plant: 0, skyport: 0 };
 }
 
 export function defenseMultiplier(

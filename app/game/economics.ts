@@ -28,6 +28,8 @@ export function createEconomyLedger(): EconomyLedger {
     fort: { spent: 0, earned: 0, runs: 0 },
     factory: { spent: 0, earned: 0, runs: 0 },
     harbor: { spent: 0, earned: 0, runs: 0 },
+    plant: { spent: 0, earned: 0, runs: 0 },
+    skyport: { spent: 0, earned: 0, runs: 0 },
   };
 }
 
@@ -38,6 +40,8 @@ export function cloneEconomyLedger(ledger: EconomyLedger): EconomyLedger {
     fort: { ...ledger.fort },
     factory: { ...ledger.factory },
     harbor: { ...ledger.harbor },
+    plant: { ...ledger.plant },
+    skyport: { ...ledger.skyport },
   };
 }
 
@@ -80,7 +84,7 @@ export interface Viability {
 /** One player's verdict on each kind of building. */
 export function viabilityFor(state: WorldState, owner: PlayerId): Viability[] {
   const faction = state.factions[owner]!;
-  const structures: StructureType[] = ["city", "factory", "harbor", "fort"];
+  const structures: StructureType[] = ["city", "factory", "harbor", "plant", "skyport", "fort"];
   return structures.map((structure) => {
     const entry = faction.economy[structure];
     const standing = faction.structures[structure];

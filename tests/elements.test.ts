@@ -14,10 +14,11 @@ import {
   deriveDominantBase,
   elementMultiplier,
   realmMatchup,
-  seaHostShare,
   sharedTradeForms,
   tradeFormIncomeMultiplier,
+  tradeHostShare,
   tradesBy,
+  VEHICLE_FORM,
 } from "../app/game/elements";
 import { ELEMENT_RULES, TRADE_RULES } from "../app/game/rules";
 import type { ElementId, TradeForm, WorldState } from "../app/game/types";
@@ -310,13 +311,13 @@ test("resonance counts shared forms symmetrically", () => {
   }
 });
 
-test("sea host shares: resonance beats a stranger, alliance still pays best", () => {
-  assert.equal(seaHostShare(0, false), TRADE_RULES.foreignHostShare);
-  assert.equal(seaHostShare(1, false), ELEMENT_RULES.resonantHostShareOne);
-  assert.equal(seaHostShare(2, false), ELEMENT_RULES.resonantHostShareTwo);
+test("host shares: resonance beats a stranger, alliance still pays best", () => {
+  assert.equal(tradeHostShare(0, false), TRADE_RULES.foreignHostShare);
+  assert.equal(tradeHostShare(1, false), ELEMENT_RULES.resonantHostShareOne);
+  assert.equal(tradeHostShare(2, false), ELEMENT_RULES.resonantHostShareTwo);
   // Allied standing outbids every resonance level.
   for (const shared of [0, 1, 2]) {
-    assert.equal(seaHostShare(shared, true), TRADE_RULES.alliedHostShare);
+    assert.equal(tradeHostShare(shared, true), TRADE_RULES.alliedHostShare);
   }
   // The rate ladder is strictly ordered, so each step genuinely rewards.
   assert.ok(TRADE_RULES.foreignHostShare < ELEMENT_RULES.resonantHostShareOne);
@@ -324,40 +325,69 @@ test("sea host shares: resonance beats a stranger, alliance still pays best", ()
   assert.ok(ELEMENT_RULES.resonantHostShareTwo < TRADE_RULES.alliedHostShare);
 });
 
+test("every carrier's vehicle trades by exactly its own form", () => {
+  assert.deepEqual(VEHICLE_FORM, {
+    train: "land",
+    ship: "waterway",
+    pulse: "energy",
+    flyer: "airborne",
+  });
+  // Four kinds, four forms, nothing shared: each form owns one carrier.
+  assert.equal(new Set(Object.values(VEHICLE_FORM)).size, 4);
+});
+
 test("construction affinity leans a realm toward the carriers it holds", () => {
   // A waterway realm reaches for harbors hardest and wants the raised share.
   assert.deepEqual(buildAffinityOf("tide"), {
     city: 1,
     trade: ELEMENT_RULES.buildAffinity.harbor,
+    plant: 0,
+    skyport: 0,
     harborShare: ELEMENT_RULES.waterwayHarborTradeShare,
     harborCap: ELEMENT_RULES.waterwayHarborTradeCap,
   });
-  // An energy realm reaches for factories at the gentler factory lean.
+  // An energy realm reaches for the plants only it may raise.
   assert.deepEqual(buildAffinityOf("ember"), {
     city: 1,
-    trade: ELEMENT_RULES.buildAffinity.factory,
+    trade: 1,
+    plant: ELEMENT_RULES.buildAffinity.plant,
+    skyport: 0,
     harborShare: ELEMENT_RULES.harborTradeShare,
     harborCap: ELEMENT_RULES.harborTradeCap,
   });
-  // A land realm lets rail-laying trade buildings jump its city queue.
+  // A land realm lets road-laying trade buildings jump its city queue.
   assert.deepEqual(buildAffinityOf("stone"), {
     city: ELEMENT_RULES.buildAffinity.city,
     trade: 1,
+    plant: 0,
+    skyport: 0,
     harborShare: ELEMENT_RULES.harborTradeShare,
     harborCap: ELEMENT_RULES.harborTradeCap,
   });
-  // Airborne has no carrier: gale's program is exactly the neutral one.
+  // An airborne realm reaches for its skyports and nothing exclusive else.
   assert.deepEqual(buildAffinityOf("gale"), {
-    city: 1, trade: 1,
+    city: 1,
+    trade: 1,
+    plant: 0,
+    skyport: ELEMENT_RULES.buildAffinity.skyport,
     harborShare: ELEMENT_RULES.harborTradeShare,
     harborCap: ELEMENT_RULES.harborTradeCap,
   });
-  // A compound holding both trade carriers takes the stronger lean, and the
-  // raised harbor share follows the waterway form wherever it appears.
+  // Compounds compose their parents' leans, and the raised harbor share
+  // follows the waterway form wherever it appears.
   assert.equal(buildAffinityOf("steam").trade, ELEMENT_RULES.buildAffinity.harbor);
+  assert.equal(buildAffinityOf("steam").plant, ELEMENT_RULES.buildAffinity.plant);
   assert.equal(buildAffinityOf("steam").harborShare, ELEMENT_RULES.waterwayHarborTradeShare);
-  assert.equal(buildAffinityOf("magma").trade, ELEMENT_RULES.buildAffinity.factory);
+  assert.equal(buildAffinityOf("magma").plant, ELEMENT_RULES.buildAffinity.plant);
   assert.equal(buildAffinityOf("magma").city, ELEMENT_RULES.buildAffinity.city);
   assert.equal(buildAffinityOf("grove").trade, ELEMENT_RULES.buildAffinity.harbor);
   assert.equal(buildAffinityOf("grove").city, ELEMENT_RULES.buildAffinity.city);
+  assert.equal(buildAffinityOf("ice").skyport, ELEMENT_RULES.buildAffinity.skyport);
+  // The exclusive carriers stay gated: no element without the form reaches
+  // for a plant or skyport at any weight.
+  for (const element of ELEMENT_SPACE) {
+    const affinity = buildAffinityOf(element);
+    assert.equal(affinity.plant > 0, tradesBy(element, "energy"), `${element} plant gate`);
+    assert.equal(affinity.skyport > 0, tradesBy(element, "airborne"), `${element} skyport gate`);
+  }
 });

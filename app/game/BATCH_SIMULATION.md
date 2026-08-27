@@ -56,7 +56,7 @@ not inflate the world's total developed-city count.
 
 - treasury, current income and cumulative nominal passive income;
 - infrastructure, warship and naval spending;
-- train/ship owner income and foreign-host income;
+- convoy/ship/pulse/flyer owner income and foreign-host income;
 - domestic and foreign station stops;
 - completed train and ship journeys;
 - trade-income-to-construction-spend ratio;

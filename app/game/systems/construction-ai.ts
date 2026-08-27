@@ -11,6 +11,7 @@ import {
   isFrontierCell,
 } from "../grid";
 import {
+  ELEMENT_RULES,
   FORT_RADIUS,
   TERRAIN_RULES,
   TRADE_RULES,
@@ -87,7 +88,7 @@ function buildIndex(state: SimulationContext["state"]): BuildIndex {
     if (!owned) {
       owned = [];
       cellsByOwner.set(owner, owned);
-      structuresByOwner.set(owner, { city: [], fort: [], factory: [], harbor: [] });
+      structuresByOwner.set(owner, { city: [], fort: [], factory: [], harbor: [], plant: [], skyport: [] });
     }
     owned.push(index);
     if (cell.structure) structuresByOwner.get(owner)![cell.structure].push(index);
@@ -96,7 +97,7 @@ function buildIndex(state: SimulationContext["state"]): BuildIndex {
 }
 
 const NO_STRUCTURES: Record<StructureType, number[]> = {
-  city: [], fort: [], factory: [], harbor: [],
+  city: [], fort: [], factory: [], harbor: [], plant: [], skyport: [],
 };
 
 function vulnerableBoundaryCells(context: SimulationContext, owner: PlayerId): number[] {
@@ -150,7 +151,10 @@ function bestBuildTile(
     if (structure === "harbor" && !cell.coastal) continue;
 
     const frontier = isFrontierCell(state, index);
-    if ((structure === "city" || structure === "factory") && frontier && !stackingCity) continue;
+    if (
+      (structure === "city" || structure === "factory" || structure === "plant" || structure === "skyport")
+      && frontier && !stackingCity
+    ) continue;
 
     // Only forts and stacking cities read the threat distance, and `vulnerable`
     // is every boundary cell of every theater aimed at this player -- thousands
@@ -208,6 +212,32 @@ function bestBuildTile(
       score += 3 + TERRAIN_RULES[cell.terrain].goldYield * 0.35;
       score += nearestDistance(context, index, ownCities) < 8 ? 1.2 : 0;
     }
+    if (structure === "plant") {
+      // A plant is dead wire without a station in conduit reach, so it sits
+      // in the thick of its own network and spaces itself from its siblings
+      // roughly a conduit apart.
+      const nearestStation = Math.min(
+        nearestDistance(context, index, ownCities),
+        nearestDistance(context, index, ownFactories),
+      );
+      if (nearestStation > TRADE_RULES.conduitRadius * 0.85) continue;
+      score += TERRAIN_RULES[cell.terrain].goldYield * 0.4;
+      score += Math.max(0, 4.5 - nearestStation * 0.9);
+      const nearestPlant = nearestDistance(context, index, ownSites.plant);
+      score += Number.isFinite(nearestPlant)
+        ? Math.max(0, 3 - Math.abs(nearestPlant - TRADE_RULES.conduitRadius) * 0.5)
+        : 0;
+    }
+    if (structure === "skyport") {
+      // Skyports serve people and want the world: beside a city, far from
+      // each other, because a flight shorter than the minimum flies nowhere.
+      const nearestCity = nearestDistance(context, index, ownCities);
+      score += nearestCity < 5 ? 2.2 - nearestCity * 0.3 : 0;
+      const nearestSkyport = nearestDistance(context, index, ownSites.skyport);
+      score += Number.isFinite(nearestSkyport)
+        ? clamp(nearestSkyport - TRADE_RULES.minimumFlightDistance, -4, 4) * 0.8
+        : 1.5;
+    }
     if (structure === "fort") {
       const nearbyInfrastructure = cellsWithin(
         state,
@@ -256,6 +286,17 @@ function desiredInfrastructure(
   const desiredCities = clamp(Math.ceil((physicalTerritory / 8) * cityQuota), 2, 90);
   const desiredTrade = clamp(Math.ceil(desiredCities * 0.8 * tradeQuota), 2, 100);
   const desiredHarbors = Math.min(20, Math.ceil(desiredTrade * affinity.harborShare));
+  // The exclusive carriers: only a realm holding the form wants any at all,
+  // which the zero affinity weight already encodes.
+  const desiredPlants = affinity.plant > 0
+    ? Math.min(ELEMENT_RULES.plantCap, Math.max(1, Math.ceil(desiredTrade * ELEMENT_RULES.plantTradeShare)))
+    : 0;
+  const desiredSkyports = affinity.skyport > 0
+    ? Math.min(
+      ELEMENT_RULES.skyportCap,
+      Math.max(ELEMENT_RULES.skyportFloor, Math.ceil(counts.city / ELEMENT_RULES.skyportCityDivisor)),
+    )
+    : 0;
   const tradeBuildings = counts.factory + counts.harbor;
   const vulnerable = vulnerableBoundaryCells(context, owner);
   const desiredForts = Math.min(18, Math.max(0, Math.ceil((vulnerable.length / 18) * fortQuota)));
@@ -267,8 +308,23 @@ function desiredInfrastructure(
 
   const cityShortfall = Math.max(0, (desiredCities - counts.city) / desiredCities);
   const tradeShortfall = Math.max(0, (desiredTrade - tradeBuildings) / desiredTrade);
-  if (cityShortfall <= 0 && tradeShortfall <= 0) return null;
-  if (cityShortfall * affinity.city >= tradeShortfall * affinity.trade) return "city";
+  const plantShortfall = desiredPlants > 0
+    ? Math.max(0, (desiredPlants - counts.plant) / desiredPlants)
+    : 0;
+  const skyportShortfall = desiredSkyports > 0
+    ? Math.max(0, (desiredSkyports - counts.skyport) / desiredSkyports)
+    : 0;
+  // Every program competes through its weighted shortfall, so the trade-form
+  // affinity composes with the quota-driven appetites instead of gating them.
+  const cityPriority = cityShortfall * affinity.city;
+  const tradePriority = tradeShortfall * affinity.trade;
+  const plantPriority = plantShortfall * affinity.plant;
+  const skyportPriority = skyportShortfall * affinity.skyport;
+  const best = Math.max(cityPriority, tradePriority, plantPriority, skyportPriority);
+  if (best <= 0) return null;
+  if (plantPriority === best) return "plant";
+  if (skyportPriority === best) return "skyport";
+  if (cityPriority >= tradePriority) return "city";
   if (
     counts.factory >= 3 &&
     counts.harbor < desiredHarbors &&
@@ -327,9 +383,10 @@ export class ConstructionAiSystem implements SimulationSystem {
           tileIndex = budget >= cost ? findTile(desired) : null;
         }
 
-        // An inland realm should not stall its whole program because no harbor
-        // site is currently available; continue growing the rail network.
-        if (tileIndex === null && desired === "harbor") {
+        // A realm should not stall its whole program because no harbor,
+        // plant or skyport site is currently available; continue growing the
+        // land network instead.
+        if (tileIndex === null && (desired === "harbor" || desired === "plant" || desired === "skyport")) {
           desired = "factory";
           cost = nextStructureCost(desired, shadowCounts);
           tileIndex = budget >= cost ? findTile(desired) : null;

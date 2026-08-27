@@ -15,16 +15,21 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded when trade forms went live on their carriers. An energy realm's
- * trains now earn more for their owner, a land realm's stations host foreign
- * stops for more, a waterway realm's ships price the same voyage higher, sea
- * hosting pays a resonant share between realms whose expressed elements trade
- * the same ways, and construction leans toward the carriers a realm holds —
- * a waterway realm wants a third of its trade buildings to be harbors and
- * reaches for them first. Incomes and build choices shift from the first
- * launches and construction windows, so every world digest moves, and the
- * cell digests move with them: richer treasuries build sooner, and stations
- * rise on different ground.
+ * Re-recorded when every trade form gained a carrier of its own. Land keeps
+ * the road-and-rail network — its vehicles are convoys now, and the land
+ * form's reward rides them; the waterway keeps its ships; energy realms
+ * raise power plants that string straight conduits and pulse flat-value
+ * deliveries down them; airborne realms raise skyports and fly freight
+ * point to point over anything. Two new structures enter the shared trade
+ * ladder and the exclusive carriers gate on the expressed form, so
+ * construction programs, treasuries and the map itself all diverge from the
+ * first planning window — every digest moves, and gale finally trades.
+ *
+ * Before that, re-recorded when trade forms first went live riding the then-existing
+ * carriers: trains earned the energy reward, stations the land reward, ships
+ * the waterway reward, sea hosting paid a resonant share between realms
+ * whose expressed elements trade the same ways, and construction leaned
+ * toward the carriers a realm holds.
  *
  * Before that, re-recorded for the four-family roster and the live element system. The
  * founding roster reworked to twelve players in each of four families — grove
@@ -96,25 +101,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "8dd3111b174769b3aa8a801681232d03", cells: "1b5951d693443dc3" },
-      { tick: 200, world: "bd862d0391bfa667dbd8cd59b50c5a12", cells: "ca1200acd15454c1" },
-      { tick: 600, world: "b0e4835ad861dc82012d1022fc0d67f5", cells: "490190e5f1fd303e", deep: true },
+      { tick: 60, world: "4452b3ed11210df52a492352249e3330", cells: "1b5951d693443dc3" },
+      { tick: 200, world: "4c4d5e232f615fcacfeecdc5abd1c496", cells: "e2f24edbbb301e7d" },
+      { tick: 600, world: "1501adf33aec24e6654fbd9e86b80f34", cells: "91c3a0cf0ab73793", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "5c981faad9aca4645f4f857b865c9ae2", cells: "f229054926890556" },
-      { tick: 200, world: "e4a4ff35600dae3e031acbdc83b7b0e9", cells: "3dbcf1a12739a699" },
-      { tick: 600, world: "9d57908868be1e388046828ccba9526d", cells: "b5f8f1cb9be0cdc6", deep: true },
+      { tick: 60, world: "0362f855f9e798abe2582fc59d7580d4", cells: "ae4878a1aa128779" },
+      { tick: 200, world: "14b28d1b36f291075e15c77100aaad1e", cells: "a0e5279dee3180ff" },
+      { tick: 600, world: "5346ba781f1c9f9d667cb639d8ffb21e", cells: "9a4572bc0facc0f6", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "ce2a32e02619877e1d8e3cbc741512f4", cells: "952d20dafddadc3f" },
-      { tick: 200, world: "b5ee0e21722ed8fc90662d3810cfa9c8", cells: "441770fdd7af70fc" },
-      { tick: 600, world: "61c7c2f2674ca06ea758cd2094605f01", cells: "50a5ef2c65c657b2", deep: true },
+      { tick: 60, world: "ca23bb9a7bb1d7da4b0ce3af260000e5", cells: "503f482935f15882" },
+      { tick: 200, world: "d5e41a1f212b553bcc620344e94efcfc", cells: "f278fc5eacad9acc" },
+      { tick: 600, world: "62de19b6815125728fd5b6b2703bfb0c", cells: "af1ad94167eabc03", deep: true },
     ],
   },
 ];

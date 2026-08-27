@@ -96,7 +96,8 @@ const checkpointSummary = checkpointTicks.map((tick) => {
   });
   const players = samples.flatMap((sample) => PLAYER_ORDER.map((id) => sample.players[id]));
   const structureSpend = mean(samples.map((sample) => sample.structureSpend));
-  const tradeIncome = mean(samples.map((sample) => sample.trainIncome + sample.shipIncome));
+  const tradeIncome = mean(samples.map((sample) =>
+    sample.trainIncome + sample.shipIncome + sample.pulseIncome + sample.flyerIncome));
   const ratioOfLifetime = (
     numerator: (player: (typeof players)[number]) => number,
   ) => {
@@ -161,6 +162,8 @@ const checkpointSummary = checkpointTicks.map((tick) => {
     nominalPassiveIncomePerWorld: rounded(mean(samples.map((sample) => sample.nominalPassiveIncome))),
     trainIncomePerWorld: rounded(mean(samples.map((sample) => sample.trainIncome))),
     shipIncomePerWorld: rounded(mean(samples.map((sample) => sample.shipIncome))),
+    pulseIncomePerWorld: rounded(mean(samples.map((sample) => sample.pulseIncome))),
+    flyerIncomePerWorld: rounded(mean(samples.map((sample) => sample.flyerIncome))),
     resonantShipVoyagesPerWorld: rounded(mean(samples.map((sample) => PLAYER_ORDER.reduce(
       (sum, id) => sum + sample.players[id].cumulative.resonantVoyagesHosted,
       0,
@@ -175,7 +178,9 @@ const checkpointSummary = checkpointTicks.map((tick) => {
           const trade = sample.players[id].cumulative;
           return sum
             + trade.trainIncomeEarned + trade.trainIncomeHosted
-            + trade.shipIncomeEarned + trade.shipIncomeHosted;
+            + trade.shipIncomeEarned + trade.shipIncomeHosted
+            + trade.pulseIncomeEarned + trade.pulseIncomeHosted
+            + trade.flyerIncomeEarned + trade.flyerIncomeHosted;
         }, 0) / Math.max(1, members.length);
       }))),
     ])),
@@ -211,6 +216,8 @@ const checkpointSummary = checkpointTicks.map((tick) => {
     activeCampaigns: rounded(mean(samples.map((sample) => sample.activeCampaigns)), 2),
     activeTrains: rounded(mean(samples.map((sample) => sample.activeTrains)), 1),
     activeShips: rounded(mean(samples.map((sample) => sample.activeShips)), 1),
+    activePulses: rounded(mean(samples.map((sample) => sample.activePulses)), 1),
+    activeFlyers: rounded(mean(samples.map((sample) => sample.activeFlyers)), 1),
   };
 });
 

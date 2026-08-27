@@ -559,6 +559,24 @@ function drawTradeRoutes(
     const path = route.pathIndices.length > 1
       ? route.pathIndices
       : [route.startIndex, route.endIndex];
+    if (route.kind === "conduit") {
+      // A conduit is a strung line, not a laid road: one straight bright
+      // wire with a faint dark shadow under it.
+      const [sx, sy] = centerFor(path[0]!, state, shape);
+      const [ex, ey] = centerFor(path[path.length - 1]!, state, shape);
+      context.beginPath();
+      context.moveTo(sx, sy);
+      context.lineTo(ex, ey);
+      context.setLineDash([]);
+      context.strokeStyle = "rgba(40, 52, 46, 0.4)";
+      context.lineWidth = 2;
+      context.stroke();
+      context.setLineDash([1.6, 2.6]);
+      context.strokeStyle = "rgba(151, 227, 255, 0.9)";
+      context.lineWidth = 1.1;
+      context.stroke();
+      continue;
+    }
     // A railway reads as one: a darker roadbed underneath, then a bright
     // dashed running line over it, both following the same smoothed curve.
     context.beginPath();
@@ -697,7 +715,14 @@ function drawTradeVehicles(
     context.lineWidth = 1;
     context.beginPath();
     if (vehicle.kind === "train") context.roundRect(-5, -3, 10, 6, 2);
-    else {
+    else if (vehicle.kind === "pulse") context.arc(0, 0, 2.6, 0, Math.PI * 2);
+    else if (vehicle.kind === "flyer") {
+      context.moveTo(7, 0);
+      context.lineTo(-5, -4.5);
+      context.lineTo(-2.5, 0);
+      context.lineTo(-5, 4.5);
+      context.closePath();
+    } else {
       context.moveTo(6, 0);
       context.lineTo(-4, -3.5);
       context.lineTo(-2, 3.5);
@@ -1274,6 +1299,8 @@ export function WorldMap({
   const truces = Object.values(state.relations).filter((relation) => relation.status === "truce").length;
   const trains = state.tradeVehicles.filter((vehicle) => vehicle.kind === "train").length;
   const ships = state.tradeVehicles.filter((vehicle) => vehicle.kind === "ship").length;
+  const pulses = state.tradeVehicles.filter((vehicle) => vehicle.kind === "pulse").length;
+  const flyers = state.tradeVehicles.filter((vehicle) => vehicle.kind === "flyer").length;
   const hoveredPosition = hoveredCell === null
     ? null
     : cellCoordinates(hoveredCell, state.config.width);
@@ -1339,7 +1366,7 @@ export function WorldMap({
           <span><i className="legend-peace" /> border</span>
           <span><i className="legend-war" /> war front</span>
           <span><i className="legend-alliance" /> allied border</span>
-          <span><i className="legend-trade" /> trains {trains}/300 · ships {ships}/1000</span>
+          <span><i className="legend-trade" /> convoys {trains} · ships {ships} · pulses {pulses} · flyers {flyers}</span>
         </div>
       )}
       <div className="map-hint" aria-hidden="true">

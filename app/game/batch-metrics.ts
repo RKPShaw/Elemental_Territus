@@ -35,13 +35,19 @@ export interface PlayerCumulativeMetrics {
   trainIncomeHosted: number;
   shipIncomeEarned: number;
   shipIncomeHosted: number;
-  /** Foreign voyages this realm hosted at a trade-form-resonant share. */
+  pulseIncomeEarned: number;
+  pulseIncomeHosted: number;
+  flyerIncomeEarned: number;
+  flyerIncomeHosted: number;
+  /** Foreign deliveries this realm hosted at a trade-form-resonant share. */
   resonantVoyagesHosted: number;
   domesticStopsServed: number;
   foreignStopsServed: number;
   foreignStopsHosted: number;
   trainsCompleted: number;
   shipsCompleted: number;
+  pulsesCompleted: number;
+  flyersCompleted: number;
   warsDeclared: number;
   peaceTreaties: number;
   alliancesOffered: number;
@@ -105,6 +111,8 @@ export interface PlayerBalanceSnapshot {
   activeTheaters: number;
   activeTrains: number;
   activeShips: number;
+  activePulses: number;
+  activeFlyers: number;
   activeWars: number;
   activeAlliances: number;
   cumulative: PlayerCumulativeMetrics;
@@ -141,13 +149,18 @@ export interface WorldBalanceSnapshot {
   nominalPassiveIncome: number;
   trainIncome: number;
   shipIncome: number;
+  pulseIncome: number;
+  flyerIncome: number;
   activeWars: number;
   activeAlliances: number;
   activeCampaigns: number;
   activeTheaters: number;
   activeTrains: number;
   activeShips: number;
+  activePulses: number;
+  activeFlyers: number;
   railEdges: number;
+  conduitEdges: number;
   /** Living realms by current strategic focus. */
   focusCounts: Record<StrategicDomain, number>;
   eventCounts: Record<string, number>;
@@ -157,7 +170,7 @@ export interface WorldBalanceSnapshot {
 }
 
 function emptyStructures(): StructureCounts {
-  return { city: 0, fort: 0, factory: 0, harbor: 0 };
+  return { city: 0, fort: 0, factory: 0, harbor: 0, plant: 0, skyport: 0 };
 }
 
 function emptyFocusCounts(): Record<StrategicDomain, number> {
@@ -182,12 +195,18 @@ function emptyPlayerMetrics(): PlayerCumulativeMetrics {
     trainIncomeHosted: 0,
     shipIncomeEarned: 0,
     shipIncomeHosted: 0,
+    pulseIncomeEarned: 0,
+    pulseIncomeHosted: 0,
+    flyerIncomeEarned: 0,
+    flyerIncomeHosted: 0,
     resonantVoyagesHosted: 0,
     domesticStopsServed: 0,
     foreignStopsServed: 0,
     foreignStopsHosted: 0,
     trainsCompleted: 0,
     shipsCompleted: 0,
+    pulsesCompleted: 0,
+    flyersCompleted: 0,
     warsDeclared: 0,
     peaceTreaties: 0,
     alliancesOffered: 0,
@@ -225,7 +244,8 @@ function realmFromTarget(event: WorldReportEvent): PlayerId | null {
 
 function structureFrom(event: WorldReportEvent): StructureType | null {
   const structure = event.facts.structure;
-  return structure === "city" || structure === "fort" || structure === "factory" || structure === "harbor"
+  return structure === "city" || structure === "fort" || structure === "factory"
+    || structure === "harbor" || structure === "plant" || structure === "skyport"
     ? structure
     : null;
 }
@@ -333,15 +353,26 @@ export class BatchMetricsCollector {
       }
     }
     if (event.kind === "trade.journey-completed" && actor) {
-      if (event.facts.vehicleKind === "train") this.players[actor].trainsCompleted += 1;
-      if (event.facts.vehicleKind === "ship") {
+      const kind = event.facts.vehicleKind;
+      if (kind === "train") this.players[actor].trainsCompleted += 1;
+      if (kind === "ship" || kind === "pulse" || kind === "flyer") {
         const ownerIncome = Number(event.facts.income ?? 0);
-        this.players[actor].shipsCompleted += 1;
-        this.players[actor].shipIncomeEarned += ownerIncome;
+        if (kind === "ship") {
+          this.players[actor].shipsCompleted += 1;
+          this.players[actor].shipIncomeEarned += ownerIncome;
+        } else if (kind === "pulse") {
+          this.players[actor].pulsesCompleted += 1;
+          this.players[actor].pulseIncomeEarned += ownerIncome;
+        } else {
+          this.players[actor].flyersCompleted += 1;
+          this.players[actor].flyerIncomeEarned += ownerIncome;
+        }
         this.tradeIncomeThisTick[actor] += ownerIncome;
         if (target && target !== actor) {
           const hostIncome = Number(event.facts.hostIncome ?? 0);
-          this.players[target].shipIncomeHosted += hostIncome;
+          if (kind === "ship") this.players[target].shipIncomeHosted += hostIncome;
+          else if (kind === "pulse") this.players[target].pulseIncomeHosted += hostIncome;
+          else this.players[target].flyerIncomeHosted += hostIncome;
           this.tradeIncomeThisTick[target] += hostIncome;
           if (Number(event.facts.sharedForms ?? 0) > 0) {
             this.players[target].resonantVoyagesHosted += 1;
@@ -468,6 +499,8 @@ export class BatchMetricsCollector {
         activeTheaters: state.theaters.filter((theater) => theater.attacker === id && theater.staleRefreshes === 0).length,
         activeTrains: state.tradeVehicles.filter((vehicle) => vehicle.owner === id && vehicle.kind === "train").length,
         activeShips: state.tradeVehicles.filter((vehicle) => vehicle.owner === id && vehicle.kind === "ship").length,
+        activePulses: state.tradeVehicles.filter((vehicle) => vehicle.owner === id && vehicle.kind === "pulse").length,
+        activeFlyers: state.tradeVehicles.filter((vehicle) => vehicle.owner === id && vehicle.kind === "flyer").length,
         activeWars: PLAYER_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "war").length,
         activeAlliances: PLAYER_ORDER.filter((other) => other !== id && getRelation(state, id, other).status === "truce").length,
         cumulative: cloneCumulative(this.players[id]),
@@ -531,6 +564,8 @@ export class BatchMetricsCollector {
       nominalPassiveIncome: total((metrics) => metrics.nominalPassiveIncome),
       trainIncome: total((metrics) => metrics.trainIncomeEarned + metrics.trainIncomeHosted),
       shipIncome: total((metrics) => metrics.shipIncomeEarned + metrics.shipIncomeHosted),
+      pulseIncome: total((metrics) => metrics.pulseIncomeEarned + metrics.pulseIncomeHosted),
+      flyerIncome: total((metrics) => metrics.flyerIncomeEarned + metrics.flyerIncomeHosted),
       activeWars: Object.values(state.relations).filter(
         (relation) => relation.status === "war" && relation.parties.every((id) => state.factions[id].alive),
       ).length,
@@ -541,7 +576,10 @@ export class BatchMetricsCollector {
       activeTheaters: state.theaters.filter((theater) => theater.staleRefreshes === 0).length,
       activeTrains: state.tradeVehicles.filter((vehicle) => vehicle.kind === "train").length,
       activeShips: state.tradeVehicles.filter((vehicle) => vehicle.kind === "ship").length,
-      railEdges: state.tradeRoutes.length,
+      activePulses: state.tradeVehicles.filter((vehicle) => vehicle.kind === "pulse").length,
+      activeFlyers: state.tradeVehicles.filter((vehicle) => vehicle.kind === "flyer").length,
+      railEdges: state.tradeRoutes.filter((route) => route.kind === "rail").length,
+      conduitEdges: state.tradeRoutes.filter((route) => route.kind === "conduit").length,
       focusCounts,
       eventCounts: { ...this.eventCounts },
       firstEventTicks: { ...this.firstEventTicks },
