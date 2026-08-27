@@ -41,6 +41,8 @@ export interface PlayerCumulativeMetrics {
   flyerIncomeHosted: number;
   /** Foreign deliveries this realm hosted at a trade-form-resonant share. */
   resonantVoyagesHosted: number;
+  /** Enemy works this realm captured whose heritage it trades by natively. */
+  resonantCaptures: number;
   domesticStopsServed: number;
   foreignStopsServed: number;
   foreignStopsHosted: number;
@@ -200,6 +202,7 @@ function emptyPlayerMetrics(): PlayerCumulativeMetrics {
     flyerIncomeEarned: 0,
     flyerIncomeHosted: 0,
     resonantVoyagesHosted: 0,
+    resonantCaptures: 0,
     domesticStopsServed: 0,
     foreignStopsServed: 0,
     foreignStopsHosted: 0,
@@ -314,6 +317,9 @@ export class BatchMetricsCollector {
           this.players[target].citySitesLost += 1;
         }
       }
+    }
+    if (event.kind === "territory.resonant-capture" && actor) {
+      this.players[actor].resonantCaptures += 1;
     }
     if (event.kind === "military.warship-built" && actor) {
       this.players[actor].warshipSpend += Number(event.facts.cost ?? 0);

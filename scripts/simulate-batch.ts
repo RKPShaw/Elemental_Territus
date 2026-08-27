@@ -168,6 +168,10 @@ const checkpointSummary = checkpointTicks.map((tick) => {
       (sum, id) => sum + sample.players[id].cumulative.resonantVoyagesHosted,
       0,
     )))),
+    resonantCapturesPerWorld: rounded(mean(samples.map((sample) => PLAYER_ORDER.reduce(
+      (sum, id) => sum + sample.players[id].cumulative.resonantCaptures,
+      0,
+    )))),
     // The per-family income split: whether the trade-form rewards actually
     // land on the families that hold the forms.
     tradeIncomePerRealmByFamily: Object.fromEntries(ELEMENT_ORDER.map((element) => [

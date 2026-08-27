@@ -8,7 +8,12 @@ import {
   surroundingIndices,
 } from "../grid";
 import { cellRevision } from "../structure-index";
-import { sharedTradeForms, tradeFormIncomeMultiplier, tradeHostShare } from "../elements";
+import {
+  sharedTradeForms,
+  structurePayoutMultiplier,
+  tradeFormIncomeMultiplier,
+  tradeHostShare,
+} from "../elements";
 import { recordEarned } from "../economics";
 import { realmSubject } from "../reporting";
 import {
@@ -630,22 +635,35 @@ function payTrainStop(
     state.factions[vehicle.owner].expressedElement,
     "land",
   );
+  // Each leg also pays at the heritage efficiency of the structure that
+  // earned it: the dispatching factory for the convoy's owner, the station
+  // for its host. A factory captured away mid-journey prices no leg — its
+  // efficiency belongs to its new owner, not to this convoy's.
+  const sourceCell = state.cells[vehicle.sourceIndex]!;
+  const sourceEfficiency = sourceCell.owner === vehicle.owner
+    ? structurePayoutMultiplier(state, sourceCell)
+    : 1;
   const ownerIncome = (
     foreign
       ? TRADE_RULES.foreignTrainStopPayout
       : TRADE_RULES.domesticTrainStopPayout
-  ) * stationMultiplier * convoyMultiplier;
+  ) * stationMultiplier * convoyMultiplier * sourceEfficiency;
   addIncome(state, vehicle.owner, ownerIncome);
   // The train came from a factory, so the factory is what earned this.
   recordEarned(state, vehicle.owner, "factory", ownerIncome, 1);
   let hostIncome = 0;
   let stationMultiplierBonus = 1;
+  let hostEfficiency = 1;
   if (foreign) {
     stationMultiplierBonus = tradeFormIncomeMultiplier(
       state.factions[hostOwner].expressedElement,
       "land",
     );
-    hostIncome = TRADE_RULES.foreignTrainStopPayout * stationMultiplier * stationMultiplierBonus;
+    hostEfficiency = structurePayoutMultiplier(state, stop);
+    hostIncome = TRADE_RULES.foreignTrainStopPayout
+      * stationMultiplier
+      * stationMultiplierBonus
+      * hostEfficiency;
     addIncome(state, hostOwner, hostIncome);
     // The host earned it by having somewhere worth stopping, so it belongs to
     // the station that took the stop rather than to the visitor's factory.
@@ -671,6 +689,8 @@ function payTrainStop(
       allied,
       convoyBonus: convoyMultiplier > 1,
       stationBonus: stationMultiplierBonus > 1,
+      sourceEfficiency,
+      hostEfficiency,
       stationLevel: stop.structure === "city" ? stop.structureLevel : 1,
       stationMultiplier,
       stopNumber: vehicle.completedStops,
@@ -808,7 +828,14 @@ function updateVehicles(context: SimulationContext): void {
         : 0;
       const hostShare = vehicle.foreign ? tradeHostShare(sharedForms, vehicle.allied) : 0;
       if (vehicle.foreign) {
-        const hostIncome = vehicle.payout * hostShare;
+        // The receiving structure hosts at its heritage efficiency — unless
+        // it changed hands mid-voyage, in which case the delivery is still
+        // owed to the destination realm at par.
+        const endCell = state.cells[vehicle.endIndex]!;
+        const hostEfficiency = endCell.owner === vehicle.destinationOwner
+          ? structurePayoutMultiplier(state, endCell)
+          : 1;
+        const hostIncome = vehicle.payout * hostShare * hostEfficiency;
         vehicle.hostIncome += hostIncome;
         addIncome(state, vehicle.destinationOwner, hostIncome);
         // The receiving end earned it through whatever the delivery reached:
@@ -982,12 +1009,17 @@ function spawnShips(context: SimulationContext): void {
     const plannedTravelTicks = totalDistance / TRADE_RULES.shipVelocity;
     // Ships are the waterway carrier: a realm whose expressed element trades
     // by water sails the same voyage for more, priced at launch so the
-    // expected payout below is the payout the voyage delivers.
+    // expected payout below is the payout the voyage delivers. The harbor's
+    // heritage efficiency prices the voyage too — a captured port pays what
+    // its captor's history can wring from it.
     const waterwayMultiplier = tradeFormIncomeMultiplier(
       state.factions[owner].expressedElement,
       "waterway",
     );
-    const payout = plannedTravelTicks * TRADE_RULES.shipPayoutPerTravelTick * waterwayMultiplier;
+    const payout = plannedTravelTicks
+      * TRADE_RULES.shipPayoutPerTravelTick
+      * waterwayMultiplier
+      * structurePayoutMultiplier(state, state.cells[source]!);
     const vehicleId = `ship:${state.tick}:${source}:${destination}`;
     const vehicle: TradeVehicle = {
       id: vehicleId,
@@ -1135,7 +1167,9 @@ function spawnPulses(context: SimulationContext): void {
       state.factions[owner].expressedElement,
       "energy",
     );
-    const payout = TRADE_RULES.energyDeliveryPayout * energyMultiplier;
+    const payout = TRADE_RULES.energyDeliveryPayout
+      * energyMultiplier
+      * structurePayoutMultiplier(state, state.cells[source]!);
     const vehicle: TradeVehicle = {
       id: `pulse:${state.tick}:${source}:${link.endIndex}`,
       owner,
@@ -1221,7 +1255,10 @@ function spawnFlyers(context: SimulationContext): void {
       state.factions[owner].expressedElement,
       "airborne",
     );
-    const payout = plannedTravelTicks * TRADE_RULES.airPayoutPerTravelTick * airborneMultiplier;
+    const payout = plannedTravelTicks
+      * TRADE_RULES.airPayoutPerTravelTick
+      * airborneMultiplier
+      * structurePayoutMultiplier(state, state.cells[source]!);
     const vehicle: TradeVehicle = {
       id: `flyer:${state.tick}:${source}:${destination}`,
       owner,

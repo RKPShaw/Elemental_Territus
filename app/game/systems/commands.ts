@@ -535,6 +535,10 @@ export class CommandExecutionSystem implements SimulationSystem {
         } else {
           cell.structure = command.structure;
           cell.structureLevel = 1;
+          // Heritage is stamped at build and never cleared: added city levels
+          // develop the founders' work rather than rebuilding it, so only a
+          // fresh structure carries the builder's current expression.
+          cell.structureHeritage = actor.expressedElement;
           markCellsChanged(state);
         }
         actor.structures[command.structure] += 1;

@@ -2,11 +2,12 @@ import { markCellsChanged } from "../structure-index";
 import { openLens } from "../lenses";
 import { PLAYERS } from "../players";
 import { getRelation, isAtWar } from "../diplomacy";
-import { realmMatchup } from "../elements";
+import { ELEMENTS, heritageStanding, realmMatchup } from "../elements";
 import { ownedNeighborCount } from "../grid";
 import {
   CAMPAIGN_RULES,
   CLAIM_RULES,
+  ELEMENT_RULES,
   SETTLE_PREFERENCE_FLOOR,
   SETTLE_PREFERENCE_RANGE,
   DIPLOMACY_RULES,
@@ -74,6 +75,7 @@ function captureEnemyTile(
   if (tile.owner !== defender) return;
   const capturedStructure = tile.structure;
   const capturedStructureLevel = tile.structureLevel;
+  const capturedHeritage = tile.structureHeritage;
   const capturedCapital = tile.capitalOf === defender;
   tile.owner = campaign.attacker;
   markCellsChanged(state);
@@ -110,9 +112,44 @@ function captureEnemyTile(
         tileIndex,
         structure: capturedStructure,
         structureLevel: capturedStructureLevel,
+        heritage: capturedHeritage,
         campaignCaptures: campaign.captures,
       },
       summary: `${PLAYERS[campaign.attacker].realmName} captured a ${capturedStructure} belonging to ${PLAYERS[defender].realmName}.`,
+    });
+  }
+
+  // Resonant conquest: a captor whose expressed element trades the ways of
+  // the works it just took pulls a premium from them while the conquest is
+  // fresh (the window rides the tile's capturedAt — no second timer). Forts
+  // pay nothing, so a fort's heritage is history without a premium.
+  if (
+    capturedStructure &&
+    capturedStructure !== "fort" &&
+    capturedHeritage !== null &&
+    heritageStanding(state.factions[campaign.attacker], capturedHeritage) === "native"
+  ) {
+    context.report({
+      domain: "territory",
+      kind: "territory.resonant-capture",
+      importance: "notable",
+      storyKey: campaign.storyKey,
+      initiator: realmSubject(campaign.attacker),
+      targets: [structureSubject(capturedStructure, tileIndex, campaign.attacker), realmSubject(defender)],
+      participants: [campaignSubject(campaign)],
+      links: {
+        campaign: campaign.id,
+        structure: `${capturedStructure}:${tileIndex}`,
+        ...(theater ? { theater: theater.id } : {}),
+      },
+      facts: {
+        tileIndex,
+        structure: capturedStructure,
+        heritage: capturedHeritage,
+        bonus: ELEMENT_RULES.resonantCaptureBonus,
+        windowTicks: ELEMENT_RULES.resonantWindowTicks,
+      },
+      summary: `${PLAYERS[campaign.attacker].realmName} captured a ${capturedStructure} of ${ELEMENTS[capturedHeritage].name} heritage it trades by, and the fresh conquest pays a resonant premium.`,
     });
   }
 

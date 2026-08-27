@@ -15,7 +15,18 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded when every trade form gained a carrier of its own. Land keeps
+ * Re-recorded when infrastructure gained memory. Every structure now carries
+ * its builder's expressed element (structureHeritage — a new cell field, so
+ * every digest moves by construction) and pays its current owner by how well
+ * that owner's history covers the heritage's trade forms: native works pay
+ * in full, legacy history pays 0.9, an incompatible network 0.78, and a
+ * native captor pulls a resonant premium from freshly taken works while the
+ * conquest is fresh. Theaters weigh heritage-matching enemy structures
+ * higher, so wars now march for the networks their victors can run — city
+ * income, every carrier's payouts and campaign priorities all genuinely
+ * differ, and the map diverges with them.
+ *
+ * Before that, re-recorded when every trade form gained a carrier of its own. Land keeps
  * the road-and-rail network — its vehicles are convoys now, and the land
  * form's reward rides them; the waterway keeps its ships; energy realms
  * raise power plants that string straight conduits and pulse flat-value
@@ -106,25 +117,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "4452b3ed11210df52a492352249e3330", cells: "1b5951d693443dc3" },
-      { tick: 200, world: "c892b4cfa4738ea852a3cec51c8e8e61", cells: "051476656c69d348" },
-      { tick: 600, world: "0e7584e13feeaac15b9b7a57d9281d84", cells: "15e235474cc82db9", deep: true },
+      { tick: 60, world: "7daac289fe9477fd71d993084f421a46", cells: "c533d5f1040b2ff1" },
+      { tick: 200, world: "b05db30db2ef9883c82e370c354f4174", cells: "77cd275d067b3ff9" },
+      { tick: 600, world: "999a00c7614f5e05fde2462ae3ca06ec", cells: "eab8adb502d9fa68", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "0362f855f9e798abe2582fc59d7580d4", cells: "ae4878a1aa128779" },
-      { tick: 200, world: "fc967620a786a40482ec3f5634e3dfc4", cells: "0da3cb89f82aeb9f" },
-      { tick: 600, world: "d1a6bd8e3a6209fd6afa17de7f7fb132", cells: "04715bf665fc614e", deep: true },
+      { tick: 60, world: "d6541e4f0decbf041b5fc98148f90a65", cells: "7b32593869bea912" },
+      { tick: 200, world: "b22d9eabf4db293e6b24d750cacd6ee0", cells: "f6872f718ea82adf" },
+      { tick: 600, world: "31930bb7af5b741c695e11517f994af0", cells: "4d81f25e9737955e", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "ca23bb9a7bb1d7da4b0ce3af260000e5", cells: "503f482935f15882" },
-      { tick: 200, world: "e056c0b3eb1e90eab8f7fd576293d305", cells: "663c88f0e88eaa3a" },
-      { tick: 600, world: "e537a72c74cc07aa0e62a172db658f53", cells: "bf954ebabe5fe12e", deep: true },
+      { tick: 60, world: "d2bd4c7a64c29e8eb634937bb42fd116", cells: "d3e68b9445214f1d" },
+      { tick: 200, world: "37094f9aa274cd0be691df730848315d", cells: "e85bd3d4fa2f8088" },
+      { tick: 600, world: "8c6cb0e943c188b72f08f16c902f66eb", cells: "66215bb9de10b8ae", deep: true },
     ],
   },
 ];

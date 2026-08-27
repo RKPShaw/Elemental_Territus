@@ -287,11 +287,10 @@ export const ENEMY_TERRAIN_COST: Record<LandTerrainId, number> = {
  * 1.12× faster with the edge and 0.88× slower against it (1 ± matchupEdge —
  * the sums are float-exact, which the element tests pin), and the composed
  * 25×25 table grades every other pair from it. Combat reads that table live
- * through each realm's expressed element; ascension arithmetic and the
- * trade-form rewards below are live too. Only the infrastructure-memory
- * constants still wait on their phase. An elemental edge should matter
- * without ever deciding a battle by itself, so every multiplier here lives
- * inside the floor/ceiling band.
+ * through each realm's expressed element; ascension arithmetic, the
+ * trade-form rewards and the infrastructure-memory constants below are all
+ * live. An elemental edge should matter without ever deciding a battle by
+ * itself, so every multiplier here lives inside the floor/ceiling band.
  */
 export const ELEMENT_RULES = {
   /** Full counter advantage between two founding elements, as a share of 1. */
@@ -393,6 +392,11 @@ export const ELEMENT_RULES = {
   resonantCaptureBonus: 0.2,
   /** How long after capture the resonant window stays open. */
   resonantWindowTicks: 600,
+  /**
+   * Extra weight a theater gives an enemy structure whose heritage the
+   * attacker trades by: works it could run natively are worth marching for.
+   */
+  heritagePrizeWeight: 1.3,
 } as const;
 
 /**

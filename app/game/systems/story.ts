@@ -142,6 +142,9 @@ function applyMetrics(story: StoryArc, event: WorldReportEvent): void {
     case "territory.structure-captured":
       increment(story, "structuresCaptured");
       break;
+    case "territory.resonant-capture":
+      increment(story, "resonantCaptures");
+      break;
     case "territory.settlement-milestone":
       story.metrics.settledTiles = Math.max(
         story.metrics.settledTiles ?? 0,
