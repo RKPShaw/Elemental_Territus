@@ -1,4 +1,49 @@
-export type ElementId = "ember" | "tide" | "grove" | "stone" | "gale";
+/**
+ * Every elemental identity a realm can hold or one day express.
+ *
+ * The first five are the founding families that seat the roster. The rest are
+ * the compound (tier 2) and advanced (tier 3) elements of the wider space —
+ * declared and fully described in elements.ts, but dormant until the systems
+ * that award and express them arrive. Widening this union is deliberate: every
+ * Record<ElementId, …> site is then compiler-checked for the full space.
+ */
+export type ElementId =
+  | "ember"
+  | "tide"
+  | "grove"
+  | "stone"
+  | "gale"
+  | "steam"
+  | "magma"
+  | "lightning"
+  | "ice"
+  | "sand"
+  | "geyser"
+  | "tempest"
+  | "bloom"
+  | "mist"
+  | "mirage"
+  | "plasma"
+  | "ash"
+  | "obsidian"
+  | "glass"
+  | "spirit"
+  | "aurora"
+  | "lodestone"
+  | "amber"
+  | "fungus"
+  | "crystal";
+
+/** The four irreducible bases every element's character is composed from. */
+export type FoundingElementId = "ember" | "tide" | "stone" | "gale";
+
+export type ElementTier = 1 | 2 | 3;
+
+/**
+ * The four fundamental ways value moves through the world, one per founding
+ * base: ember trades energy, tide the waterways, stone the land, gale the air.
+ */
+export type TradeForm = "energy" | "waterway" | "land" | "airborne";
 
 /**
  * A competing power. Ten players share each element, so a player carries an
@@ -44,8 +89,25 @@ export interface ElementDefinition {
   color: string;
   softColor: string;
   deepColor: string;
+  /**
+   * The founding five's legacy counter cycle, still the live combat rule.
+   * Empty for the wider space; retired entirely when the composed matchup
+   * table takes over combat.
+   */
   strongAgainst: readonly ElementId[];
   weakAgainst: readonly ElementId[];
+  /** Where this element belongs in the three-tier space. */
+  tier: ElementTier;
+  /**
+   * What this element is made of: nothing for a founding base, two founding
+   * bases for tier 2, two tier-2 elements for tier 3. Composition — and from
+   * it dominance and counters — is derived from these, never hand-authored.
+   */
+  bases: readonly ElementId[];
+  /** The repeated base of a dominant tier 3; null for balanced and lower tiers. */
+  dominantBase: ElementId | null;
+  /** Native trade forms: one for tier 1, two thereafter. */
+  tradeForms: readonly TradeForm[];
   favoredTerrain: LandTerrainId;
   temperament: string;
 }
@@ -414,7 +476,15 @@ export interface ReportSubject {
   realmId?: PlayerId;
 }
 
-export type ReportFact = string | number | boolean | null | string[] | number[];
+export type ReportFact =
+  | string
+  | number
+  | boolean
+  | null
+  | string[]
+  | number[]
+  /** Small labelled tallies, such as a conqueror's per-element counts. */
+  | Record<string, number>;
 
 export interface WorldReportEvent {
   schemaVersion: 1;

@@ -127,6 +127,13 @@ function normalizeCellValue(field: (typeof CELL_FIELDS)[number], raw: unknown): 
 
 // Kept local rather than imported so the digest stays pinned to an explicit
 // ordering even if the engine's canonical ordering is later moved or renamed.
+//
+// ELEMENT_CODES predates the fifty-player roster: cell owners are player ids
+// now, so a numeric owner code would need a roster table, not this one. It is
+// unreachable for the current representation (owners are strings) and stays
+// only so an old struct-of-arrays capture still digests. Do not extend it for
+// the wider element space; new numeric codes (e.g. structure heritage) must
+// map against ELEMENT_SPACE order instead.
 const ELEMENT_CODES = ["ember", "tide", "grove", "stone", "gale"] as const;
 const TERRAIN_CODES = ["water", "farmland", "plains", "forest", "hills", "mountains"] as const;
 const STRUCTURE_CODES = ["city", "fort", "factory", "harbor"] as const;
