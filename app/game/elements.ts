@@ -1,4 +1,5 @@
 import { ELEMENT_RULES, TRADE_RULES, clamp } from "./rules";
+import { powerPayoutFactor } from "./powers";
 import type {
   Cell,
   ElementDefinition,
@@ -258,6 +259,11 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: ["steam", "magma"],
     dominantBase: "ember",
     tradeForms: ["energy", "waterway"],
+    // The bespoke mechanics carry an authored posture — accumulate quietly,
+    // release into conquest — instead of the blend of their constituents.
+    priorityProfile: {
+      economy: 0.18, conquest: 0.22, ascension: 0.06, diplomacy: 0.08, defense: 0.28, trade: 0.18,
+    },
     favoredTerrain: "hills",
     temperament: "Sits quiet over building pressure and erupts when it matters.",
   },
@@ -274,6 +280,9 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: ["steam", "lightning"],
     dominantBase: "ember",
     tradeForms: ["waterway", "airborne"],
+    priorityProfile: {
+      economy: 0.14, conquest: 0.32, ascension: 0.06, diplomacy: 0.12, defense: 0.12, trade: 0.24,
+    },
     favoredTerrain: "plains",
     temperament: "Gathers strength while moving and unravels when pinned down.",
   },
@@ -290,6 +299,9 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: ["steam", "grove"],
     dominantBase: "tide",
     tradeForms: ["waterway", "land"],
+    priorityProfile: {
+      economy: 0.3, conquest: 0.14, ascension: 0.06, diplomacy: 0.1, defense: 0.14, trade: 0.26,
+    },
     favoredTerrain: "farmland",
     temperament: "Turns frontier into heartland faster than the land can object.",
   },
@@ -338,6 +350,9 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: ["magma", "lightning"],
     dominantBase: "ember",
     tradeForms: ["energy", "airborne"],
+    priorityProfile: {
+      economy: 0.32, conquest: 0.18, ascension: 0.06, diplomacy: 0.08, defense: 0.12, trade: 0.24,
+    },
     favoredTerrain: "mountains",
     temperament: "Runs a few furious centers and dares its treasury to keep up.",
   },
@@ -370,6 +385,9 @@ export const ELEMENTS: Record<ElementId, ElementDefinition> = {
     bases: ["magma", "ice"],
     dominantBase: null,
     tradeForms: ["energy", "land"],
+    priorityProfile: {
+      economy: 0.18, conquest: 0.12, ascension: 0.06, diplomacy: 0.1, defense: 0.38, trade: 0.16,
+    },
     favoredTerrain: "mountains",
     temperament: "Lets attackers break themselves on edges it spent years honing.",
   },
@@ -791,16 +809,24 @@ export function heritageEfficiency(standing: HeritageStanding): number {
  * resonant window pulls a premium from the fresh conquest. The window reads
  * the cell's capturedAt, so a structure the captor itself raises on freshly
  * won ground briefly rides the same wave; that costs no second timestamp
- * and reads as building in the momentum of the conquest.
+ * and reads as building in the momentum of the conquest. On top of the
+ * heritage ladder rides the owner's elemental power: plasma runs everything
+ * furiously hot until containment fails, and the profile identities lean
+ * their payouts inside the band.
  */
 export function structurePayoutMultiplier(state: WorldState, cell: Cell): number {
-  if (cell.structure === null || cell.structureHeritage === null || cell.owner === null) return 1;
+  if (cell.structure === null || cell.owner === null) return 1;
+  const power = powerPayoutFactor(state, cell.owner);
+  if (cell.structureHeritage === null) return power;
   const standing = heritageStanding(state.factions[cell.owner], cell.structureHeritage);
-  if (standing !== "native") return heritageEfficiency(standing);
+  if (standing !== "native") return heritageEfficiency(standing) * power;
   const sinceCapture = state.tick - cell.capturedAt;
-  return cell.capturedAt >= 0 && sinceCapture >= 0 && sinceCapture < ELEMENT_RULES.resonantWindowTicks
+  const resonant = cell.capturedAt >= 0
+    && sinceCapture >= 0
+    && sinceCapture < ELEMENT_RULES.resonantWindowTicks
     ? 1 + ELEMENT_RULES.resonantCaptureBonus
     : 1;
+  return resonant * power;
 }
 
 export interface BuildAffinity {

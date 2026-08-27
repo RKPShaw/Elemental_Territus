@@ -6,6 +6,7 @@ import {
 } from "../grid";
 import { frontierTargets } from "../frontier";
 import { sharedTradeForms } from "../elements";
+import { powerDefenseFactor } from "../powers";
 import { smoothCellNoise } from "../random";
 import {
   CAMPAIGN_RULES,
@@ -90,7 +91,10 @@ export function conquestCostAt(
   if (target === "wilderness") return WILDERNESS_TERRAIN_COST[terrain];
   const fort = isFortProtected(state, index, target) ? 2 : 1;
   const city = cell.structure === "city" ? 1.1 : 1;
-  return ENEMY_TERRAIN_COST[terrain] * fort * city;
+  // The defender's elemental power prices its own ground: a geyser's banked
+  // pressure stiffens it, a venting geyser's or a shattered obsidian's lies
+  // soft, and the profile identities lean it inside the band.
+  return ENEMY_TERRAIN_COST[terrain] * fort * city * powerDefenseFactor(state, target);
 }
 
 function infrastructureValue(state: WorldState, index: number, viewer?: PlayerId): number {

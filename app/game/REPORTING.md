@@ -61,3 +61,11 @@ The first live resident of an extension namespace is `dynasty.element-ascended`:
 the ascension system reports each realm's rise to a compound (`major`) or
 advanced (`historic`) element under the story key `ascension:<realm>`, so a
 realm's whole climb through the tiers reads as one arc.
+
+The bespoke tier 3 mechanics report their dramatic moments in the same
+namespace, all under the story key `powers:<realm>` so one realm's mechanic
+reads as one arc: `dynasty.geyser-erupted` and `dynasty.obsidian-shattered`
+and `dynasty.plasma-containment-failed` are `major`, while
+`dynasty.tempest-crested` and `dynasty.bloom-overextended` are `notable`
+meter transitions. Each carries the expressed element and, for the windowed
+releases, the window length in ticks as facts.

@@ -400,6 +400,78 @@ export const ELEMENT_RULES = {
 } as const;
 
 /**
+ * The bespoke-mechanic balance surface.
+ *
+ * Five advanced elements carry a mechanic of their own (powers.ts); everything
+ * else in the tier 3 space expresses as a bounded stat profile at the same
+ * chokepoints. Two disciplines hold everywhere: every mechanic's strength is
+ * paired with a weakness that triggers mechanically from world state — no
+ * bespoke AI cleverness is ever required to break one — and every profile
+ * multiplier stays inside the ±profileBand band, so an identity colors a
+ * civilization without deciding its games.
+ */
+export const POWER_RULES = {
+  /**
+   * Geyser banks pressure while it holds still. A full bank stiffens its
+   * ground; launching a war with a full bank erupts — a surge window where
+   * its campaigns press harder — and then the empty system must refill,
+   * during which its ground is soft. The weakness is the refill, exactly as
+   * designed: catch a geyser realm just after it spent itself.
+   */
+  geyserBankTicks: 240,
+  geyserBankDefense: 0.12,
+  geyserSurgeAttack: 1.25,
+  geyserSurgeTicks: 90,
+  geyserVentDefense: 0.88,
+  geyserVentTicks: 240,
+  /**
+   * Tempest gathers momentum from conquest and unravels when pinned down:
+   * each enemy tile taken feeds the storm, every quiet tick bleeds it. The
+   * meter is the whole mechanic — the attack factor rides it continuously,
+   * and a crest is reported when the storm first gathers to strength.
+   */
+  tempestGainPerCapture: 0.04,
+  tempestDecayPerTick: 0.005,
+  tempestMomentumAttack: 0.15,
+  tempestCrestThreshold: 0.75,
+  /**
+   * Bloom turns frontier into heartland half again as fast — until the
+   * overgrowth outruns its people. The overextension check is automatic:
+   * below the enter ratio of home population the bonus pauses and the
+   * realm's ground softens, and only clear recovery re-arms it. Enter and
+   * exit differ so the check cannot flap on the boundary.
+   */
+  bloomSettleBonus: 1.5,
+  bloomOverextendedEnterRatio: 0.2,
+  bloomOverextendedExitRatio: 0.24,
+  bloomOverextendedDefense: 0.92,
+  /**
+   * Plasma runs its works furiously hot — everything its structures pay is
+   * multiplied — against a standing gold upkeep per structure. The failure
+   * state is mechanical: the tick the treasury cannot cover the burn,
+   * containment fails and the works limp below par for the outage window.
+   */
+  plasmaPayoutBoost: 1.6,
+  plasmaUpkeepPerStructure: 600,
+  plasmaFailureTicks: 300,
+  plasmaFailurePenalty: 0.7,
+  /**
+   * Obsidian lets attackers break themselves on its edges: extra attacker
+   * casualties on every push into its ground. Sustained siege accumulates
+   * fracture; at the limit the edge shatters — reflection off, ground soft —
+   * for the shatter window, then the honing starts over. Quiet ticks anneal
+   * fracture back down.
+   */
+  obsidianReflectCasualties: 1.35,
+  obsidianFractureTicks: 600,
+  obsidianAnnealTicks: 300,
+  obsidianShatterTicks: 180,
+  obsidianShatterDefense: 0.85,
+  /** Hard band around any stat-profile multiplier: identity, never destiny. */
+  profileBand: 0.15,
+} as const;
+
+/**
  * The strategic-priority surface.
  *
  * Every realm carries normalized weights over the strategic domains, seeded

@@ -1,13 +1,10 @@
 import {
-  FORT_RADIUS,
   TERRAIN_RULES,
   calculateTroopCap,
   clamp,
   normalizedCellArea,
-  normalizedCellLength,
 } from "../rules";
 import { committedTroopsFor } from "../campaigns";
-import { cellsWithin } from "../grid";
 import { PLAYER_ORDER } from "../players";
 import type { PlayerId, StructureCounts, WorldState } from "../types";
 
@@ -19,26 +16,6 @@ export interface RealmAccountingDraft {
 
 export function emptyStructureCounts(): StructureCounts {
   return { city: 0, fort: 0, factory: 0, harbor: 0, plant: 0, skyport: 0 };
-}
-
-export function defenseMultiplier(
-  state: WorldState,
-  tileIndex: number,
-  defender: PlayerId,
-): number {
-  const tile = state.cells[tileIndex]!;
-  let protection = 1;
-  const lengthScale = normalizedCellLength(state.config);
-  for (const nearby of cellsWithin(state, tileIndex, FORT_RADIUS / lengthScale)) {
-    const cell = state.cells[nearby]!;
-    if (cell.owner !== defender) continue;
-    if (cell.structure === "fort") {
-      protection = 2;
-      break;
-    }
-  }
-  const cityResistance = tile.structure === "city" ? 1.1 : 1;
-  return TERRAIN_RULES[tile.terrain].defenseCost * protection * cityResistance;
 }
 
 export function recalculateRealm(state: WorldState, id: PlayerId): void {

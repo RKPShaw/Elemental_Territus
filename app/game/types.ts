@@ -181,6 +181,26 @@ export interface Cell {
   structureHeritage: ElementId | null;
 }
 
+/**
+ * The running state of a realm's elemental mechanic.
+ *
+ * Five advanced elements carry a bespoke mechanic (see powers.ts); every realm
+ * holds one of these small meters so expression can change without the state
+ * shape changing. What the fields mean depends on the expressed element:
+ * charge is the mechanic's meter — pressure banked for geyser, momentum held
+ * for tempest, fracture accumulated for obsidian, the overextension flag for
+ * bloom; releasedAt is the tick of the last release — eruption, crest,
+ * shatter, containment failure, overextension onset — or -1 for never; tally
+ * is the bookkeeping the meter is computed from (enemy tiles already credited
+ * to momentum), kept current for every realm so a late ascension starts its
+ * mechanic from now rather than from the whole war record.
+ */
+export interface ElementPowerState {
+  charge: number;
+  releasedAt: number;
+  tally: number;
+}
+
 export interface AiIntent {
   target: PlayerId | null;
   posture: RealmPosture;
@@ -239,6 +259,8 @@ export interface FactionState {
   capitalIndex: number;
   /** Standing priorities; seeded by element, bent by situation. */
   strategy: StrategicPriorities;
+  /** The meter behind the expressed element's mechanic; see powers.ts. */
+  power: ElementPowerState;
   /** Distinct elemental powers held; drives terrain affinity and matchups. */
   absorbedElements: ElementId[];
   /**
