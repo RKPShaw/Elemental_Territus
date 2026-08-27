@@ -522,88 +522,78 @@ function routeAllowedForTrain(state: WorldState, route: TradeRoute, trainOwner: 
   return true;
 }
 
-type RailAdjacency = Map<number, Array<{ index: number; route: TradeRoute }>>;
-
 /**
- * The rail graph this owner is allowed to run on. Identical in content and
- * insertion order to building it inline, but built once per owner rather than
- * once per attempted destination.
+ * The track cells this owner is allowed to run trains over: the union of every
+ * rail route whose ground the owner can trade across. Built once per owner and
+ * shared by every destination its factories retry.
  */
-function railAdjacencyFor(
+function allowedTrackFor(
   state: WorldState,
   routes: readonly TradeRoute[],
   trainOwner: PlayerId,
-): RailAdjacency {
-  const adjacency: RailAdjacency = new Map();
-  const link = (from: number, to: number, route: TradeRoute) => {
-    const existing = adjacency.get(from);
-    if (existing) existing.push({ index: to, route });
-    else adjacency.set(from, [{ index: to, route }]);
-  };
+): Set<number> {
+  const track = new Set<number>();
   for (const route of routes) {
     if (route.kind !== "rail" || !routeAllowedForTrain(state, route, trainOwner)) continue;
-    link(route.startIndex, route.endIndex, route);
-    link(route.endIndex, route.startIndex, route);
+    for (const index of route.pathIndices) track.add(index);
   }
-  return adjacency;
+  return track;
 }
 
-function shortestRailPath(
+/**
+ * The shortest physical run over laid track from source to destination.
+ *
+ * Journeys used to be stitched from whole route legs, so a train inherited
+ * every station its legs had been planned around and called at all of them.
+ * Searching the track cells themselves finds the genuinely shortest line, and
+ * the train serves only the stations that line actually runs through -- a city
+ * off the track is passed by.
+ */
+function shortestRailJourney(
   state: WorldState,
-  adjacency: RailAdjacency,
+  trackCells: ReadonlySet<number>,
   source: number,
   destination: number,
 ): RailJourney | null {
-  if (!adjacency.has(source) || !adjacency.has(destination)) return null;
-  const distances = new Map<number, number>([[source, 0]]);
-  const previous = new Map<number, { index: number; route: TradeRoute }>();
-  const unvisited = new Set(adjacency.keys());
-  while (unvisited.size > 0) {
-    let current: number | null = null;
-    let currentDistance = Number.POSITIVE_INFINITY;
-    for (const candidate of unvisited) {
-      const distance = distances.get(candidate) ?? Number.POSITIVE_INFINITY;
-      if (distance < currentDistance) {
-        current = candidate;
-        currentDistance = distance;
-      }
+  if (!trackCells.has(source) || !trackCells.has(destination)) return null;
+  const { width, height } = state.config;
+  beginRailSearch(state.cells.length);
+  railDistance[source] = 0;
+  railPrevious[source] = -1;
+  railStamp[source] = railGeneration;
+  railHeap.push(source, 0);
+  let found = false;
+  while (true) {
+    const current = railHeap.pop();
+    if (current < 0) break;
+    const cost = railHeap.poppedCost;
+    if (cost !== railDistance[current]) continue;
+    if (current === destination) {
+      found = true;
+      break;
     }
-    if (current === null || !Number.isFinite(currentDistance)) break;
-    unvisited.delete(current);
-    if (current === destination) break;
-    for (const neighbor of adjacency.get(current) ?? []) {
-      if (!unvisited.has(neighbor.index)) continue;
-      const proposed = currentDistance + neighbor.route.value;
-      if (proposed < (distances.get(neighbor.index) ?? Number.POSITIVE_INFINITY)) {
-        distances.set(neighbor.index, proposed);
-        previous.set(neighbor.index, { index: current, route: neighbor.route });
-      }
+    const ax = current % width;
+    const ay = (current - ax) / width;
+    for (const neighbor of surroundingIndices(current, width, height)) {
+      if (!trackCells.has(neighbor)) continue;
+      const bx = neighbor % width;
+      const by = (neighbor - bx) / width;
+      const proposed = cost + (ax !== bx && ay !== by ? Math.SQRT2 : 1);
+      if (railStamp[neighbor] === railGeneration && proposed >= railDistance[neighbor]!) continue;
+      railStamp[neighbor] = railGeneration;
+      railDistance[neighbor] = proposed;
+      railPrevious[neighbor] = current;
+      railHeap.push(neighbor, proposed);
     }
   }
-  if (!distances.has(destination)) return null;
-  const legs: Array<{ from: number; to: number; route: TradeRoute }> = [];
-  for (let cursor = destination; cursor !== source;) {
-    const prior = previous.get(cursor);
-    if (!prior) return null;
-    legs.push({ from: prior.index, to: cursor, route: prior.route });
-    cursor = prior.index;
-  }
-  legs.reverse();
+  if (!found) return null;
   const pathIndices: number[] = [];
-  const stopIndices = [source];
-  for (const leg of legs) {
-    const oriented = leg.route.startIndex === leg.from
-      ? leg.route.pathIndices
-      : [...leg.route.pathIndices].reverse();
-    pathIndices.push(...(pathIndices.length > 0 ? oriented.slice(1) : oriented));
-    stopIndices.push(leg.to);
-  }
-  const stationStops = pathIndices.filter((index) => stationOwner(state, index) !== null);
-  return {
-    pathIndices,
-    stopIndices: [...new Set([...stopIndices, ...stationStops])]
-      .sort((first, second) => pathIndices.indexOf(first) - pathIndices.indexOf(second)),
-  };
+  for (let cursor = destination; cursor >= 0; cursor = railPrevious[cursor]!) pathIndices.push(cursor);
+  pathIndices.reverse();
+  const stopIndices = pathIndices.filter(
+    (index) => index === source || stationOwner(state, index) !== null,
+  );
+  return { pathIndices, stopIndices };
 }
 
 function addIncome(state: WorldState, owner: PlayerId, amount: number): void {
@@ -825,14 +815,14 @@ function spawnTrains(context: SimulationContext): void {
   const stations = new Set(state.tradeRoutes.flatMap((route) => [route.startIndex, route.endIndex]));
   const factories = PLAYER_ORDER.flatMap((owner) => structureCells(state, owner, "factory"))
     .filter((factory) => stations.has(factory) && dispatchReady(state, "train", factory));
-  // One graph per owner, shared by that owner's factories and by every
+  // One track set per owner, shared by that owner's factories and by every
   // destination they retry.
-  const adjacencyByOwner = new Map<PlayerId, RailAdjacency>();
-  const adjacencyFor = (owner: PlayerId): RailAdjacency => {
-    const cached = adjacencyByOwner.get(owner);
+  const trackByOwner = new Map<PlayerId, Set<number>>();
+  const trackFor = (owner: PlayerId): Set<number> => {
+    const cached = trackByOwner.get(owner);
     if (cached) return cached;
-    const built = railAdjacencyFor(state, state.tradeRoutes, owner);
-    adjacencyByOwner.set(owner, built);
+    const built = allowedTrackFor(state, state.tradeRoutes, owner);
+    trackByOwner.set(owner, built);
     return built;
   };
   let activeTrains = trains.length;
@@ -847,7 +837,7 @@ function spawnTrains(context: SimulationContext): void {
     while (pool.length > 0 && !journey) {
       const choice = random.int(0, pool.length - 1);
       destination = pool.splice(choice, 1)[0]!;
-      journey = shortestRailPath(state, adjacencyFor(owner), source, destination);
+      journey = shortestRailJourney(state, trackFor(owner), source, destination);
     }
     if (!journey || destination < 0) continue;
     const destinationOwner = stationOwner(state, destination)!;

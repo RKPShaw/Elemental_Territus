@@ -126,8 +126,9 @@ drive the same simulation safely.
 - Every diplomatic pair begins at peace; territory cannot be attacked until a
   formal declaration of war succeeds.
 - Every player begins with a compact territory, roughly 12–16K home population,
-  a 20K treasury, and no prebuilt city or factory. Settlement fronts spend
-  population while later city development raises capacity toward the 1.5M cap.
+  a 20K treasury, and a single founded city on its capital tile. Settlement
+  fronts spend population while later city development raises capacity toward
+  the 1.5M cap.
 - Players score, offer and accept ten-minute alliance truces from power parity,
   trade potential, geography and shared threats. A truce can be betrayed only
   for a strong strategic opening.
@@ -151,13 +152,18 @@ drive the same simulation safely.
   exception: they may stack into defensible urban centers, with each extra level
   adding 50% station value but yielding less coverage than a spread-out network.
 - Factory catchments generate a sparse minimum-link rail graph rather than an
-  all-to-all mesh. Cities can bridge factory networks or snap into a nearby rail
-  edge, becoming true shortest-path stations.
-- Each factory may operate one train at a time. A train follows the least-cost
-  graph path, dwells two seconds at each reached station, and excludes its own
-  launch factory from the payout. Domestic stops pay the train realm 50K;
-  foreign stops pay both train and host realms 100K, for 4× total value. The
-  world supports up to 300 simultaneous trains.
+  all-to-all mesh. New cities are founded directly on laid track whenever the
+  rails have reached a realm's territory, so stations sit on the line itself.
+- Each factory may operate one train at a time. A train runs the shortest
+  physical path over laid track from its factory to its destination, dwells two
+  seconds at each station that path actually passes through -- a city off the
+  line is passed by -- and excludes its own launch factory from the payout.
+  Domestic stops pay the train realm 50K; foreign stops pay both train and host
+  realms 100K, for 4× total value. The world supports up to 75 simultaneous
+  trains.
+- Every realm opens with its capital as a founded city. Capturing a capital
+  annexes the defender's entire remaining territory on the spot: the realm
+  falls to the captor along with its elements.
 - Merchant ships select random destination harbors and use contiguous water-only
   paths. Their fixed velocity makes long voyages last several world minutes;
   payout is 4K per planned travel second and the world supports up to 1,000 ships.

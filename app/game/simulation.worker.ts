@@ -16,10 +16,12 @@ let previousTime = performance.now();
 let previousPublish = 0;
 let loopStarted = false;
 let publishedReportCount = 0;
+let championAnnounced = false;
 
 function publish(replaceHistory = false): void {
   if (!engine) return;
   const world = engine.snapshot();
+  championAnnounced = Boolean(world.champion);
   const reportDelta = replaceHistory
     ? world.reports
     : world.reports.slice(publishedReportCount);
@@ -52,7 +54,14 @@ function runLoop(): void {
     accumulator = 0;
   }
 
-  if (engine && (now - previousPublish >= VISUAL_SNAPSHOT_INTERVAL_MS || engine.observe((state) => Boolean(state.champion)))) {
+  // Victory is pushed out immediately rather than waiting out the snapshot
+  // interval -- but only once. This condition used to be simply "a champion
+  // exists", which stayed true on every 4ms pass after a realm won the age,
+  // so the worker cloned and posted the entire world 250 times a second until
+  // the tab ran out of memory. That is the crash that ended a game the moment
+  // it was won.
+  const championNow = engine ? engine.observe((state) => Boolean(state.champion)) : false;
+  if (engine && (now - previousPublish >= VISUAL_SNAPSHOT_INTERVAL_MS || (championNow && !championAnnounced))) {
     publish();
   }
   scheduleLoop();

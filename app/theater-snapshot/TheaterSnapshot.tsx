@@ -27,7 +27,7 @@ export function TheaterSnapshot({ tick }: { tick: number }) {
       </header>
       <WorldMap
         state={world}
-        selected="ember"
+        selected="ember-1"
         onSelect={() => undefined}
         showAllTheaters
         renderMarker={String(tick)}

@@ -212,6 +212,11 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
     faction.capitalIndex = site.index;
     cells[site.index]!.capitalOf = site.player;
     cells[site.index]!.owner = site.player;
+    // The capital is a founded city, not a bare marker: it anchors the rail
+    // network from the first tick, and losing it costs the realm everything --
+    // see the capital-capture annexation in the campaign system.
+    cells[site.index]!.structure = "city";
+    cells[site.index]!.structureLevel = 1;
   }
 
   const cellArea = normalizedCellArea(config);
