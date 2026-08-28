@@ -1,11 +1,15 @@
+import { ELEMENTS } from "../elements";
 import { compactNumber } from "../rules";
 import { greaterImportance } from "../reporting";
+import { DOMAIN_LABELS } from "../strategy";
 import type {
+  ElementId,
   ReportSubject,
   SimulationContext,
   SimulationSystem,
   StoryArc,
   StoryKind,
+  StrategicDomain,
   WorldReportEvent,
 } from "../types";
 
@@ -30,6 +34,24 @@ function numericFact(event: WorldReportEvent, key: string): number {
   return typeof value === "number" ? value : 0;
 }
 
+function stringFact(event: WorldReportEvent, key: string): string | null {
+  const value = event.facts[key];
+  return typeof value === "string" ? value : null;
+}
+
+/**
+ * The bespoke tier-3 mechanics report under one powers:<realm> story key, so
+ * a realm's whole mechanic reads as one arc. Each dramatic moment counts its
+ * own metric and names its own deed in the arc's summary.
+ */
+const POWER_STORY: Partial<Record<string, { metric: string; deed: string }>> = {
+  "dynasty.geyser-erupted": { metric: "eruptions", deed: "eruption" },
+  "dynasty.tempest-crested": { metric: "crests", deed: "crest" },
+  "dynasty.bloom-overextended": { metric: "overextensions", deed: "overextension" },
+  "dynasty.plasma-containment-failed": { metric: "containmentFailures", deed: "containment failure" },
+  "dynasty.obsidian-shattered": { metric: "shatters", deed: "shattering" },
+};
+
 function booleanFact(event: WorldReportEvent, key: string): boolean {
   return event.facts[key] === true;
 }
@@ -41,6 +63,7 @@ function increment(story: StoryArc, key: string, amount = 1): void {
 function inferStoryKind(event: WorldReportEvent): StoryKind {
   if (event.domain === "intrigue") return "intrigue";
   if (event.domain === "dynasty") return "dynasty";
+  if (event.domain === "leadership") return "leadership";
   if (event.kind === "politics.revolt" || event.kind.includes("revolt")) return "revolt";
   if (event.kind === "world.created" || event.kind === "world.victory") return "world";
   if (event.kind.includes("alliance")) return "alliance";
@@ -67,10 +90,11 @@ function initialHeadline(event: WorldReportEvent, kind: StoryKind): string {
   if (kind === "trade") return target ? `${initiator} trades with ${target}` : `${initiator} expands its trade`;
   if (kind === "intrigue") return `Intrigue within ${initiator}`;
   if (kind === "dynasty") {
-    return event.kind === "dynasty.element-ascended"
-      ? `${initiator} ascends`
-      : `A new bond for ${initiator}`;
+    if (event.kind === "dynasty.element-ascended") return `${initiator} ascends`;
+    if (POWER_STORY[event.kind]) return `The power within ${initiator}`;
+    return `A new bond for ${initiator}`;
   }
+  if (kind === "leadership") return `${initiator} sets its course`;
   if (kind === "revolt") return `Revolt challenges ${target ?? initiator}`;
   return event.kind === "world.created" ? `${initiator} begins` : event.summary;
 }
@@ -174,6 +198,19 @@ function applyMetrics(story: StoryArc, event: WorldReportEvent): void {
     case "trade.journey-cancelled":
       increment(story, "cancelledJourneys");
       break;
+    case "dynasty.element-ascended":
+      increment(story, "ascensions");
+      story.metrics.tier = numericFact(event, "tier");
+      story.metrics.realmsAbsorbed = numericFact(event, "realmsAbsorbed");
+      break;
+    case "leadership.strategy-adopted":
+      increment(story, "turns");
+      break;
+    default: {
+      const power = POWER_STORY[event.kind];
+      if (power) increment(story, power.metric);
+      break;
+    }
   }
 }
 
@@ -251,6 +288,55 @@ function summarizeDevelopment(story: StoryArc, event: WorldReportEvent): void {
     : event.summary;
 }
 
+/**
+ * Dynasty arcs carry two very different tales under one domain: a realm's
+ * climb through the tiers (one ascension:<realm> arc for its whole history)
+ * and the moments its bespoke mechanic breaks the surface (one powers:<realm>
+ * arc per realm). Anything else in the namespace — a future marriage, say —
+ * keeps the generic telling.
+ */
+function summarizeDynasty(story: StoryArc, event: WorldReportEvent): void {
+  const realm = realmNames(story)[0] ?? event.initiator?.label ?? "A realm";
+  if (event.kind === "dynasty.element-ascended") {
+    const to = stringFact(event, "to");
+    const name = to && to in ELEMENTS ? ELEMENTS[to as ElementId].name : null;
+    story.headline = name ? `${realm} rises to ${name}` : `${realm} ascends`;
+    const ascensions = story.metrics.ascensions ?? 0;
+    story.summary = ascensions > 1
+      ? `${event.summary} Its history has now carried it up the tiers ${ascensions} times.`
+      : event.summary;
+    return;
+  }
+  const power = POWER_STORY[event.kind];
+  if (power) {
+    const element = stringFact(event, "elementName");
+    story.headline = element ? `${realm} wields ${element}` : `The power within ${realm}`;
+    const deeds = Object.values(POWER_STORY)
+      .filter((entry) => entry && (story.metrics[entry.metric] ?? 0) > 0)
+      .map((entry) => {
+        const count = story.metrics[entry!.metric]!;
+        return `${count} ${entry!.deed}${count === 1 ? "" : "s"}`;
+      });
+    story.summary = deeds.length > 0
+      ? `${element ?? "Its element"} has spoken through ${realm}: ${deeds.join(", ")}.`
+      : event.summary;
+    return;
+  }
+  story.summary = event.summary;
+}
+
+/** A court's course-turns: each era's arc reads its latest heading and how restless it has been. */
+function summarizeLeadership(story: StoryArc, event: WorldReportEvent): void {
+  const realm = realmNames(story)[0] ?? event.initiator?.label ?? "A realm";
+  const to = stringFact(event, "to");
+  const label = to && to in DOMAIN_LABELS ? DOMAIN_LABELS[to as StrategicDomain] : null;
+  story.headline = label ? `${realm} turns to ${label}` : `${realm} sets its course`;
+  const turns = story.metrics.turns ?? 0;
+  story.summary = turns > 1
+    ? `${event.summary} The council has turned ${turns} times this era.`
+    : event.summary;
+}
+
 function summarizeTrade(story: StoryArc, event: WorldReportEvent): void {
   const names = realmNames(story);
   const journeys = story.metrics.journeys ?? 0;
@@ -284,6 +370,8 @@ function updateStory(story: StoryArc, event: WorldReportEvent): void {
   else if (story.kind === "expansion") summarizeExpansion(story, event);
   else if (story.kind === "development") summarizeDevelopment(story, event);
   else if (story.kind === "trade") summarizeTrade(story, event);
+  else if (story.kind === "dynasty") summarizeDynasty(story, event);
+  else if (story.kind === "leadership") summarizeLeadership(story, event);
   else {
     if (event.kind === "world.victory") {
       story.headline = `${event.initiator?.label ?? "A realm"} closes the age`;

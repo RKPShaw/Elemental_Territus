@@ -1,11 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ascensionTitle } from "../game/ascension";
 import { getRelation, otherParty, warsFor } from "../game/diplomacy";
 import { committedTroopsFor } from "../game/campaigns";
 import { ELEMENT_ORDER, ELEMENTS, realmMatchupLabel } from "../game/elements";
 import { PLAYERS, PLAYER_ORDER, playerElement } from "../game/players";
+import {
+  bloomIsOverextended,
+  geyserSurging,
+  geyserVenting,
+  obsidianShattered,
+  plasmaContainmentFailed,
+} from "../game/powers";
 import { latestStories } from "../game/reporting";
+import { DOMAIN_LABELS, STRATEGIC_DOMAINS } from "../game/strategy";
 import {
   ELEMENT_RULES,
   STRUCTURE_RULES,
@@ -19,7 +28,7 @@ import {
   normalizedCellArea,
   populationGrowthEfficiency,
 } from "../game/rules";
-import type { ElementId, PlayerId, WorldState } from "../game/types";
+import type { ElementId, PlayerId, StrategicDomain, WorldState } from "../game/types";
 import {
   THEATER_LAYERS,
   THEATER_LAYER_LABELS,
@@ -48,6 +57,49 @@ const POSTURE_LABEL = {
   recovering: "Rebuilding the host",
   trading: "Growing through trade",
 } as const;
+
+/** Tier glyphs for the badges; tier 1 wears none — the founding state is the default. */
+const TIER_MARK: Record<number, string> = { 2: "Ⅱ", 3: "Ⅲ" };
+
+/** Compact domain names for the priority list; DOMAIN_LABELS keeps the prose. */
+const DOMAIN_SHORT: Record<StrategicDomain, string> = {
+  economy: "Economy",
+  conquest: "Conquest",
+  ascension: "Mastery",
+  diplomacy: "Diplomacy",
+  defense: "Defense",
+  trade: "Trade",
+};
+
+/**
+ * The one-line reading of a bespoke tier-3 mechanic's meter, for the realms
+ * whose expressed element carries one; null for everyone else. The observer
+ * deserves the same view of the meters the terminal's `inspect elements` has.
+ */
+function bespokePowerStatus(state: WorldState, id: PlayerId): string | null {
+  const faction = state.factions[id];
+  const power = faction.power;
+  switch (faction.expressedElement) {
+    case "geyser":
+      return geyserSurging(power, state.tick)
+        ? "Erupting into its wars"
+        : geyserVenting(power, state.tick)
+          ? "Venting — defenses soft"
+          : `Pressure banked ${Math.round(power.charge * 100)}%`;
+    case "tempest":
+      return `Conquest momentum ${Math.round(power.charge * 100)}%`;
+    case "bloom":
+      return bloomIsOverextended(power) ? "Overextended — growth checked" : "Blooming across the frontier";
+    case "plasma":
+      return plasmaContainmentFailed(power, state.tick) ? "Containment failed" : "Running payouts hot";
+    case "obsidian":
+      return obsidianShattered(power, state.tick)
+        ? "Edge shattered"
+        : `Fracture ${Math.round(power.charge * 100)}%`;
+    default:
+      return null;
+  }
+}
 
 function shareOf(state: WorldState, id: PlayerId) {
   return (state.factions[id].territory / state.landTiles) * 100;
@@ -174,6 +226,9 @@ export function Simulator() {
 
   const chosen = world.factions[selected];
   const chosenElement = ELEMENTS[playerElement(selected)];
+  const chosenExpressed = ELEMENTS[chosen.expressedElement];
+  const chosenAscension = ascensionTitle(chosen);
+  const chosenPower = bespokePowerStatus(world, selected);
   const chosenPlayer = PLAYERS[selected]!;
   const target = chosen.intent.target ? PLAYERS[chosen.intent.target] : null;
   const targetRelation = target ? getRelation(world, selected, target.id) : null;
@@ -324,7 +379,10 @@ export function Simulator() {
               <span aria-hidden="true">♛</span>
               <div>
                 <small>{world.worldName} is united</small>
-                <strong>{PLAYERS[world.champion]!.realmName} wins the age!</strong>
+                <strong>
+                  {PLAYERS[world.champion]!.realmName}
+                  {ascensionTitle(world.factions[world.champion]) ? `, ${ascensionTitle(world.factions[world.champion])},` : ""} wins the age!
+                </strong>
               </div>
               <button type="button" onClick={createNewWorld}>Grow another world</button>
             </div>
@@ -372,6 +430,7 @@ export function Simulator() {
             {PLAYER_ORDER.map((id) => {
               const faction = world.factions[id];
               const element = ELEMENTS[playerElement(id)];
+              const expressed = ELEMENTS[faction.expressedElement];
               const player = PLAYERS[id]!;
               const share = shareOf(world, id);
               const realmWars = warsFor(world, id).length;
@@ -382,13 +441,15 @@ export function Simulator() {
                   key={id}
                   className={`realm-pill ${selected === id ? "selected" : ""} ${!faction.alive ? "fallen" : ""}`}
                   onClick={() => setSelected(id)}
+                  title={ascensionTitle(faction) ? `${player.realmName} — ${ascensionTitle(faction)}` : player.realmName}
                 >
                   <span
                     className="realm-glyph"
                     style={{ color: element.deepColor, background: element.softColor }}
                     aria-hidden="true"
                   >
-                    {element.glyph}
+                    {expressed.glyph}
+                    {expressed.tier > 1 && <b className="tier-mark">{TIER_MARK[expressed.tier]}</b>}
                   </span>
                   <span className="realm-pill-copy">
                     <strong>{player.name}</strong>
@@ -411,13 +472,23 @@ export function Simulator() {
         <aside className="war-room" aria-label="Realm intelligence">
           <section className="panel council-panel" style={{ "--realm": chosenPlayer.color } as React.CSSProperties}>
             <div className="panel-heading">
+              {/* The emblem keeps the family's colors — identity never repaints —
+                  while the glyph and tier mark read what the realm has become. */}
               <div className="selected-emblem" style={{ background: chosenElement.softColor, color: chosenElement.deepColor }}>
-                {chosenElement.glyph}
+                {chosenExpressed.glyph}
+                {chosenExpressed.tier > 1 && (
+                  <b className="tier-mark" title={`Tier ${chosenExpressed.tier} — ${chosenExpressed.name}`}>
+                    {TIER_MARK[chosenExpressed.tier]}
+                  </b>
+                )}
               </div>
               <div>
                 <p className="eyebrow">Council of {chosenPlayer.name}</p>
                 <h2>{chosenPlayer.realmName}</h2>
-                <span className="realm-status">{chosen.alive ? chosenElement.title : "Its banner has fallen"}</span>
+                <span className="realm-status">
+                  {chosen.alive ? chosenExpressed.title : "Its banner has fallen"}
+                  {chosen.alive && chosenAscension ? ` · ${chosenAscension}` : ""}
+                </span>
               </div>
               <strong className="share-number">
                 <SmoothNumber value={shareOf(world, selected)} format="decimal" suffix="%" />
@@ -472,8 +543,27 @@ export function Simulator() {
                   </div>
                 </div>
 
+                <div className="strategy-card" aria-label="Standing strategic priorities">
+                  <div className="intent-topline">
+                    <span>Strategic focus</span>
+                    <strong>{DOMAIN_LABELS[chosen.strategy.focus]}</strong>
+                  </div>
+                  <div className="priority-list" aria-label="Priority weights by domain">
+                    {STRATEGIC_DOMAINS.map((domain) => (
+                      <div key={domain} className={domain === chosen.strategy.focus ? "leading" : ""}>
+                        <span>{DOMAIN_SHORT[domain]}</span>
+                        <div className="meter">
+                          <i style={{ width: `${Math.min(100, chosen.strategy.weights[domain] * 250)}%` }} />
+                        </div>
+                        <b>{Math.round(chosen.strategy.weights[domain] * 100)}%</b>
+                      </div>
+                    ))}
+                  </div>
+                  <p>“{chosen.strategy.reason}” <small>— held {formatWorldTime(world.tick - chosen.strategy.adoptedAt)}</small></p>
+                </div>
+
                 <div className="target-row">
-                  <span>Strategic focus</span>
+                  <span>Eyes on</span>
                   {target ? (
                     <button type="button" onClick={() => setSelected(target.id)}>
                       <i style={{ background: target.color }} />
@@ -540,6 +630,13 @@ export function Simulator() {
                     return realms > 1 ? `${realms} realms absorbed` : "native power";
                   })()}</small>
                 </div>
+
+                {chosenPower && (
+                  <div className="power-row" aria-label="Elemental power state">
+                    <span>{chosenExpressed.name} power</span>
+                    <strong>{chosenPower}</strong>
+                  </div>
+                )}
 
                 <div className="infrastructure-row" aria-label="Infrastructure counts">
                   {(Object.keys(chosen.structures) as Array<keyof typeof chosen.structures>).map((structure) => (
@@ -656,7 +753,7 @@ export function Simulator() {
                               background: ELEMENTS[playerElement(participant.realmId!)].softColor,
                               color: ELEMENTS[playerElement(participant.realmId!)].deepColor,
                             }}
-                          >{ELEMENTS[playerElement(participant.realmId!)].glyph}</button>
+                          >{ELEMENTS[world.factions[participant.realmId!].expressedElement].glyph}</button>
                         ))}
                       </div>
                     </li>

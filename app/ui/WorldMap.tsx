@@ -494,30 +494,37 @@ function drawStructure(
   const cell = state.cells[index]!;
   if (!cell.structure || !cell.owner) return;
   const [x, y] = centerFor(index, state, shape);
-  const element = PLAYERS[cell.owner]!;
+  // The marker wears the owner's family colors — identity never repaints —
+  // while a capital's glyph reads the expressed element of the realm founded
+  // there, so ascension shows on the map and a captured capital stays storied
+  // ground: the conqueror's ring around the fallen realm's mark.
+  const family = ELEMENTS[playerElement(cell.owner)];
+  const capitalGlyph = cell.capitalOf
+    ? ELEMENTS[state.factions[cell.capitalOf].expressedElement].glyph
+    : null;
   const radius = Math.max(5, Math.min(shape.cellWidth, shape.cellHeight) * 0.63);
   context.save();
   context.shadowColor = "rgba(14, 27, 35, 0.28)";
   context.shadowBlur = 4;
-  context.fillStyle = cell.capitalOf ? element.deepColor : "rgba(255, 249, 226, 0.94)";
-  context.strokeStyle = element.deepColor;
+  context.fillStyle = capitalGlyph ? family.deepColor : "rgba(255, 249, 226, 0.94)";
+  context.strokeStyle = family.deepColor;
   context.lineWidth = 1.3;
   context.beginPath();
   context.arc(x, y, radius, 0, Math.PI * 2);
   context.fill();
   context.stroke();
   context.shadowColor = "transparent";
-  context.fillStyle = cell.capitalOf ? "#fff5d9" : element.deepColor;
+  context.fillStyle = capitalGlyph ? "#fff5d9" : family.deepColor;
   context.font = `800 ${Math.max(8, radius * 1.05)}px ui-rounded, sans-serif`;
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText(
-    cell.capitalOf ? element.glyph : STRUCTURE_RULES[cell.structure].glyph,
+    capitalGlyph ?? STRUCTURE_RULES[cell.structure].glyph,
     x,
     y + 0.3,
   );
   if (cell.structure === "city" && cell.structureLevel > 1) {
-    context.fillStyle = element.deepColor;
+    context.fillStyle = family.deepColor;
     context.strokeStyle = "rgba(255, 249, 226, 0.98)";
     context.lineWidth = 2.5;
     context.font = `900 ${Math.max(7, radius * 0.7)}px ui-rounded, sans-serif`;
@@ -815,7 +822,7 @@ function drawCampaigns(
 ) {
   const activeLabels = new Set<string>();
   for (const campaign of state.campaigns) {
-    const element = PLAYERS[campaign.attacker]!;
+    const family = ELEMENTS[playerElement(campaign.attacker)];
     if (campaign.mode === "naval" && campaign.originIndex !== null && campaign.targetIndex !== null) {
       const geometry = pathRenderGeometry(campaign.id, state, shape, campaign.pathIndices, true);
       if (!geometry.valid) continue;
@@ -827,7 +834,7 @@ function drawCampaigns(
       context.translate(position.x, position.y);
       context.rotate(position.angle);
       context.fillStyle = "#fff6d8";
-      context.strokeStyle = element.deepColor;
+      context.strokeStyle = family.deepColor;
       context.lineWidth = 1.5;
       context.beginPath();
       context.moveTo(7, 0);

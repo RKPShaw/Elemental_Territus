@@ -611,6 +611,7 @@ export type StoryKind =
   | "conquest"
   | "intrigue"
   | "dynasty"
+  | "leadership"
   | "revolt";
 
 export interface StoryArc {

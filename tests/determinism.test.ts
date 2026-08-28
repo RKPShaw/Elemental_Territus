@@ -15,7 +15,20 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded when the information identities landed on the belief layer.
+ * Re-recorded when legibility rebuilt the story surfacing. The consolidated
+ * story arcs are part of the world's memory — the digest hashes their
+ * headlines and summaries — and the correlator now tells the arcs the element
+ * system created: ascension arcs read the climb ("rises to Steam") instead of
+ * a bare "ascends", the bespoke mechanics' arcs count their eruptions,
+ * crests and shatterings instead of borrowing the marriage headline, and a
+ * court's strategy turns consolidate as a leadership arc (a new story kind)
+ * rather than an unlabelled "world" story. No report event, chronicle line or
+ * simulation rule changed — narration is downstream of the facts by
+ * architecture — so every world digest moves with the retold stories while
+ * every cell digest holds at every checkpoint: the proof that this phase
+ * changed the telling, never the tale.
+ *
+ * Before that, re-recorded when the information identities landed on the belief layer.
  * Swift sight is the mover: glass and every realm whose expressed element
  * trades by air now observe twice per observation interval, so the twelve
  * gale realms' belief stores differ from the first interval — wrapped second
@@ -147,25 +160,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "cf4c12abe042d7e583d534e3498a88b7", cells: "629af1312b4f3fa9" },
-      { tick: 200, world: "b6f3b4e4e5b4f5d7751510d285e8486f", cells: "9be20ce70518e538" },
-      { tick: 600, world: "0eb719b866418c60d1df601a48aea681", cells: "e62118e3a07cad0b", deep: true },
+      { tick: 60, world: "26fca22fdd1b120c9c26bbc77198d657", cells: "629af1312b4f3fa9" },
+      { tick: 200, world: "83b1d54b129bbc5a5653b9b6f578d451", cells: "9be20ce70518e538" },
+      { tick: 600, world: "b643f02e761ff174ca10fb5a4663c4d3", cells: "e62118e3a07cad0b", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "928391a2532453020bbb0f445ea07678", cells: "276de65e7315dcf1" },
-      { tick: 200, world: "e16512745a7359a1147a4633e34e8629", cells: "b08bbbcba3a1e819" },
-      { tick: 600, world: "bd1edecfffb3f5838d1e21df66764419", cells: "45611db072c12f6c", deep: true },
+      { tick: 60, world: "b8c4c73457e187e760decfa15644462e", cells: "276de65e7315dcf1" },
+      { tick: 200, world: "965d570b022fb155f87eeee24db9e4b3", cells: "b08bbbcba3a1e819" },
+      { tick: 600, world: "d49d19f883b900911af9a024ed46efa2", cells: "45611db072c12f6c", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "ff67731dbbf1b621e30ab9932cc493d8", cells: "dff14e1783896ee1" },
-      { tick: 200, world: "7212a23be4557b7b1da88cfd13e13eba", cells: "441ef46b90bcf0e2" },
-      { tick: 600, world: "4983e5992f2da74317d27e98a7af45d3", cells: "be9b534a0f34203a", deep: true },
+      { tick: 60, world: "dcd9137dd3ad31e213c8b6b84631cc0c", cells: "dff14e1783896ee1" },
+      { tick: 200, world: "224ad452af3afde27302bfccf1fbad3c", cells: "441ef46b90bcf0e2" },
+      { tick: 600, world: "b919e8b4c163134512df90632ce5511b", cells: "be9b534a0f34203a", deep: true },
     ],
   },
 ];
