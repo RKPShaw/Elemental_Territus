@@ -234,20 +234,24 @@ export const STRATEGIC_REGION_RULES = {
    * satisfied comfortably a hundred ticks later. Too many and the partition
    * starts where it would have ended, so boundaries no longer visibly migrate
    * as terrain develops, which is half of what makes the map feel alive.
-   * Four passes cleared both for the fifty-capital draft. The four-family
-   * roster's forty-eight capitals seed the heat differently and one seed
-   * opened under budget again — and further passes plateaued where it stood,
-   * so the correction is per-pass gain rather than more passes. The map still
-   * visibly redraws itself as the world grows, which the geography test
-   * continues to assert.
+   * The continents-and-rivers map retuned this pair: awkward coastlines and
+   * river valleys need eight full-gain passes before every region opens
+   * inside the area budget. That starts the partition close to settled, so
+   * the visible migration the geography test asserts now comes from the
+   * runtime anchor filter instead — filterAlpha and filterBeta were raised in
+   * the same change to keep boundaries chasing live value at the pace the
+   * old map got for free from its rougher opening.
    */
-  initialRelaxationPasses: 4,
-  initialRelaxationGain: 0.85,
-  filterAlpha: 0.11,
-  filterBeta: 0.022,
+  initialRelaxationPasses: 8,
+  initialRelaxationGain: 1,
+  filterAlpha: 0.35,
+  filterBeta: 0.06,
   velocityDamping: 0.72,
   maximumAnchorStep: 0.62,
-  areaBalanceStrength: 60,
+  // Raised from 60 when the continents-and-rivers map landed: land now splits
+  // across more separate landmasses, and the partition needs a stronger area
+  // pull to keep every region inside the common budget across all of them.
+  areaBalanceStrength: 150,
   terrainTransitionCost: 0.16,
   reliefGradientCost: 3.1,
   infrastructureGradientCost: 3.8,

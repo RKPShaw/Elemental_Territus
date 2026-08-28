@@ -3,9 +3,12 @@ import test from "node:test";
 import { ElementalWarEngine } from "../app/game/engine";
 import { runBatchGame } from "../app/game/batch";
 import { PLAYER_ORDER } from "../app/game/players";
+import { ELEMENT_SPACE } from "../app/game/elements";
+import { statProfileOf } from "../app/game/powers";
 import {
   ELEMENT_RULES,
   ENEMY_TERRAIN_COST,
+  POWER_RULES,
   STRUCTURE_MIN_SPACING,
   STRATEGIC_REGION_RULES,
   TRADE_RULES,
@@ -503,12 +506,23 @@ test("train stops pay the fixed values, scaled by stacks and trade-form rewards"
   // scales the host's, and both ride the report so the arithmetic stays
   // fully accountable.
   const formBonus = 1 + ELEMENT_RULES.tradeFormIncomeBonus;
-  const efficiencies = new Set([
+  // A leg's efficiency is its heritage standing times the owner's elemental
+  // payout factor (stat-profile payouts, or plasma's boom and bust), so the
+  // known ladder is every product of the two.
+  const heritageLadder = [
     1,
     ELEMENT_RULES.legacyEfficiency,
     ELEMENT_RULES.incompatibleEfficiency,
     1 + ELEMENT_RULES.resonantCaptureBonus,
-  ]);
+  ];
+  const payoutFactors = [
+    ...new Set(ELEMENT_SPACE.map((element) => statProfileOf(element).payout)),
+    POWER_RULES.plasmaPayoutBoost,
+    POWER_RULES.plasmaFailurePenalty,
+  ];
+  const efficiencies = new Set(
+    heritageLadder.flatMap((heritage) => payoutFactors.map((payout) => heritage * payout)),
+  );
   for (const event of stops) {
     const multiplier = Number(event.facts.stationMultiplier);
     const ownerBonus = event.facts.convoyBonus === true ? formBonus : 1;
