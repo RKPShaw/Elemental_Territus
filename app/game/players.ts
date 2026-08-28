@@ -52,34 +52,6 @@ export const PLAYER_ORDER: readonly PlayerId[] = buildRoster();
 
 export const PLAYER_COUNT = PLAYER_ORDER.length;
 
-function hexToRgb(hex: string): [number, number, number] {
-  const value = Number.parseInt(hex.slice(1), 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
-}
-
-function rgbToHex(red: number, green: number, blue: number): string {
-  const channel = (value: number) => Math.max(0, Math.min(255, Math.round(value)))
-    .toString(16)
-    .padStart(2, "0");
-  return `#${channel(red)}${channel(green)}${channel(blue)}`;
-}
-
-/**
- * Twelve distinguishable tints per element, walking from the element's soft
- * colour to its deep one. A player therefore reads as its family at a glance
- * while still being separable from its siblings.
- */
-function shadeFor(element: ElementId, ordinal: number): string {
-  const [softRed, softGreen, softBlue] = hexToRgb(ELEMENTS[element].softColor);
-  const [deepRed, deepGreen, deepBlue] = hexToRgb(ELEMENTS[element].deepColor);
-  const amount = PLAYERS_PER_ELEMENT === 1 ? 0.5 : ordinal / (PLAYERS_PER_ELEMENT - 1);
-  return rgbToHex(
-    softRed + (deepRed - softRed) * amount,
-    softGreen + (deepGreen - softGreen) * amount,
-    softBlue + (deepBlue - softBlue) * amount,
-  );
-}
-
 interface PlayerDefinition {
   id: PlayerId;
   element: ElementId;
@@ -89,6 +61,14 @@ interface PlayerDefinition {
   name: string;
   /** Full title, such as "The Cinderkin IV". */
   realmName: string;
+  /**
+   * The founding element's documented color (see ELEMENT_COLORS.md), shared
+   * by every realm of the family. Per-sibling shades were dropped
+   * deliberately: all realms of an element read as one similar color, and
+   * borders, glyphs and labels carry the identity. On the live map a realm is
+   * painted by the element it currently expresses, so this is the color it
+   * starts with; conquest and ascension repaint it.
+   */
   color: string;
 }
 
@@ -103,7 +83,7 @@ function buildDefinitions(): Record<PlayerId, PlayerDefinition> {
         ordinal,
         name: `${ELEMENTS[element].name} ${ordinalLabel(ordinal)}`,
         realmName: `${ELEMENTS[element].realmName} ${ordinalLabel(ordinal)}`,
-        color: shadeFor(element, ordinal),
+        color: ELEMENTS[element].color,
       };
     }
   }

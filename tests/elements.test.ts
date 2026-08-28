@@ -478,3 +478,22 @@ test("structure payouts read heritage, and fresh native conquest resonates", () 
   assert.equal(structurePayoutMultiplier(state, heritageCell("stone-1", null, 990)), 1);
   assert.equal(structurePayoutMultiplier(state, heritageCell("stone-1", null, 990, null)), 1);
 });
+
+test("every realm of a family wears its element's documented color", async () => {
+  const { PLAYERS, PLAYER_ORDER, playerElement } = await import("../app/game/players");
+  for (const id of PLAYER_ORDER) {
+    assert.equal(PLAYERS[id]!.color, ELEMENTS[playerElement(id)].color);
+  }
+});
+
+test("every element documents a distinct full color set", () => {
+  const banners = new Set<string>();
+  for (const id of ELEMENT_SPACE) {
+    const definition = ELEMENTS[id];
+    for (const color of [definition.color, definition.softColor, definition.deepColor]) {
+      assert.match(color, /^#[0-9a-f]{6}$/);
+    }
+    banners.add(definition.color);
+  }
+  assert.equal(banners.size, ELEMENT_SPACE.length, "element banner colors must be unique");
+});

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ELEMENTS } from "../game/elements";
-import { PLAYERS, PLAYER_ORDER, playerElement } from "../game/players";
+import { PLAYERS, PLAYER_ORDER } from "../game/players";
 import {
   cellCoordinates,
   frontTargets,
@@ -29,7 +29,7 @@ import type {
   MapRasterResult,
   RasterBufferRecycle,
 } from "../game/map-raster-protocol";
-import { politicalFieldArrays } from "../game/political-field";
+import { PoliticalFieldSmoother, politicalFieldArrays } from "../game/political-field";
 import type { PlayerId, WorldState } from "../game/types";
 import { isValidWaterPath } from "../game/water-navigation";
 
@@ -157,11 +157,12 @@ function drawStructure(
   const cell = state.cells[index]!;
   if (!cell.structure || !cell.owner) return;
   const [x, y] = centerFor(index, state, shape);
-  // The marker wears the owner's family colors — identity never repaints —
-  // while a capital's glyph reads the expressed element of the realm founded
-  // there, so ascension shows on the map and a captured capital stays storied
-  // ground: the conqueror's ring around the fallen realm's mark.
-  const family = ELEMENTS[playerElement(cell.owner)];
+  // The marker wears the color of the element its owner currently expresses,
+  // so a conquest that forges a new tier repaints the realm's marks along
+  // with its territory. A capital's glyph still reads the expressed element
+  // of the realm founded there, so a captured capital stays storied ground:
+  // the conqueror's ring around the fallen realm's mark.
+  const family = ELEMENTS[state.factions[cell.owner].expressedElement];
   const capitalGlyph = cell.capitalOf
     ? ELEMENTS[state.factions[cell.capitalOf].expressedElement].glyph
     : null;
@@ -380,7 +381,7 @@ function drawTradeVehicles(
     context.save();
     context.translate(x, y);
     context.rotate(angle);
-    context.fillStyle = ELEMENTS[playerElement(vehicle.owner)].deepColor;
+    context.fillStyle = ELEMENTS[state.factions[vehicle.owner].expressedElement].deepColor;
     context.strokeStyle = "rgba(255,250,226,.95)";
     context.lineWidth = 1;
     context.beginPath();
@@ -486,7 +487,7 @@ function drawCampaigns(
 ) {
   const activeLabels = new Set<string>();
   for (const campaign of state.campaigns) {
-    const family = ELEMENTS[playerElement(campaign.attacker)];
+    const family = ELEMENTS[state.factions[campaign.attacker].expressedElement];
     if (campaign.mode === "naval" && campaign.originIndex !== null && campaign.targetIndex !== null) {
       const geometry = pathRenderGeometry(campaign.id, state, shape, campaign.pathIndices, true);
       if (!geometry.valid) continue;
@@ -586,7 +587,7 @@ function drawWarships(
       const angle = visualTick * 0.025 + ship * 2.1;
       const x = px + Math.cos(angle) * (13 + ship * 3);
       const y = py + Math.sin(angle) * (9 + ship * 2);
-      context.fillStyle = ELEMENTS[playerElement(id)].deepColor;
+      context.fillStyle = ELEMENTS[faction.expressedElement].deepColor;
       context.beginPath();
       context.moveTo(x + 5, y);
       context.lineTo(x - 4, y - 3);
@@ -767,6 +768,8 @@ function createRasterRequest(
   theaterLayer: TheaterLayer,
   rasterWidth: number,
   rasterHeight: number,
+  smoother: PoliticalFieldSmoother,
+  now: number,
 ): MapRasterRequest {
   const terrains = new Uint8Array(state.cells.length);
   for (let index = 0; index < state.cells.length; index += 1) {
@@ -785,7 +788,19 @@ function createRasterRequest(
     if (!maps) throw new Error("Theater raster requested without theater intelligence fields");
     return { ...common, mode: "theaters", values: maps[theaterLayer].slice() };
   }
-  const { owners, pressureOwners, pressures } = politicalFieldArrays(previous, state, blend);
+  const field = politicalFieldArrays(previous, state, blend);
+  const { pushOwners, pushStrengths } = smoother.smooth(field, now);
+  // The color each realm paints with is the documented color of the element
+  // it currently expresses, read fresh every frame so an ascension repaints
+  // the realm the moment the conquest forges its new tier.
+  const playerColors = new Uint8Array(RASTER_PLAYER_ORDER.length * 3);
+  for (let index = 0; index < RASTER_PLAYER_ORDER.length; index += 1) {
+    const element = ELEMENTS[state.factions[RASTER_PLAYER_ORDER[index]!]!.expressedElement];
+    const value = Number.parseInt(element.color.slice(1), 16);
+    playerColors[index * 3] = (value >> 16) & 255;
+    playerColors[index * 3 + 1] = (value >> 8) & 255;
+    playerColors[index * 3 + 2] = value & 255;
+  }
   const warMatrix = new Uint8Array(RASTER_PLAYER_ORDER.length ** 2);
   for (const relation of Object.values(state.relations)) {
     if (relation.status !== "war") continue;
@@ -798,9 +813,12 @@ function createRasterRequest(
     ...common,
     mode: "political",
     selected: RASTER_PLAYER_INDEX.get(selected)!,
-    owners,
-    pressureOwners,
-    pressures,
+    owners: field.owners,
+    pressureOwners: field.pressureOwners,
+    pressures: field.pressures,
+    pushOwners,
+    pushStrengths,
+    playerColors,
     warMatrix,
   };
 }
@@ -814,6 +832,9 @@ function rasterTransferables(request: MapRasterRequest): Transferable[] {
       request.owners.buffer,
       request.pressureOwners.buffer,
       request.pressures.buffer,
+      request.pushOwners.buffer,
+      request.pushStrengths.buffer,
+      request.playerColors.buffer,
       request.warMatrix.buffer,
     );
   }
@@ -887,6 +908,7 @@ export function WorldMap({
     intervalMs: 250,
   });
   const fieldDirtyRef = useRef(true);
+  const fieldSmootherRef = useRef<PoliticalFieldSmoother | null>(null);
   const dispatchedBlendRef = useRef(1);
   const lastDispatchAtRef = useRef(0);
   const lastStaticFrameAtRef = useRef(0);
@@ -944,6 +966,8 @@ export function WorldMap({
     latestRasterRequestRef.current = requestId;
     const fieldWidth = Math.max(1, Math.min(canvas.width, current.config.width * STATIC_FIELD_GRID_SCALE));
     const fieldHeight = Math.max(1, Math.min(canvas.height, current.config.height * STATIC_FIELD_GRID_SCALE));
+    const smoother = fieldSmootherRef.current ?? new PoliticalFieldSmoother();
+    fieldSmootherRef.current = smoother;
     const job: RasterJob = {
       request: createRasterRequest(
         requestId,
@@ -956,6 +980,8 @@ export function WorldMap({
         theaterLayerRef.current,
         fieldWidth,
         fieldHeight,
+        smoother,
+        now,
       ),
       state: current,
       selected: selectedRef.current,
@@ -1041,6 +1067,7 @@ export function WorldMap({
     if (visualSeedRef.current !== state.seed) {
       visualSeedRef.current = state.seed;
       visualTickRef.current = state.tick;
+      fieldSmootherRef.current?.reset();
       timelineRef.current = {
         previous: null,
         current: state,
@@ -1228,6 +1255,7 @@ export function WorldMap({
         <div className="map-legend" aria-hidden="true">
           <span><i className="legend-peace" /> border</span>
           <span><i className="legend-war" /> war front</span>
+          <span><i className="legend-push" /> push · attacker&apos;s shade</span>
           <span><i className="legend-alliance" /> allied border</span>
           <span><i className="legend-trade" /> convoys {trains} · ships {ships} · pulses {pulses} · flyers {flyers}</span>
         </div>
