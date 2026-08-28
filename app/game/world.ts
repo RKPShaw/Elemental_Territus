@@ -45,7 +45,15 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   diplomacyInterval: 16,
   constructionInterval: 2,
   strategyInterval: 40,
-  minimumPeaceTicks: 180,
+  /**
+   * Lowered from 180 when war became funded and frontier-reluctant: a long
+   * flat truce made every realm's pent-up desire fire on the first legal
+   * diplomacy pass, so the whole world attacked on one tick. The opening
+   * calm now comes from the incentives themselves — armies still settling
+   * the frontier, mobilization chests still filling — which release realm by
+   * realm instead of all at once.
+   */
+  minimumPeaceTicks: 64,
   victoryShare: 0.8,
   maximumTroops: 1_500_000,
 };

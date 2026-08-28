@@ -19,6 +19,7 @@ import {
   STRUCTURE_RULES,
   WARSHIP_COST,
   compactNumber,
+  mobilizationCostFor,
   nextStructureCost,
 } from "../rules";
 import type { Campaign, PlayerId, SimulationContext, SimulationSystem, WorldReportDraft } from "../types";
@@ -81,6 +82,14 @@ export class CommandExecutionSystem implements SimulationSystem {
         const previousRelationSince = relation.since;
         if (relation.status === "war") continue;
         if (!betrayingTruce && state.tick < relation.cooldownUntil) continue;
+        // War is funded: the declaration spends the mobilization chest on
+        // raising and provisioning the host. A court whose treasury cannot
+        // cover it does not go to war this term, which is what lets economies
+        // that grow at different rates open their wars at different times —
+        // and an emptied chest delays the same realm's next declaration.
+        const mobilization = mobilizationCostFor(actor.troops);
+        if (actor.gold < mobilization) continue;
+        actor.gold -= mobilization;
         const targetIsExposedTraitor = state.tick < state.factions[command.target].traitorUntil;
         const allianceStoryKey = relation.storyKey;
         if (betrayingTruce && !targetIsExposedTraitor) {
@@ -130,6 +139,7 @@ export class CommandExecutionSystem implements SimulationSystem {
             betrayal: betrayingTruce,
             targetAlreadyTraitor: targetIsExposedTraitor,
             tradeStopped: true,
+            mobilizationGold: mobilization,
           },
           summary: `${realmTitle(state, command.actor)} declared war on ${realmTitle(state, command.target)}${betrayingTruce ? " by breaking their alliance" : ""}.`,
         });

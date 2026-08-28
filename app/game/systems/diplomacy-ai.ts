@@ -4,8 +4,9 @@ import { relationKey } from "../diplomacy";
 import type { RelationCounts } from "../diplomacy";
 import { ascensionAppetite } from "../ascension";
 import { realmMatchup } from "../elements";
+import { frontierTargets } from "../frontier";
 import { borderLength } from "../grid";
-import { DIPLOMACY_RULES, ELEMENT_RULES, clamp } from "../rules";
+import { DIPLOMACY_RULES, ELEMENT_RULES, clamp, mobilizationCostFor } from "../rules";
 import { strategyFactor } from "../strategy";
 import type { PlayerId, RelationState, SimulationContext, SimulationSystem } from "../types";
 
@@ -124,6 +125,13 @@ function warDesire(
   const exposedTraitor = state.tick < rival.traitorUntil ? 0.48 : 0;
   const longPeace = clamp((state.tick - relation.since) / 320, 0, 0.38);
   const existingWars = warCount(pass, actor);
+  // Free land first: settlement is always cheaper than invasion, so a realm
+  // whose wilderness frontier is still open prefers settling it. Frontiers
+  // close at geography-dependent times, so this is one of the incentives that
+  // staggers the opening wars instead of a schedule doing it.
+  const openFrontier = frontierTargets(state, actor, "wilderness").length;
+  const settlementPull = clamp(openFrontier / (self.territory * 0.1 + 8), 0, 1)
+    * DIPLOMACY_RULES.openFrontierWarReluctance;
   // Opportunism: a target already at war with its host running thin invites
   // every other border to open too. This is what lets several realms fall on
   // one collapsing power at once instead of queueing politely.
@@ -138,13 +146,19 @@ function warDesire(
   const ascensionPull = ascensionAppetite(state, actor, target)
     * ELEMENT_RULES.ascensionWarDesire
     * strategyFactor(self.strategy, "ascension");
+  // War is funded: the declaration will spend the mobilization chest, and a
+  // court whose treasury cannot yet cover it wants the war less. Treasuries
+  // grow at genuinely different rates — terrain, trade, construction — so
+  // this is the economic incentive that spreads attack timing across realms.
+  const warChest = clamp(self.gold / mobilizationCostFor(self.troops), 0, 1);
   // A conquest-minded realm wants the same war more; near the declaration
   // threshold the sum is positive, so the factor moves decisions exactly there.
   return (readiness * 0.88 + troopEdge * 0.38 + elementalEdge * 1.6
     + (border > 0 ? 0.14 : -0.05) + containLeader + finishVulnerable
     + exposedTraitor + longPeace + ascensionPull + pileOn - self.warWeariness * 0.72
-    - existingWars * 0.26 + random.next() * 0.16)
-    * strategyFactor(self.strategy, "conquest");
+    - existingWars * 0.26 - settlementPull + random.next() * 0.16)
+    * strategyFactor(self.strategy, "conquest")
+    * (0.35 + 0.65 * warChest);
 }
 
 function considerTradePolicy(
@@ -174,15 +188,15 @@ export class DiplomacyAiSystem implements SimulationSystem {
     const { state, random } = context;
     if (state.tick % state.config.diplomacyInterval !== 0) return;
     const pass = buildPass(state);
-    // Wars declared earlier in this same pass, counted on top of the tally
-    // taken at the start of it, so one sweep cannot push a realm past its cap.
-    const declaredThisPass = new Map<PlayerId, number>();
-    const liveWarCount = (id: PlayerId) => warCount(pass, id) + (declaredThisPass.get(id) ?? 0);
-    const belowWarCap = (id: PlayerId) => liveWarCount(id) < DIPLOMACY_RULES.maximumWarsPerRealm;
-    const recordDeclaration = (actor: PlayerId, target: PlayerId) => {
-      declaredThisPass.set(actor, (declaredThisPass.get(actor) ?? 0) + 1);
-      declaredThisPass.set(target, (declaredThisPass.get(target) ?? 0) + 1);
-    };
+    // The court's term budget: how many major diplomatic acts each realm may
+    // still take this pass. There is no cap on wars held — only on actions
+    // taken per sitting, so no court performs an unbounded burst in one term.
+    const actionsTaken = new Map<PlayerId, number>();
+    const hasAction = (id: PlayerId) =>
+      (actionsTaken.get(id) ?? 0) < DIPLOMACY_RULES.courtActionsPerTerm;
+    const spendAction = (id: PlayerId) =>
+      actionsTaken.set(id, (actionsTaken.get(id) ?? 0) + 1);
+    const warsHeld = (id: PlayerId) => warCount(pass, id);
 
     for (const relation of allRelations(state)) {
       const [a, b] = relation.parties;
@@ -202,18 +216,23 @@ export class DiplomacyAiSystem implements SimulationSystem {
         const shareB = factionB.territory / state.landTiles;
         const bIsTraitor = state.tick < factionB.traitorUntil;
         const aIsTraitor = state.tick < factionA.traitorUntil;
-        const aHasOpening = belowWarCap(a) && hasRoute(context, a, b) && (
-          (bIsTraitor && ratioA > 1.05) ||
-          (ratioA > 1.65 && shareB < shareA * 0.72 && random.chance(0.42))
-        );
-        const bHasOpening = belowWarCap(b) && hasRoute(context, b, a) && (
-          (aIsTraitor && ratioB > 1.05) ||
-          (ratioB > 1.65 && shareA < shareB * 0.72 && random.chance(0.42))
-        );
+        // Betrayal is funded like any other war: no chest, no knife.
+        const aHasOpening = hasAction(a)
+          && factionA.gold >= mobilizationCostFor(factionA.troops)
+          && hasRoute(context, a, b) && (
+            (bIsTraitor && ratioA > 1.05) ||
+            (ratioA > 1.65 && shareB < shareA * 0.72 && random.chance(0.42))
+          );
+        const bHasOpening = hasAction(b)
+          && factionB.gold >= mobilizationCostFor(factionB.troops)
+          && hasRoute(context, b, a) && (
+            (aIsTraitor && ratioB > 1.05) ||
+            (ratioB > 1.65 && shareA < shareB * 0.72 && random.chance(0.42))
+          );
         if (aHasOpening || bHasOpening) {
           const actor = aHasOpening && (!bHasOpening || ratioA >= ratioB) ? a : b;
           state.commands.push({ type: "declare-war", actor, target: otherParty(relation, actor) });
-          recordDeclaration(a, b);
+          spendAction(actor);
         }
         continue;
       }
@@ -222,18 +241,20 @@ export class DiplomacyAiSystem implements SimulationSystem {
         if (relation.truceOfferBy) {
           const receiver = otherParty(relation, relation.truceOfferBy);
           if (
+            hasAction(receiver) &&
             truceCount(pass, receiver) < DIPLOMACY_RULES.maximumTrucesPerRealm &&
             truceValue(context, pass, receiver, relation.truceOfferBy) > 0.68
           ) {
             state.commands.push({ type: "accept-truce", actor: receiver, target: relation.truceOfferBy });
+            spendAction(receiver);
           }
           continue;
         }
 
         if (
           state.tick >= 48 &&
-          liveWarCount(a) === 0 &&
-          liveWarCount(b) === 0 &&
+          warsHeld(a) === 0 &&
+          warsHeld(b) === 0 &&
           truceCount(pass, a) < DIPLOMACY_RULES.maximumTrucesPerRealm &&
           truceCount(pass, b) < DIPLOMACY_RULES.maximumTrucesPerRealm
         ) {
@@ -241,8 +262,11 @@ export class DiplomacyAiSystem implements SimulationSystem {
           const valueB = truceValue(context, pass, b, a);
           if (Math.max(valueA, valueB) > 0.78 && random.chance(0.34)) {
             const actor = valueA >= valueB ? a : b;
-            state.commands.push({ type: "offer-truce", actor, target: otherParty(relation, actor) });
-            continue;
+            if (hasAction(actor)) {
+              state.commands.push({ type: "offer-truce", actor, target: otherParty(relation, actor) });
+              spendAction(actor);
+              continue;
+            }
           }
         }
 
@@ -250,13 +274,16 @@ export class DiplomacyAiSystem implements SimulationSystem {
           state.tick < state.config.minimumPeaceTicks ||
           state.tick < relation.cooldownUntil
         ) continue;
-        // Only the declarer's own war count gates a declaration. The target's
-        // never does: a realm already fighting for its life is exactly the one
-        // its other neighbours descend on.
-        const desireA = belowWarCap(a)
+        // Only the declarer's own term budget gates a declaration. Neither
+        // side's war count does: a realm already fighting for its life is
+        // exactly the one its other neighbours descend on, and a sprawling
+        // conqueror may open as many fronts as its desire — weariness, the
+        // per-war reluctance and the mobilization chest inside warDesire —
+        // still clears.
+        const desireA = hasAction(a)
           ? warDesire(context, pass, a, b, relation) * state.config.aggression
           : Number.NEGATIVE_INFINITY;
-        const desireB = belowWarCap(b)
+        const desireB = hasAction(b)
           ? warDesire(context, pass, b, a, relation) * state.config.aggression
           : Number.NEGATIVE_INFINITY;
         const threshold = 1.08 + random.next() * 0.14;
@@ -264,7 +291,7 @@ export class DiplomacyAiSystem implements SimulationSystem {
           const actor = desireA >= desireB ? a : b;
           const target = actor === a ? b : a;
           state.commands.push({ type: "declare-war", actor, target });
-          recordDeclaration(actor, target);
+          spendAction(actor);
         }
         continue;
       }

@@ -187,13 +187,17 @@ test("a running world keeps expression, masks and held powers exactly consistent
 });
 
 test("conquest histories produce ascensions and report them as dynasty facts", () => {
-  const state = new ElementalWarEngine(0x240823).step(1_200);
+  // The horizon followed funded mobilization out: wars now open when each
+  // realm's chest and frontier allow rather than all on the first legal
+  // tick, so the conquest histories that assemble a tier 2 arrive a couple
+  // of hundred ticks later on this seed (first ascension ~1420).
+  const state = new ElementalWarEngine(0x240823).step(1_500);
   const ascensions = state.reports.filter(
     (event) => event.kind === "dynasty.element-ascended",
   );
   assert.ok(
     ascensions.length > 0,
-    "the calibration world should crown at least one ascension by tick 1200",
+    "the calibration world should crown at least one ascension by tick 1500",
   );
   for (const event of ascensions) {
     assert.equal(event.domain, "dynasty");

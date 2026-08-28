@@ -23,9 +23,16 @@ import { cellDigest, worldDigest } from "./world-digest";
  * deadlocking (rival settlers cancel each other at a discount, and an
  * invasion slows the frontier program rather than freezing it), so the
  * no-man's-land strips between neighbours close. Diplomacy dropped the
- * one-war-per-pair engagement lock for a per-declarer war cap that leaves
- * targets unprotected — coalitions now pile onto a weakened realm — and
- * campaigns may be launched by either party to a war, so an overmatched
+ * one-war-per-pair engagement lock entirely: there is no cap on wars held,
+ * only a court-actions-per-term budget on what one realm may do in a single
+ * diplomacy sitting, so coalitions pile onto a weakened realm freely. War
+ * became funded — a declaration spends a mobilization chest that scales with
+ * the army being raised, desire scales with the ability to pay, and open
+ * wilderness frontier suppresses desire while free land remains — so the
+ * opening wars release realm by realm as economies and frontiers allow
+ * instead of all firing on the first legal tick (minimumPeaceTicks came down
+ * from 180 to 64 because the incentives now carry the opening calm).
+ * Campaigns may be launched by either party to a war, so an overmatched
  * defender blunts an invasion and counterattacks to take its ground back,
  * across up to two fronts at once. Realms also carry living names (identity
  * is new faction state) that climb a title ladder as conquest earns it, so
@@ -188,25 +195,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "c70b912d091d4ef3865a1e7ed53c9164", cells: "d058e52ff49e744c" },
-      { tick: 200, world: "81e157b8a09bf8b763e6e214a7bb950b", cells: "657234015b2e4fde" },
-      { tick: 600, world: "e2f3dca70946c997a812707e9c260110", cells: "8c7fdadb9cfecd7a", deep: true },
+      { tick: 60, world: "59c52fe9e9cd9b1717b5ea25b663be41", cells: "d058e52ff49e744c" },
+      { tick: 200, world: "220a72a4e8943cbe3b6d512921a6c6ec", cells: "9966a0655de90fbd" },
+      { tick: 600, world: "7fb9d658a02763aacc827ed243e16a8b", cells: "0e28dbcd5dbdbd5f", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "34fa2fa751bf4f15634a8bca8e156034", cells: "c82e87ddc5911bed" },
-      { tick: 200, world: "08e44db10b4cfe423093089eace918b0", cells: "03baac24afa0596c" },
-      { tick: 600, world: "038c9aa1d018d439642b67daf105c42d", cells: "606a23a705965ada", deep: true },
+      { tick: 60, world: "3d0869ed2f038364e6e78d679a1c826d", cells: "c82e87ddc5911bed" },
+      { tick: 200, world: "65cf9e0f62a7d731d784f0e9809fdd8e", cells: "8ebe141aa80506c1" },
+      { tick: 600, world: "22e62afb6e5d0d6d02e24c3032ac031e", cells: "d95192e0bf7c9b1f", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "ca96b6c54cb4f5ab4067c4d4dc760247", cells: "dd2cfa50d8d2a55b" },
-      { tick: 200, world: "ca578614e8fd6fa54c805b2ea2563bf8", cells: "70eb5f7cd3b15df1" },
-      { tick: 600, world: "2264a4e41eab366d5683f4c0972ebb4b", cells: "8a2d5ae065f89e17", deep: true },
+      { tick: 60, world: "7c40984bfbad3b0434ce76fdd4aade48", cells: "dd2cfa50d8d2a55b" },
+      { tick: 200, world: "02ee609bd848ae3898cb8f3ed531fd32", cells: "550d9208da469ae8" },
+      { tick: 600, world: "2c8d24f138bdf47f12c46fd925536269", cells: "a072a48dbd9a8b56", deep: true },
     ],
   },
 ];
