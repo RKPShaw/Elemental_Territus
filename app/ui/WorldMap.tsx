@@ -58,11 +58,14 @@ interface MapGeometry {
  * whole raster had to stay affordable; the map was drawn at 336 by 208 and
  * stretched to fill the canvas, which five broad regions survived and fifty
  * intricate frontiers do not. Now that the field is sparse, the expensive half
- * -- blurring -- is per cell and does not grow with this at all, so doubling
- * the linear resolution costs only the sampling pass and still lands well under
- * what the dense field cost at half the size.
+ * -- blurring -- is per cell and does not grow with this at all, so the linear
+ * resolution costs only the sampling pass. Raised from four to eight when
+ * coastlines and borders still read blurry at the old raster: at eight the
+ * field renders at (or clamps to) the canvas's own pixel size, so upscaling
+ * no longer softens the lines, and the sampling pass paid for the extra
+ * pixels by skipping the claim merge on open water.
  */
-const STATIC_FIELD_GRID_SCALE = 4;
+const STATIC_FIELD_GRID_SCALE = 8;
 
 /**
  * The map's logical coordinate space, in CSS pixels.

@@ -41,6 +41,14 @@ import type { SimulationWorkerCommand, SimulationWorkerEvent } from "../game/sim
 import { WorldMap } from "./WorldMap";
 
 const INITIAL_SEED = 0x240823;
+
+/**
+ * Factual reports kept in the browser-side archive. The worker forgets each
+ * event once it is delivered, so this is the only copy; the cap keeps a
+ * long-running tab from growing without bound while still holding far more
+ * history than the panel or a typical export needs.
+ */
+const REPORT_ARCHIVE_LIMIT = 50_000;
 const SPEEDS = [1, 2, 4, 8, 16] as const;
 const TEMPERAMENTS = [
   { label: "Patient", value: 0.72, note: "long peace, slower fronts" },
@@ -183,12 +191,17 @@ export function Simulator() {
     workerRef.current = worker;
     worker.addEventListener("message", (event: MessageEvent<SimulationWorkerEvent>) => {
       if (event.data.type !== "snapshot") return;
-      setWorld((previous) => ({
-        ...event.data.world,
-        reports: event.data.replaceHistory
+      setWorld((previous) => {
+        const merged = event.data.replaceHistory
           ? event.data.reportDelta
-          : [...(previous?.reports ?? []), ...event.data.reportDelta],
-      }));
+          : [...(previous?.reports ?? []), ...event.data.reportDelta];
+        return {
+          ...event.data.world,
+          reports: merged.length > REPORT_ARCHIVE_LIMIT
+            ? merged.slice(-REPORT_ARCHIVE_LIMIT)
+            : merged,
+        };
+      });
       if (event.data.world.champion) setRunning(false);
     });
     const initialize: SimulationWorkerCommand = {
@@ -264,7 +277,7 @@ export function Simulator() {
           ? "crowding"
           : "constrained";
   const stories = latestStories(world.stories).slice(0, 8);
-  const recentReports = [...world.reports].reverse().slice(0, 18);
+  const recentReports = world.reports.slice(-18).reverse();
 
   function createNewWorld() {
     const seed = (world.seed * 1664525 + 1013904223 + world.tick) >>> 0;
@@ -738,7 +751,7 @@ export function Simulator() {
                     <li key={story.id} className={`story-card ${story.kind} ${story.status}`}>
                       <div className="story-topline">
                         <span>{story.kind} · {story.status}</span>
-                        <small>Age {Math.floor(story.startedAt / 60) + 1}{story.updatedAt !== story.startedAt ? `–${Math.floor(story.updatedAt / 60) + 1}` : ""} · {story.eventIds.length} facts</small>
+                        <small>Age {Math.floor(story.startedAt / 60) + 1}{story.updatedAt !== story.startedAt ? `–${Math.floor(story.updatedAt / 60) + 1}` : ""} · {story.eventCount} facts</small>
                       </div>
                       <strong>{story.headline}</strong>
                       <p>{story.summary}</p>

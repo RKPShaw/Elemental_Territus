@@ -31,7 +31,10 @@ than emitted as thousands of fake "actions."
 `StorySystem` observes all unprocessed report events through `storyCursor`.
 Events with the same `storyKey` are consolidated into a `StoryArc`. Story arcs
 may change headline, summary, importance and status, but never rewrite their
-source facts. `eventIds` preserves the complete chain of evidence.
+source facts. `eventCount` carries the arc's true total of consolidated
+facts, and `eventIds` keeps a capped working set of the most recent ones —
+an arc that runs for a whole game would otherwise grow without bound, and
+the live worker clones every arc into each published snapshot.
 
 Examples:
 

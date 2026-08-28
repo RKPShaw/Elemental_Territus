@@ -21,7 +21,6 @@ interface RgbColor {
 
 const COLOR_CACHE = new Map<string, RgbColor>();
 const NEUTRAL_FIELD = RASTER_PLAYER_ORDER.length;
-const WATER_FIELD = RASTER_PLAYER_ORDER.length + 1;
 
 function rgb(hex: string): RgbColor {
   const cached = COLOR_CACHE.get(hex);
@@ -139,19 +138,69 @@ function leasePixels(byteLength: number, zeroed: boolean): Uint8ClampedArray<Arr
   return new Uint8ClampedArray(byteLength);
 }
 
-function fieldIndex(owner: number, terrain: number): number {
-  if (owner >= 0) return owner;
-  return RASTER_TERRAIN_ORDER[terrain] === "water" ? WATER_FIELD : NEUTRAL_FIELD;
+const WATER_TERRAIN = RASTER_TERRAIN_ORDER.indexOf("water");
+
+/**
+ * Half-width of the coastline band, in land-fraction units. The land mask
+ * moves from 0 to 1 across one grid cell, so at eight raster pixels per cell
+ * this band draws a stroke roughly a pixel and a half wide.
+ */
+const COAST_BAND = 0.09;
+/** Land-fraction span over which the fill anti-aliases from water to land. */
+const COAST_AA = 0.05;
+
+function fieldIndex(owner: number): number {
+  return owner >= 0 ? owner : NEUTRAL_FIELD;
 }
 
-function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
+/** Exported for headless benchmarks and tests; the worker protocol is the real interface. */
+export function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
   const { gridWidth, gridHeight, rasterWidth, rasterHeight } = request;
   const cells = gridWidth * gridHeight;
-  // Two claims per cell: who holds it, and who is pressing it.
+
+  // Coasts used to be part of the claim field itself: water carried a claim,
+  // the blur smeared it into the shore, and the land-water line came out as
+  // soft as any contested border. Land-versus-water is a fact, not a contest,
+  // so it now comes from this mask sampled bilinearly and cut at one half --
+  // a crisp, anti-aliased coastline however far the raster is upscaled --
+  // while the blurred claims decide only whose banner the land flies.
+  const landMask = new Float32Array(cells);
+  for (let index = 0; index < cells; index += 1) {
+    landMask[index] = request.terrains[index] === WATER_TERRAIN ? 0 : 1;
+  }
+  // One gentle smoothing pass rounds the bilinear contour's 45-degree
+  // chamfers into curves. It is light enough that a single-cell river channel
+  // stays below the waterline (0.6 * 0 + 0.4 * 6/8 = 0.3), so no waterway is
+  // ever smoothed shut.
+  {
+    const smoothed = new Float32Array(cells);
+    for (let y = 0; y < gridHeight; y += 1) {
+      for (let x = 0; x < gridWidth; x += 1) {
+        const index = y * gridWidth + x;
+        let sum = 0;
+        let count = 0;
+        for (let oy = -1; oy <= 1; oy += 1) {
+          const ny = y + oy;
+          if (ny < 0 || ny >= gridHeight) continue;
+          for (let ox = -1; ox <= 1; ox += 1) {
+            const nx = x + ox;
+            if (nx < 0 || nx >= gridWidth || (ox === 0 && oy === 0)) continue;
+            sum += landMask[ny * gridWidth + nx]!;
+            count += 1;
+          }
+        }
+        smoothed[index] = landMask[index]! * 0.6 + (count > 0 ? sum / count : landMask[index]!) * 0.4;
+      }
+    }
+    landMask.set(smoothed);
+  }
+
+  // Two claims per land cell: who holds it, and who is pressing it.
   const rawIds = new Int16Array(cells * 2).fill(-1);
   const rawWeights = new Float32Array(cells * 2);
   for (let index = 0; index < request.owners.length; index += 1) {
-    const owner = fieldIndex(request.owners[index]!, request.terrains[index]!);
+    if (request.terrains[index] === WATER_TERRAIN) continue;
+    const owner = fieldIndex(request.owners[index]!);
     const pressureOwner = request.pressureOwners[index]!;
     const pressure = pressureOwner >= 0 && pressureOwner !== request.owners[index]
       ? Math.max(0, Math.min(1, request.pressures[index]!))
@@ -159,7 +208,7 @@ function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
     rawIds[index * 2] = owner;
     rawWeights[index * 2] = 1 - pressure;
     if (pressure > 0) {
-      rawIds[index * 2 + 1] = fieldIndex(pressureOwner, request.terrains[index]!);
+      rawIds[index * 2 + 1] = fieldIndex(pressureOwner);
       rawWeights[index * 2 + 1] = pressure;
     }
   }
@@ -168,9 +217,74 @@ function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
   // Every fill pixel is written below; only the borders need a clean slate.
   const fill = leasePixels(rasterWidth * rasterHeight * 4, false);
   const borders = leasePixels(fill.length, true);
-  // Four corners of the bilinear sample, each carrying its own claims.
-  const mergedIds = new Int16Array(CLAIMS_PER_CELL * 4);
-  const mergedWeights = new Float64Array(CLAIMS_PER_CELL * 4);
+  // The bilinear corners, unrolled: this loop runs per raster pixel, and at
+  // the sharper raster an object allocation per pixel is real GC pressure.
+  const cornerCells = new Int32Array(4);
+  const cornerShares = new Float64Array(4);
+  // The union of the four corners' claims, rebuilt only when the pixel walk
+  // crosses into a new cell quad. Deduplicating per pixel was the dominant
+  // cost of the sharper raster; within a quad the id set never changes, only
+  // the bilinear shares do, so each pixel is a few multiplies per claim.
+  const quadIds = new Int16Array(CLAIMS_PER_CELL * 4);
+  const quadWeights = new Float64Array(CLAIMS_PER_CELL * 4 * 4);
+  let quadCount = 0;
+  const water = rgb(TERRAIN_RULES.water.fill);
+  const shore = rgb("#8fbcc4");
+  const coastLine = { red: 20, green: 34, blue: 39 };
+  const shoreline = mix(water, shore, 0.45);
+
+  // Per-pixel color math ran through rgb()'s string-keyed cache and mix()'s
+  // fresh object per call -- at the sharper raster that was over a million
+  // allocations a frame. Everything is precomputed here into flat channel
+  // tables: terrain fills by terrain index, each realm's overlay color and
+  // blend strength by claim field, water by depth step. The terrain tint is
+  // then blended bilinearly across the land corners of the sample -- colors,
+  // never categories -- so the ground fades between biomes as smoothly as the
+  // old low raster's upscale did, while coasts and borders stay sharp.
+  const terrainCount = RASTER_TERRAIN_ORDER.length;
+  const fieldCount = RASTER_PLAYER_ORDER.length + 1;
+  const terrainLut = new Float64Array(terrainCount * 3);
+  for (let index = 0; index < terrainCount; index += 1) {
+    const terrainId = RASTER_TERRAIN_ORDER[index]!;
+    const color = rgb(TERRAIN_RULES[terrainId === "water" ? "plains" : terrainId].fill);
+    terrainLut[index * 3] = color.red;
+    terrainLut[index * 3 + 1] = color.green;
+    terrainLut[index * 3 + 2] = color.blue;
+  }
+  const overlayLut = new Float64Array(fieldCount * 3);
+  const overlayAmount = new Float64Array(fieldCount);
+  for (let field = 0; field < fieldCount; field += 1) {
+    const color = field < RASTER_PLAYER_ORDER.length
+      ? rgb(PLAYERS[RASTER_PLAYER_ORDER[field]!]!.color)
+      : rgb("#d8cfb1");
+    overlayLut[field * 3] = color.red;
+    overlayLut[field * 3 + 1] = color.green;
+    overlayLut[field * 3 + 2] = color.blue;
+    overlayAmount[field] = field < RASTER_PLAYER_ORDER.length ? 0.66 : 0.16;
+  }
+  const WATER_STEPS = 48;
+  const waterLut = new Uint8ClampedArray(WATER_STEPS * 3);
+  for (let step = 0; step < WATER_STEPS; step += 1) {
+    const color = mix(water, shore, (step / (WATER_STEPS - 1)) * 0.45);
+    waterLut[step * 3] = color.red;
+    waterLut[step * 3 + 1] = color.green;
+    waterLut[step * 3 + 2] = color.blue;
+  }
+
+  // Horizontal sampling depends only on the column, so the floor/clamp chain
+  // runs once per column instead of once per pixel.
+  const colX0 = new Int32Array(rasterWidth);
+  const colX1 = new Int32Array(rasterWidth);
+  const colTx = new Float64Array(rasterWidth);
+  const colNearest = new Int32Array(rasterWidth);
+  for (let px = 0; px < rasterWidth; px += 1) {
+    const gridX = ((px + 0.5) / rasterWidth) * gridWidth - 0.5;
+    const floorX = Math.floor(gridX);
+    colX0[px] = Math.max(0, Math.min(gridWidth - 1, floorX));
+    colX1[px] = Math.min(gridWidth - 1, colX0[px]! + 1);
+    colTx[px] = Math.max(0, Math.min(1, gridX - floorX));
+    colNearest[px] = Math.max(0, Math.min(gridWidth - 1, Math.round(gridX)));
+  }
 
   for (let py = 0; py < rasterHeight; py += 1) {
     const gridY = ((py + 0.5) / rasterHeight) * gridHeight - 0.5;
@@ -178,67 +292,153 @@ function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
     const y0 = Math.max(0, Math.min(gridHeight - 1, floorY));
     const y1 = Math.min(gridHeight - 1, y0 + 1);
     const ty = Math.max(0, Math.min(1, gridY - floorY));
+    const nearestY = Math.max(0, Math.min(gridHeight - 1, Math.round(gridY)));
+    const rowTop = y0 * gridWidth;
+    const rowBottom = y1 * gridWidth;
+    const nearestRow = nearestY * gridWidth;
+    let quadX = -1;
     for (let px = 0; px < rasterWidth; px += 1) {
-      const gridX = ((px + 0.5) / rasterWidth) * gridWidth - 0.5;
-      const floorX = Math.floor(gridX);
-      const x0 = Math.max(0, Math.min(gridWidth - 1, floorX));
-      const x1 = Math.min(gridWidth - 1, x0 + 1);
-      const tx = Math.max(0, Math.min(1, gridX - floorX));
+      const x0 = colX0[px]!;
+      const x1 = colX1[px]!;
+      const tx = colTx[px]!;
 
-      const corners = [
-        { cell: y0 * gridWidth + x0, share: (1 - tx) * (1 - ty) },
-        { cell: y0 * gridWidth + x1, share: tx * (1 - ty) },
-        { cell: y1 * gridWidth + x0, share: (1 - tx) * ty },
-        { cell: y1 * gridWidth + x1, share: tx * ty },
-      ];
-      let merged = 0;
-      for (const corner of corners) {
-        if (corner.share <= 0) continue;
-        const base = corner.cell * CLAIMS_PER_CELL;
-        for (let slot = 0; slot < CLAIMS_PER_CELL; slot += 1) {
-          const id = claims.ids[base + slot]!;
-          if (id < 0) break;
-          const value = claims.weights[base + slot]! * corner.share;
-          let at = -1;
-          for (let e = 0; e < merged; e += 1) {
-            if (mergedIds[e] === id) { at = e; break; }
+      cornerCells[0] = rowTop + x0;
+      cornerShares[0] = (1 - tx) * (1 - ty);
+      cornerCells[1] = rowTop + x1;
+      cornerShares[1] = tx * (1 - ty);
+      cornerCells[2] = rowBottom + x0;
+      cornerShares[2] = (1 - tx) * ty;
+      cornerCells[3] = rowBottom + x1;
+      cornerShares[3] = tx * ty;
+
+      const landFraction =
+        landMask[cornerCells[0]!]! * cornerShares[0]! +
+        landMask[cornerCells[1]!]! * cornerShares[1]! +
+        landMask[cornerCells[2]!]! * cornerShares[2]! +
+        landMask[cornerCells[3]!]! * cornerShares[3]!;
+      const pixel = (py * rasterWidth + px) * 4;
+
+      // The coastline itself: one dark stroke exactly on the half contour,
+      // drawn into the border layer so it sits above the fill like the
+      // political lines do.
+      const coastDepth = Math.abs(landFraction - 0.5);
+      if (coastDepth < COAST_BAND) {
+        const alpha = 0.9 * (1 - coastDepth / COAST_BAND);
+        borders[pixel] = coastLine.red;
+        borders[pixel + 1] = coastLine.green;
+        borders[pixel + 2] = coastLine.blue;
+        borders[pixel + 3] = Math.round(alpha * 255);
+      }
+
+      if (landFraction < 0.5) {
+        // Open water: no claims to weigh. Shallows brighten toward the shore
+        // so the coast reads as a beach line rather than a paint boundary.
+        const shallow = Math.max(0, Math.min(1, landFraction / 0.5));
+        const at = Math.round(shallow * (WATER_STEPS - 1)) * 3;
+        fill[pixel] = waterLut[at]!;
+        fill[pixel + 1] = waterLut[at + 1]!;
+        fill[pixel + 2] = waterLut[at + 2]!;
+        fill[pixel + 3] = 255;
+        continue;
+      }
+
+      // Rebuilt lazily so runs of open water never pay for it.
+      if (x0 !== quadX) {
+        quadX = x0;
+        quadCount = 0;
+        quadWeights.fill(0, 0, CLAIMS_PER_CELL * 4 * 4);
+        for (let corner = 0; corner < 4; corner += 1) {
+          const base = cornerCells[corner]! * CLAIMS_PER_CELL;
+          for (let slot = 0; slot < CLAIMS_PER_CELL; slot += 1) {
+            const id = claims.ids[base + slot]!;
+            if (id < 0) break;
+            let at = -1;
+            for (let e = 0; e < quadCount; e += 1) {
+              if (quadIds[e] === id) { at = e; break; }
+            }
+            if (at < 0) { at = quadCount; quadIds[at] = id; quadCount += 1; }
+            quadWeights[at * 4 + corner]! += claims.weights[base + slot]!;
           }
-          if (at < 0) { at = merged; mergedIds[at] = id; mergedWeights[at] = 0; merged += 1; }
-          mergedWeights[at]! += value;
         }
       }
 
+      let totalWeight = 0;
       let first = -1;
       let firstValue = 0;
       let second = -1;
       let secondValue = 0;
-      for (let e = 0; e < merged; e += 1) {
-        const value = mergedWeights[e]!;
+      for (let e = 0; e < quadCount; e += 1) {
+        const row = e * 4;
+        const value =
+          quadWeights[row]! * cornerShares[0]! +
+          quadWeights[row + 1]! * cornerShares[1]! +
+          quadWeights[row + 2]! * cornerShares[2]! +
+          quadWeights[row + 3]! * cornerShares[3]!;
+        if (value <= 0) continue;
+        totalWeight += value;
         if (first < 0 || value > firstValue) {
           second = first; secondValue = firstValue;
-          first = mergedIds[e]!; firstValue = value;
+          first = quadIds[e]!; firstValue = value;
         } else if (second < 0 || value > secondValue) {
-          second = mergedIds[e]!; secondValue = value;
+          second = quadIds[e]!; secondValue = value;
         }
       }
-
-      const nearestX = Math.max(0, Math.min(gridWidth - 1, Math.round(gridX)));
-      const nearestY = Math.max(0, Math.min(gridHeight - 1, Math.round(gridY)));
-      const terrainId = RASTER_TERRAIN_ORDER[request.terrains[nearestY * gridWidth + nearestX]!]!;
-      const winner = first >= 0 && first < RASTER_PLAYER_ORDER.length ? RASTER_PLAYER_ORDER[first]! : null;
-      const terrain = rgb(TERRAIN_RULES[first === WATER_FIELD ? "water" : terrainId].fill);
-      const fillColor = winner
-        ? mix(terrain, rgb(PLAYERS[winner]!.color), first === request.selected ? 0.76 : 0.66)
-        : first === NEUTRAL_FIELD
-          ? mix(terrain, rgb("#d8cfb1"), 0.16)
-          : terrain;
-      const pixel = (py * rasterWidth + px) * 4;
-      fill[pixel] = fillColor.red;
-      fill[pixel + 1] = fillColor.green;
-      fill[pixel + 2] = fillColor.blue;
+      // Terrain tint blended over the land corners of the sample; water
+      // corners are excluded and the shares renormalized, so a coastal pixel
+      // never borrows the sea's color -- that smudge is exactly what this
+      // pass exists to remove.
+      let terrainRed = 0;
+      let terrainGreen = 0;
+      let terrainBlue = 0;
+      let terrainShare = 0;
+      for (let corner = 0; corner < 4; corner += 1) {
+        const cellIndex = cornerCells[corner]!;
+        if (request.terrains[cellIndex] === WATER_TERRAIN) continue;
+        const share = cornerShares[corner]!;
+        const at = request.terrains[cellIndex]! * 3;
+        terrainRed += terrainLut[at]! * share;
+        terrainGreen += terrainLut[at + 1]! * share;
+        terrainBlue += terrainLut[at + 2]! * share;
+        terrainShare += share;
+      }
+      if (terrainShare > 0) {
+        terrainRed /= terrainShare;
+        terrainGreen /= terrainShare;
+        terrainBlue /= terrainShare;
+      } else {
+        const at = request.terrains[nearestRow + colNearest[px]!]! * 3;
+        terrainRed = terrainLut[at]!;
+        terrainGreen = terrainLut[at + 1]!;
+        terrainBlue = terrainLut[at + 2]!;
+      }
+      const field = first >= 0 && first < RASTER_PLAYER_ORDER.length ? first : NEUTRAL_FIELD;
+      const amount = field === request.selected ? 0.76 : overlayAmount[field]!;
+      const overlayBase = field * 3;
+      let red = Math.round(terrainRed + (overlayLut[overlayBase]! - terrainRed) * amount);
+      let green = Math.round(terrainGreen + (overlayLut[overlayBase + 1]! - terrainGreen) * amount);
+      let blue = Math.round(terrainBlue + (overlayLut[overlayBase + 2]! - terrainBlue) * amount);
+      // Anti-alias the last sliver of shoreline into the water color.
+      if (landFraction < 0.5 + COAST_AA) {
+        const blend = (landFraction - 0.5) / COAST_AA;
+        red = Math.round(shoreline.red + (red - shoreline.red) * blend);
+        green = Math.round(shoreline.green + (green - shoreline.green) * blend);
+        blue = Math.round(shoreline.blue + (blue - shoreline.blue) * blend);
+      }
+      fill[pixel] = red;
+      fill[pixel + 1] = green;
+      fill[pixel + 2] = blue;
       fill[pixel + 3] = 255;
 
-      if (second < 0 || secondValue < 0.055) continue;
+      if (second < 0) continue;
+      // Weights are normalized before the border thresholds read them: near a
+      // coast the water cells contribute no claims, and without this the
+      // thinner total made every shoreline border read as contested. Deferred
+      // to here so interior pixels skip the divisions.
+      if (totalWeight > 0) {
+        firstValue /= totalWeight;
+        secondValue /= totalWeight;
+      }
+      if (secondValue < 0.055) continue;
       const gap = firstValue - secondValue;
       const strength = Math.max(0, Math.min(1, 1 - gap / 0.25));
       if (strength <= 0) continue;
@@ -254,10 +454,12 @@ function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
           ? { red: 145, green: 55, blue: 58 }
           : { red: 12, green: 16, blue: 18 };
       const alpha = core ? 1 : Math.pow(strength, 0.72) * (atWar ? 0.9 : 0.78);
-      borders[pixel] = line.red;
-      borders[pixel + 1] = line.green;
-      borders[pixel + 2] = line.blue;
-      borders[pixel + 3] = Math.round(alpha * 255);
+      if (borders[pixel + 3]! < Math.round(alpha * 255)) {
+        borders[pixel] = line.red;
+        borders[pixel + 1] = line.green;
+        borders[pixel + 2] = line.blue;
+        borders[pixel + 3] = Math.round(alpha * 255);
+      }
     }
   }
   return { type: "rendered", requestId: request.requestId, mode: request.mode, rasterWidth, rasterHeight, fill, borders };

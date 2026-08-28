@@ -336,8 +336,11 @@ test("strategic geography stays connected, balanced, and migrates toward live va
   // Capitals now open as founded cities, so the opening infrastructure map
   // already resembles the developed one and boundaries drift less than they
   // did from a bare-marker start; the mechanism still visibly migrates.
+  // The threshold followed the slower-economy retune down: the world develops
+  // a quarter to an eighth as fast, so less infrastructure exists by tick 96
+  // for boundaries to chase, and the same mechanism migrates fewer cells.
   assert.ok(
-    state.regionByCell.filter((regionId, index) => regionId >= 0 && regionId !== initialAssignments[index]).length > 300,
+    state.regionByCell.filter((regionId, index) => regionId >= 0 && regionId !== initialAssignments[index]).length > 200,
     "filtered strategic boundaries should visibly migrate as terrain develops",
   );
 
@@ -563,7 +566,7 @@ test("train stops pay the fixed values, scaled by stacks and trade-form rewards"
     TRADE_RULES.foreignTrainStopPayout * 2,
     TRADE_RULES.domesticTrainStopPayout * 4,
   );
-  assert.equal(TRADE_RULES.shipPayoutPerTravelTick, 4_000);
+  assert.equal(TRADE_RULES.shipPayoutPerTravelTick, 800);
 });
 
 test("future feature namespaces feed the same story system", () => {

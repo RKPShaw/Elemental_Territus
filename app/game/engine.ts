@@ -106,6 +106,24 @@ export class ElementalWarEngine {
     return reader(this.state);
   }
 
+  /**
+   * Drops report events the engine itself is finished with: ones the story
+   * correlator has already consumed AND the caller has already delivered to
+   * whoever keeps the full archive. The live worker calls this after each
+   * published snapshot delta, so a long game's ledger lives in the archive's
+   * memory once instead of growing without bound inside the worker too --
+   * which is what eventually made every postMessage clone fail with an
+   * out-of-memory DataCloneError. Returns how many events were dropped so the
+   * caller can shift its own published-count watermark.
+   */
+  pruneConsumedReports(deliveredCount: number): number {
+    const drop = Math.max(0, Math.min(deliveredCount, this.state.storyCursor));
+    if (drop === 0) return 0;
+    this.state.reports.splice(0, drop);
+    this.state.storyCursor -= drop;
+    return drop;
+  }
+
   snapshot(): WorldState {
     return {
       ...this.state,

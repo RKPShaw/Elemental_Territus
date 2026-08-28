@@ -118,9 +118,30 @@ function createStory(event: WorldReportEvent): StoryArc {
       ...event.participants,
     ]),
     eventIds: [],
+    eventCount: 0,
     metrics: {},
   };
 }
+
+/**
+ * Supporting-fact ids retained per arc. The metrics and summaries already
+ * consolidate the whole history; the ids only exist to point a reader at
+ * recent evidence, so an arc keeps a working set rather than every id it has
+ * ever consumed. eventCount carries the true total.
+ */
+const STORY_EVENT_ID_LIMIT = 48;
+
+/**
+ * Live story arcs retained in world state. Some keys never conclude (a
+ * realm's expansion arc, a trade lane), and new keys open for every war and
+ * every development era, so a long game otherwise grows the array without
+ * bound -- and the live worker clones every arc into each published snapshot.
+ * When the ledger passes the high mark, the arcs untouched longest are
+ * retired down to the low mark; the gap keeps retirement from churning every
+ * tick. A retired key that later resurfaces simply opens a fresh arc.
+ */
+const STORY_RETENTION_HIGH = 640;
+const STORY_RETENTION_LOW = 512;
 
 function applyMetrics(story: StoryArc, event: WorldReportEvent): void {
   switch (event.kind) {
@@ -357,6 +378,10 @@ function updateStory(story: StoryArc, event: WorldReportEvent): void {
   story.updatedAt = event.tick;
   story.importance = greaterImportance(story.importance, event.importance);
   story.eventIds.push(event.id);
+  story.eventCount += 1;
+  if (story.eventIds.length > STORY_EVENT_ID_LIMIT) {
+    story.eventIds.splice(0, story.eventIds.length - STORY_EVENT_ID_LIMIT);
+  }
   story.participants = uniqueSubjects([
     ...story.participants,
     ...(event.initiator ? [event.initiator] : []),
@@ -404,6 +429,16 @@ export class StorySystem implements SimulationSystem {
         state.stories.push(story);
       }
       updateStory(story, event);
+    }
+    if (state.stories.length > STORY_RETENTION_HIGH) {
+      // Rank by recency of update; ties break toward the later insertion so
+      // the cut is deterministic. The filter keeps the survivors in their
+      // original order, so the archive still reads chronologically.
+      const ranked = state.stories
+        .map((story, index) => ({ story, index }))
+        .sort((a, b) => (b.story.updatedAt - a.story.updatedAt) || (b.index - a.index));
+      const keep = new Set(ranked.slice(0, STORY_RETENTION_LOW).map((entry) => entry.story));
+      state.stories = state.stories.filter((story) => keep.has(story));
     }
   }
 }

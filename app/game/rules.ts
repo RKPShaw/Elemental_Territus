@@ -110,7 +110,7 @@ export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
     name: "Harbor",
     glyph: "⚓",
     cost: 25_000,
-    description: "Shares the trade-building ladder and earns 4K for every second of its completed water voyage.",
+    description: "Shares the trade-building ladder and earns 800 gold for every second of its completed water voyage.",
   },
   plant: {
     id: "plant",
@@ -456,7 +456,7 @@ export const POWER_RULES = {
    * containment fails and the works limp below par for the outage window.
    */
   plasmaPayoutBoost: 1.6,
-  plasmaUpkeepPerStructure: 600,
+  plasmaUpkeepPerStructure: 120,
   plasmaFailureTicks: 300,
   plasmaFailurePenalty: 0.7,
   /**
@@ -557,9 +557,16 @@ export const STRATEGY_RULES = {
   peacefulTradeSurge: 0.08,
 } as const;
 
+/**
+ * Income rates were cut roughly fivefold across the board (land, cities and
+ * every trade carrier together) when playtests showed realms running their
+ * whole build program inside the first hundred ticks: the world should take
+ * several ages to get busy, not one. Costs stayed put, so the same ladder is
+ * climbed at a quarter to an eighth of the old pace.
+ */
 export const ECONOMY_RULES = {
-  landIncomeScale: 2.4,
-  cityIncome: 500,
+  landIncomeScale: 0.48,
+  cityIncome: 100,
   maximumTreasury: 100_000_000,
 } as const;
 
@@ -614,9 +621,9 @@ export const TRADE_RULES = {
   pulseVelocity: 0.85,
   flyerVelocity: 0.5,
   trainStopDwellTicks: 2,
-  domesticTrainStopPayout: 50_000,
-  foreignTrainStopPayout: 100_000,
-  shipPayoutPerTravelTick: 4_000,
+  domesticTrainStopPayout: 10_000,
+  foreignTrainStopPayout: 20_000,
+  shipPayoutPerTravelTick: 800,
   /**
    * The energy carrier. A power plant strings straight conduits to the
    * nearest few stations within reach, and each delivered pulse pays a flat
@@ -624,7 +631,7 @@ export const TRADE_RULES = {
    */
   conduitRadius: 5.5,
   conduitLinksPerPlant: 3,
-  energyDeliveryPayout: 45_000,
+  energyDeliveryPayout: 9_000,
   /**
    * The airborne carrier. Skyports fly straight to any other skyport, so
    * the payout is bought with distance like a voyage. Air's premium is
@@ -634,7 +641,7 @@ export const TRADE_RULES = {
    * wins on flight income alone. A hop shorter than the minimum is not
    * worth wings.
    */
-  airPayoutPerTravelTick: 3_600,
+  airPayoutPerTravelTick: 720,
   minimumFlightDistance: 4,
   foreignHostShare: 0.18,
   alliedHostShare: 0.35,
@@ -717,7 +724,12 @@ export const SETTLE_PREFERENCE_RANGE = 0.9;
 
 export const CLAIM_RULES = {
   initialRegionRadius: 2.8,
-  pressurePerTick: 8,
+  /**
+   * Settlement pace. At 8 a frontier tile fell nearly every tick and the
+   * whole world was claimed by tick 50; the intended arc is a world still
+   * being settled while the first wars open, fully claimed around tick 150.
+   */
+  pressurePerTick: 0.62,
   populationCostPerCell: 100,
   minimumHomePopulation: 8_000,
   minimumCampaignCommitment: 2_000,
