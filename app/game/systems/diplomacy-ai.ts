@@ -124,6 +124,15 @@ function warDesire(
   const exposedTraitor = state.tick < rival.traitorUntil ? 0.48 : 0;
   const longPeace = clamp((state.tick - relation.since) / 320, 0, 0.38);
   const existingWars = warCount(pass, actor);
+  // Opportunism: a target already at war with its host running thin invites
+  // every other border to open too. This is what lets several realms fall on
+  // one collapsing power at once instead of queueing politely.
+  const targetWars = warCount(pass, target);
+  const targetStretched = rival.troops / Math.max(1, rival.troopCap);
+  const pileOn = targetWars > 0
+    ? DIPLOMACY_RULES.pileOnWarDesire
+      * Math.min(1.6, targetWars * (targetStretched < 0.45 ? 1 : 0.45))
+    : 0;
   // Element mastery is pursued here: a target whose absorption advances the
   // realm's next tier is worth a war, scaled by how much the court cares.
   const ascensionPull = ascensionAppetite(state, actor, target)
@@ -133,8 +142,8 @@ function warDesire(
   // threshold the sum is positive, so the factor moves decisions exactly there.
   return (readiness * 0.88 + troopEdge * 0.38 + elementalEdge * 1.6
     + (border > 0 ? 0.14 : -0.05) + containLeader + finishVulnerable
-    + exposedTraitor + longPeace + ascensionPull - self.warWeariness * 0.72
-    - existingWars * 0.34 + random.next() * 0.16)
+    + exposedTraitor + longPeace + ascensionPull + pileOn - self.warWeariness * 0.72
+    - existingWars * 0.26 + random.next() * 0.16)
     * strategyFactor(self.strategy, "conquest");
 }
 
@@ -165,9 +174,15 @@ export class DiplomacyAiSystem implements SimulationSystem {
     const { state, random } = context;
     if (state.tick % state.config.diplomacyInterval !== 0) return;
     const pass = buildPass(state);
-    const diplomaticallyEngaged = new Set(
-      PLAYER_ORDER.filter((id) => warCount(pass, id) > 0),
-    );
+    // Wars declared earlier in this same pass, counted on top of the tally
+    // taken at the start of it, so one sweep cannot push a realm past its cap.
+    const declaredThisPass = new Map<PlayerId, number>();
+    const liveWarCount = (id: PlayerId) => warCount(pass, id) + (declaredThisPass.get(id) ?? 0);
+    const belowWarCap = (id: PlayerId) => liveWarCount(id) < DIPLOMACY_RULES.maximumWarsPerRealm;
+    const recordDeclaration = (actor: PlayerId, target: PlayerId) => {
+      declaredThisPass.set(actor, (declaredThisPass.get(actor) ?? 0) + 1);
+      declaredThisPass.set(target, (declaredThisPass.get(target) ?? 0) + 1);
+    };
 
     for (const relation of allRelations(state)) {
       const [a, b] = relation.parties;
@@ -181,26 +196,24 @@ export class DiplomacyAiSystem implements SimulationSystem {
       }
 
       if (relation.status === "truce") {
-        if (diplomaticallyEngaged.has(a) || diplomaticallyEngaged.has(b)) continue;
         const ratioA = factionA.troops / Math.max(1, factionB.troops);
         const ratioB = 1 / Math.max(0.01, ratioA);
         const shareA = factionA.territory / state.landTiles;
         const shareB = factionB.territory / state.landTiles;
         const bIsTraitor = state.tick < factionB.traitorUntil;
         const aIsTraitor = state.tick < factionA.traitorUntil;
-        const aHasOpening = hasRoute(context, a, b) && (
+        const aHasOpening = belowWarCap(a) && hasRoute(context, a, b) && (
           (bIsTraitor && ratioA > 1.05) ||
           (ratioA > 1.65 && shareB < shareA * 0.72 && random.chance(0.42))
         );
-        const bHasOpening = hasRoute(context, b, a) && (
+        const bHasOpening = belowWarCap(b) && hasRoute(context, b, a) && (
           (aIsTraitor && ratioB > 1.05) ||
           (ratioB > 1.65 && shareA < shareB * 0.72 && random.chance(0.42))
         );
         if (aHasOpening || bHasOpening) {
           const actor = aHasOpening && (!bHasOpening || ratioA >= ratioB) ? a : b;
           state.commands.push({ type: "declare-war", actor, target: otherParty(relation, actor) });
-          diplomaticallyEngaged.add(a);
-          diplomaticallyEngaged.add(b);
+          recordDeclaration(a, b);
         }
         continue;
       }
@@ -219,8 +232,8 @@ export class DiplomacyAiSystem implements SimulationSystem {
 
         if (
           state.tick >= 48 &&
-          !diplomaticallyEngaged.has(a) &&
-          !diplomaticallyEngaged.has(b) &&
+          liveWarCount(a) === 0 &&
+          liveWarCount(b) === 0 &&
           truceCount(pass, a) < DIPLOMACY_RULES.maximumTrucesPerRealm &&
           truceCount(pass, b) < DIPLOMACY_RULES.maximumTrucesPerRealm
         ) {
@@ -235,19 +248,23 @@ export class DiplomacyAiSystem implements SimulationSystem {
 
         if (
           state.tick < state.config.minimumPeaceTicks ||
-          state.tick < relation.cooldownUntil ||
-          diplomaticallyEngaged.has(a) ||
-          diplomaticallyEngaged.has(b)
+          state.tick < relation.cooldownUntil
         ) continue;
-        const desireA = warDesire(context, pass, a, b, relation) * state.config.aggression;
-        const desireB = warDesire(context, pass, b, a, relation) * state.config.aggression;
+        // Only the declarer's own war count gates a declaration. The target's
+        // never does: a realm already fighting for its life is exactly the one
+        // its other neighbours descend on.
+        const desireA = belowWarCap(a)
+          ? warDesire(context, pass, a, b, relation) * state.config.aggression
+          : Number.NEGATIVE_INFINITY;
+        const desireB = belowWarCap(b)
+          ? warDesire(context, pass, b, a, relation) * state.config.aggression
+          : Number.NEGATIVE_INFINITY;
         const threshold = 1.08 + random.next() * 0.14;
         if (Math.max(desireA, desireB) > threshold) {
           const actor = desireA >= desireB ? a : b;
           const target = actor === a ? b : a;
           state.commands.push({ type: "declare-war", actor, target });
-          diplomaticallyEngaged.add(actor);
-          diplomaticallyEngaged.add(target);
+          recordDeclaration(actor, target);
         }
         continue;
       }

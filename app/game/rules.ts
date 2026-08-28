@@ -170,6 +170,19 @@ export const DIPLOMACY_RULES = {
   traitorDurationTicks: 30,
   traitorAttackMultiplier: 1.35,
   maximumTrucesPerRealm: 2,
+  /**
+   * Wars a realm may hold as a party at once. The cap restrains how thin one
+   * realm spreads itself; it deliberately does not protect a target — any
+   * number of rivals may hold wars against the same realm, which is what lets
+   * a coalition fall on a collapsing power and carve it up together.
+   */
+  maximumWarsPerRealm: 3,
+  /**
+   * Extra war desire against a target already fighting someone else while its
+   * host runs thin. Opportunism is the intended character: a weakened realm
+   * should fear every border it has, not just the one already burning.
+   */
+  pileOnWarDesire: 0.34,
 } as const;
 
 export const CAMPAIGN_RULES = {
@@ -262,6 +275,19 @@ export const STRATEGIC_REGION_RULES = {
   boundaryInertia: 0.2,
   objectiveLookaheadCells: 14,
   maximumObjectives: 8,
+} as const;
+
+/**
+ * Streams are the minor rivers: lines of running water too small to be a
+ * terrain of their own. A stream cell stays ordinary land — armies cross it,
+ * settlers claim it — but taking ground on a stream costs more, so political
+ * borders prefer to come to rest along the watercourses the way real ones do.
+ */
+export const STREAM_RULES = {
+  /** Conquest-cost multiplier for enemy ground on a stream bank. */
+  enemyCrossingCost: 1.5,
+  /** Settlement-cost multiplier for wilderness on a stream bank. */
+  wildernessCrossingCost: 1.2,
 } as const;
 
 /**

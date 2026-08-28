@@ -1,3 +1,4 @@
+import { realmTitle } from "../naming";
 import { markCellsChanged } from "../structure-index";
 import { openLens } from "../lenses";
 import { PLAYERS } from "../players";
@@ -105,9 +106,9 @@ function captureEnemyTile(
       kind: "territory.structure-captured",
       importance: capturedStructure === "fort" || capturedStructure === "city" ? "major" : "notable",
       storyKey: campaign.storyKey,
-      initiator: realmSubject(campaign.attacker),
-      targets: [structureSubject(capturedStructure, tileIndex, defender), realmSubject(defender)],
-      participants: [campaignSubject(campaign)],
+      initiator: realmSubject(state, campaign.attacker),
+      targets: [structureSubject(state, capturedStructure, tileIndex, defender), realmSubject(state, defender)],
+      participants: [campaignSubject(state, campaign)],
       links: {
         campaign: campaign.id,
         structure: `${capturedStructure}:${tileIndex}`,
@@ -120,7 +121,7 @@ function captureEnemyTile(
         heritage: capturedHeritage,
         campaignCaptures: campaign.captures,
       },
-      summary: `${PLAYERS[campaign.attacker].realmName} captured a ${capturedStructure} belonging to ${PLAYERS[defender].realmName}.`,
+      summary: `${realmTitle(state, campaign.attacker)} captured a ${capturedStructure} belonging to ${realmTitle(state, defender)}.`,
     });
   }
 
@@ -139,9 +140,9 @@ function captureEnemyTile(
       kind: "territory.resonant-capture",
       importance: "notable",
       storyKey: campaign.storyKey,
-      initiator: realmSubject(campaign.attacker),
-      targets: [structureSubject(capturedStructure, tileIndex, campaign.attacker), realmSubject(defender)],
-      participants: [campaignSubject(campaign)],
+      initiator: realmSubject(state, campaign.attacker),
+      targets: [structureSubject(state, capturedStructure, tileIndex, campaign.attacker), realmSubject(state, defender)],
+      participants: [campaignSubject(state, campaign)],
       links: {
         campaign: campaign.id,
         structure: `${capturedStructure}:${tileIndex}`,
@@ -154,7 +155,7 @@ function captureEnemyTile(
         bonus: ELEMENT_RULES.resonantCaptureBonus,
         windowTicks: ELEMENT_RULES.resonantWindowTicks,
       },
-      summary: `${PLAYERS[campaign.attacker].realmName} captured a ${capturedStructure} of ${ELEMENTS[capturedHeritage].name} heritage it trades by, and the fresh conquest pays a resonant premium.`,
+      summary: `${realmTitle(state, campaign.attacker)} captured a ${capturedStructure} of ${ELEMENTS[capturedHeritage].name} heritage it trades by, and the fresh conquest pays a resonant premium.`,
     });
   }
 
@@ -167,33 +168,33 @@ function captureEnemyTile(
       kind: "territory.capital-captured",
       importance: "historic",
       storyKey: campaign.storyKey,
-      initiator: realmSubject(campaign.attacker),
-      targets: [realmSubject(defender)],
-      participants: [campaignSubject(campaign)],
+      initiator: realmSubject(state, campaign.attacker),
+      targets: [realmSubject(state, defender)],
+      participants: [campaignSubject(state, campaign)],
       links: {
         campaign: campaign.id,
         ...(theater ? { theater: theater.id } : {}),
       },
       facts: { tileIndex, campaignCaptures: campaign.captures, annexedTiles },
-      summary: `${PLAYERS[campaign.attacker].realmName} captured the capital of ${PLAYERS[defender].realmName} and the rest of the realm fell with it.`,
+      summary: `${realmTitle(state, campaign.attacker)} captured the capital of ${realmTitle(state, defender)} and the rest of the realm fell with it.`,
     });
   }
 
   if (capturedCapital) {
     context.emit(
-      `${PLAYERS[campaign.attacker].realmName} storms the capital of ${PLAYERS[defender].realmName} -- the whole realm falls with it!`,
+      `${realmTitle(state, campaign.attacker)} storms the capital of ${realmTitle(state, defender)} -- the whole realm falls with it!`,
       "battle",
       campaign.attacker,
     );
   } else if (capturedStructure === "fort") {
     context.emit(
-      `${PLAYERS[campaign.attacker].realmName} overruns a fortified sector after paying its doubled invasion cost.`,
+      `${realmTitle(state, campaign.attacker)} overruns a fortified sector after paying its doubled invasion cost.`,
       "battle",
       campaign.attacker,
     );
   } else if (campaign.captures % 70 === 0) {
     context.emit(
-      `${PLAYERS[campaign.attacker].realmName} has pressed the border forward by ${campaign.captures} tiles in this campaign.`,
+      `${realmTitle(state, campaign.attacker)} has pressed the border forward by ${campaign.captures} tiles in this campaign.`,
       "rise",
       campaign.attacker,
     );
@@ -235,19 +236,19 @@ function settleWildernessTile(
       kind: "territory.settlement-milestone",
       importance: "notable",
       storyKey: campaign.storyKey,
-      initiator: realmSubject(campaign.attacker),
-      targets: [targetSubject("wilderness")],
-      participants: [campaignSubject(campaign), theaterSubject(theater.id, theater.attacker)],
+      initiator: realmSubject(state, campaign.attacker),
+      targets: [targetSubject(state, "wilderness")],
+      participants: [campaignSubject(state, campaign), theaterSubject(state, theater.id, theater.attacker)],
       links: { campaign: campaign.id, theater: theater.id },
       facts: {
         claimedTiles: faction.claimedTiles,
         campaignCaptures: campaign.captures,
         terrain: tile.terrain,
       },
-      summary: `${PLAYERS[campaign.attacker].realmName} reached ${faction.claimedTiles} settled wilderness sectors.`,
+      summary: `${realmTitle(state, campaign.attacker)} reached ${faction.claimedTiles} settled wilderness sectors.`,
     });
     context.emit(
-      `${PLAYERS[campaign.attacker].realmName} settles its ${faction.claimedTiles}th piece of the unclaimed world.`,
+      `${realmTitle(state, campaign.attacker)} settles its ${faction.claimedTiles}th piece of the unclaimed world.`,
       "rise",
       campaign.attacker,
     );
@@ -261,8 +262,9 @@ function finishCampaign(
   announce = false,
   outcome = "closed",
 ): void {
+  const { state } = context;
   const survivors = Math.max(0, campaign.remaining * returnRate);
-  for (const theater of context.state.theaters) {
+  for (const theater of state.theaters) {
     if (
       theater.campaignId !== campaign.id ||
       theater.captures <= 0 ||
@@ -274,16 +276,16 @@ function finishCampaign(
       kind: "military.theater-victory",
       importance: theater.captures >= 25 ? "major" : "notable",
       storyKey: campaign.storyKey,
-      initiator: realmSubject(campaign.attacker),
-      targets: [theaterSubject(theater.id, theater.attacker), targetSubject(campaign.target)],
-      participants: [campaignSubject(campaign)],
+      initiator: realmSubject(state, campaign.attacker),
+      targets: [theaterSubject(state, theater.id, theater.attacker), targetSubject(state, campaign.target)],
+      participants: [campaignSubject(state, campaign)],
       links: { campaign: campaign.id, theater: theater.id },
       facts: {
         captures: theater.captures,
         duration: context.state.tick - theater.formedAt,
         outcome,
       },
-      summary: `${theaterSubject(theater.id, theater.attacker).label} closed after securing ${theater.captures} sectors.`,
+      summary: `${theaterSubject(state, theater.id, theater.attacker).label} closed after securing ${theater.captures} sectors.`,
     });
   }
   const relation = campaign.target === "wilderness"
@@ -294,9 +296,9 @@ function finishCampaign(
     kind: "military.campaign-concluded",
     importance: campaign.captures > 0 ? "major" : "notable",
     storyKey: campaign.storyKey,
-    initiator: realmSubject(campaign.attacker),
-    targets: [targetSubject(campaign.target)],
-    participants: [campaignSubject(campaign)],
+    initiator: realmSubject(state, campaign.attacker),
+    targets: [targetSubject(state, campaign.target)],
+    participants: [campaignSubject(state, campaign)],
     links: {
       campaign: campaign.id,
       ...(relation ? { relation: relation.key } : {}),
@@ -312,8 +314,8 @@ function finishCampaign(
       duration: context.state.tick - campaign.launchedAt,
     },
     summary: campaign.target === "wilderness"
-      ? `${PLAYERS[campaign.attacker].realmName}'s settlement campaign concluded after claiming ${campaign.captures} sectors.`
-      : `${PLAYERS[campaign.attacker].realmName}'s campaign against ${PLAYERS[campaign.target].realmName} concluded after taking ${campaign.captures} sectors.`,
+      ? `${realmTitle(state, campaign.attacker)}'s settlement campaign concluded after claiming ${campaign.captures} sectors.`
+      : `${realmTitle(state, campaign.attacker)}'s campaign against ${realmTitle(state, campaign.target)} concluded after taking ${campaign.captures} sectors.`,
   });
   context.state.factions[campaign.attacker].troops += survivors;
   if (campaign.target !== "wilderness") {
@@ -323,8 +325,8 @@ function finishCampaign(
   if (announce && campaign.captures > 0) {
     context.emit(
       campaign.target === "wilderness"
-        ? `${PLAYERS[campaign.attacker].realmName} closes its settlement campaign after claiming ${campaign.captures} tiles; ${compactNumber(survivors)} settlers return home.`
-        : `${PLAYERS[campaign.attacker].realmName} closes its campaign after taking ${campaign.captures} tiles; ${compactNumber(survivors)} troops return to the reserve.`,
+        ? `${realmTitle(state, campaign.attacker)} closes its settlement campaign after claiming ${campaign.captures} tiles; ${compactNumber(survivors)} settlers return home.`
+        : `${realmTitle(state, campaign.attacker)} closes its campaign after taking ${campaign.captures} tiles; ${compactNumber(survivors)} troops return to the reserve.`,
       campaign.target === "wilderness" ? "rise" : "battle",
       campaign.attacker,
     );
@@ -389,19 +391,19 @@ function processNavalCampaign(context: SimulationContext, campaign: Campaign): v
         kind: "military.naval-expedition-lost",
         importance: "major",
         storyKey: campaign.storyKey,
-        initiator: realmSubject(campaign.attacker),
-        targets: [realmSubject(campaign.target)],
-        participants: [campaignSubject(campaign)],
+        initiator: realmSubject(state, campaign.attacker),
+        targets: [realmSubject(state, campaign.target)],
+        participants: [campaignSubject(state, campaign)],
         links: { campaign: campaign.id },
         facts: {
           casualties: campaign.casualties,
           warshipsAttacker: attacker.warships,
           warshipsDefender: defender.warships,
         },
-        summary: `${PLAYERS[campaign.attacker].realmName}'s naval expedition was destroyed before making landfall.`,
+        summary: `${realmTitle(state, campaign.attacker)}'s naval expedition was destroyed before making landfall.`,
       });
       context.emit(
-        `${PLAYERS[campaign.attacker].realmName}'s transport fleet is scattered before reaching shore.`,
+        `${realmTitle(state, campaign.attacker)}'s transport fleet is scattered before reaching shore.`,
         "battle",
         campaign.target,
       );
@@ -457,15 +459,15 @@ function processNavalCampaign(context: SimulationContext, campaign: Campaign): v
       kind: "military.beachhead-established",
       importance: "major",
       storyKey: campaign.storyKey,
-      initiator: realmSubject(campaign.attacker),
-      targets: [realmSubject(campaign.target)],
-      participants: [campaignSubject(campaign)],
+      initiator: realmSubject(state, campaign.attacker),
+      targets: [realmSubject(state, campaign.target)],
+      participants: [campaignSubject(state, campaign)],
       links: { campaign: campaign.id },
       facts: { tileIndex: targetIndex, troopsRemaining: campaign.remaining },
-      summary: `${PLAYERS[campaign.attacker].realmName} established a beachhead in ${PLAYERS[campaign.target].realmName}.`,
+      summary: `${realmTitle(state, campaign.attacker)} established a beachhead in ${realmTitle(state, campaign.target)}.`,
     });
     context.emit(
-      `${PLAYERS[campaign.attacker].realmName} establishes a beachhead with ${compactNumber(campaign.remaining)} troops still ashore.`,
+      `${realmTitle(state, campaign.attacker)} establishes a beachhead with ${compactNumber(campaign.remaining)} troops still ashore.`,
       "battle",
       campaign.attacker,
     );
@@ -530,7 +532,12 @@ function processSettlementCampaign(context: SimulationContext, campaign: Campaig
         state.config.aggression /
         (cost * Math.max(0.7, lengthScale));
       if (tile.pressureBy && tile.pressureBy !== campaign.attacker) {
-        tile.pressure = Math.max(0, tile.pressure - progress);
+        // Contested wilderness must still fall to somebody. Cancelling the
+        // rival's claim one for one let two matched settler fronts hold a
+        // strip of no-man's-land in a permanent tug-of-war, so the strips
+        // between neighbours never closed; at a discount, the side pressing
+        // even slightly harder resolves the contest instead.
+        tile.pressure = Math.max(0, tile.pressure - progress * 0.55);
         if (tile.pressure === 0) tile.pressureBy = campaign.attacker;
       } else {
         tile.pressureBy = campaign.attacker;

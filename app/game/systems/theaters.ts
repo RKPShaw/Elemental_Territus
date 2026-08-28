@@ -15,6 +15,7 @@ import {
   ENEMY_TERRAIN_COST,
   FORT_RADIUS,
   STRATEGIC_REGION_RULES,
+  STREAM_RULES,
   TERRAIN_RULES,
   WILDERNESS_TERRAIN_COST,
   clamp,
@@ -88,13 +89,19 @@ export function conquestCostAt(
 ): number {
   const cell = state.cells[index]!;
   const terrain = cell.terrain as LandTerrainId;
-  if (target === "wilderness") return WILDERNESS_TERRAIN_COST[terrain];
+  // A stream bank is dearer ground to take, wild or held, so frontiers of
+  // both kinds tend to settle along the minor watercourses.
+  if (target === "wilderness") {
+    return WILDERNESS_TERRAIN_COST[terrain]
+      * (cell.stream ? STREAM_RULES.wildernessCrossingCost : 1);
+  }
   const fort = isFortProtected(state, index, target) ? 2 : 1;
   const city = cell.structure === "city" ? 1.1 : 1;
+  const stream = cell.stream ? STREAM_RULES.enemyCrossingCost : 1;
   // The defender's elemental power prices its own ground: a geyser's banked
   // pressure stiffens it, a venting geyser's or a shattered obsidian's lies
   // soft, and the profile identities lean it inside the band.
-  return ENEMY_TERRAIN_COST[terrain] * fort * city * powerDefenseFactor(state, target);
+  return ENEMY_TERRAIN_COST[terrain] * fort * city * stream * powerDefenseFactor(state, target);
 }
 
 function infrastructureValue(state: WorldState, index: number, viewer?: PlayerId): number {
@@ -336,9 +343,9 @@ function refreshCampaignTheaters(context: SimulationContext, campaign: Campaign)
         kind: "military.theater-formed",
         importance: "routine",
         storyKey: campaign.storyKey,
-        initiator: realmSubject(campaign.attacker),
-        targets: [theaterSubject(theater.id, theater.attacker, regionId), targetSubject(campaign.target)],
-        participants: [campaignSubject(campaign)],
+        initiator: realmSubject(state, campaign.attacker),
+        targets: [theaterSubject(state, theater.id, theater.attacker, regionId), targetSubject(state, campaign.target)],
+        participants: [campaignSubject(state, campaign)],
         links: { campaign: campaign.id, theater: theater.id, province: `region:${regionId}` },
         facts: {
           regionId,
@@ -349,7 +356,7 @@ function refreshCampaignTheaters(context: SimulationContext, campaign: Campaign)
           strategicValue: theater.strategicValue,
           objectives: theater.objectiveCells,
         },
-        summary: `${theaterSubject(theater.id, theater.attacker, regionId).label} formed across natural region ${regionId}.`,
+        summary: `${theaterSubject(state, theater.id, theater.attacker, regionId).label} formed across natural region ${regionId}.`,
       });
     } else {
       const oldCells = new Set(prior.boundaryCells);
@@ -363,9 +370,9 @@ function refreshCampaignTheaters(context: SimulationContext, campaign: Campaign)
           kind: "military.theater-realigned",
           importance: "routine",
           storyKey: campaign.storyKey,
-          initiator: realmSubject(campaign.attacker),
-          targets: [theaterSubject(theater.id, theater.attacker), targetSubject(campaign.target)],
-          participants: [campaignSubject(campaign)],
+          initiator: realmSubject(state, campaign.attacker),
+          targets: [theaterSubject(state, theater.id, theater.attacker), targetSubject(state, campaign.target)],
+          participants: [campaignSubject(state, campaign)],
           links: { campaign: campaign.id, theater: theater.id, province: `region:${regionId}` },
           facts: {
             regionId,
@@ -374,7 +381,7 @@ function refreshCampaignTheaters(context: SimulationContext, campaign: Campaign)
             strategicValue: theater.strategicValue,
             valueTrend: theater.valueTrend,
           },
-          summary: `${theaterSubject(theater.id, theater.attacker).label} advanced through natural region ${regionId}.`,
+          summary: `${theaterSubject(state, theater.id, theater.attacker).label} advanced through natural region ${regionId}.`,
         });
       }
     }
@@ -394,16 +401,16 @@ function refreshCampaignTheaters(context: SimulationContext, campaign: Campaign)
       kind: "military.theater-victory",
       importance: theater.captures >= 25 ? "major" : "notable",
       storyKey: campaign.storyKey,
-      initiator: realmSubject(campaign.attacker),
-      targets: [theaterSubject(theater.id, theater.attacker), targetSubject(campaign.target)],
-      participants: [campaignSubject(campaign)],
+      initiator: realmSubject(state, campaign.attacker),
+      targets: [theaterSubject(state, theater.id, theater.attacker), targetSubject(state, campaign.target)],
+      participants: [campaignSubject(state, campaign)],
       links: { campaign: campaign.id, theater: theater.id, province: `region:${theater.regionId}` },
       facts: {
         regionId: theater.regionId,
         captures: theater.captures,
         duration: state.tick - theater.formedAt,
       },
-      summary: `${theaterSubject(theater.id, theater.attacker).label} secured natural region ${theater.regionId}.`,
+      summary: `${theaterSubject(state, theater.id, theater.attacker).label} secured natural region ${theater.regionId}.`,
     });
   }
 
@@ -428,7 +435,10 @@ function campaignUsablePower(state: WorldState, campaign: Campaign): number {
     return total + Math.max(0, candidate.remaining);
   }, 0);
   const emergency = Math.max(5_000, state.factions[campaign.attacker].troopCap * 0.22);
-  return incoming > emergency ? 0 : usable;
+  // An invasion slows the frontier program, it no longer stops it: zeroing
+  // settlement outright left half-claimed strips of wilderness frozen between
+  // realms for as long as any war ran anywhere along the border.
+  return incoming > emergency ? usable * 0.3 : usable;
 }
 
 function cappedShares(

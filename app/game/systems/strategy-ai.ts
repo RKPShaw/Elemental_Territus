@@ -1,3 +1,4 @@
+import { realmLabel } from "../naming";
 import { PLAYERS, PLAYER_ORDER } from "../players";
 import { ascensionAppetite } from "../ascension";
 import { otherParty, warsFor } from "../diplomacy";
@@ -102,8 +103,16 @@ export class StrategyAiSystem implements SimulationSystem {
         continue;
       }
 
+      // Defense first: blunt the heaviest campaign pressing inward. Throwing
+      // troops at an invasion cancels attackers one for one, which is the only
+      // way an army defends and is paid for in people. Ground near works the
+      // realm cannot rebuild is always worth that price -- and a realm that
+      // dwarfs its invader blunts anywhere, because clearing a pinprick fast
+      // is what frees the host to counterattack and take the ground back.
       const incoming = state.campaigns.filter((campaign) => campaign.target === id);
-      const incomingCampaign = incoming.sort((a, b) => b.remaining - a.remaining)[0];
+      const incomingCampaign = [...incoming].sort((a, b) => b.remaining - a.remaining)[0];
+      const totalIncoming = incoming.reduce((total, campaign) => total + campaign.remaining, 0);
+      let defenseCommitment = 0;
       if (incomingCampaign) {
         const uncovered = Math.max(
           0,
@@ -111,12 +120,6 @@ export class StrategyAiSystem implements SimulationSystem {
         );
         const safeHomeReserve = faction.troopCap * 0.2;
         const available = Math.max(0, faction.troops - safeHomeReserve);
-        // Throwing troops at an invasion cancels attackers one for one, which
-        // is the only way an army defends and is paid for in people. Ground is
-        // not worth that price -- it can be retaken -- so a realm blunts an
-        // attack only when the invasion is inside reach of something it cannot
-        // rebuild: a city, a factory, a harbour, its capital. Everywhere else
-        // it yields the ground and lets the terrain do the defending.
         const threatened = state.theaters.some((theater) => {
           if (theater.campaignId !== incomingCampaign.id) return false;
           if (theater.allocation <= 0) return false;
@@ -125,42 +128,45 @@ export class StrategyAiSystem implements SimulationSystem {
             return cell.owner === id && (cell.capitalOf !== null || cell.structure !== null);
           });
         });
+        const overmatch = faction.troops > incomingCampaign.remaining * 1.8;
         // A defense-minded realm covers more of the pressing force; the clamp
         // keeps even the most martial court from spending itself dry here.
         const coverShare = clamp(0.62 * strategyFactor(faction.strategy, "defense"), 0.4, 0.9);
-        const desired = threatened
-          ? Math.max(0, uncovered * coverShare - incomingCampaign.defenderRemaining)
+        const desired = threatened || overmatch
+          ? Math.max(
+              0,
+              uncovered * (overmatch ? Math.max(coverShare, 0.8) : coverShare)
+                - incomingCampaign.defenderRemaining,
+            )
           : 0;
-        const plannedCommitment = Math.floor(Math.min(available, desired));
-        if (plannedCommitment >= 8_000) {
+        defenseCommitment = Math.floor(Math.min(available, desired));
+        if (defenseCommitment >= 8_000) {
           state.commands.push({
             type: "commit-defense",
             actor: id,
             target: incomingCampaign.attacker,
-            troops: plannedCommitment,
+            troops: defenseCommitment,
           });
         }
-        faction.intent = {
-          target: incomingCampaign.attacker,
-          posture: "defending",
-          confidence: clamp(0.48 + incomingCampaign.defenderRemaining / Math.max(1, incomingCampaign.remaining) * 0.4, 0.4, 0.9),
-          plannedCommitment,
-          reason: threatened
-            ? `${compactNumber(incomingCampaign.defenderRemaining)} defenders trade one-for-one to hold works the realm cannot rebuild; ${compactNumber(uncovered)} attackers still press the line.`
-            : `${compactNumber(uncovered)} attackers press open ground, which the terrain can contest more cheaply than people can.`,
-        };
-        continue;
       }
 
-      let target: PlayerId | null = null;
-      let bestScore = Number.NEGATIVE_INFINITY;
+      // Offense: score every rival this realm is at war with -- its own
+      // aggressions and its invaders alike. A counterattack against an
+      // overmatched invader is the most attractive front there is: the larger
+      // realm blunts the push, then marches back to retake its land and more.
+      interface FrontCandidate { target: PlayerId; score: number }
+      const fronts: FrontCandidate[] = [];
       for (const relation of wars) {
-        if (relation.lastAggressor !== id) continue;
         const rivalId = otherParty(relation, id);
         const rival = state.factions[rivalId];
         if (!rival.alive) continue;
         const border = borderLength(state, id, rivalId);
         const troopEdge = faction.troops / Math.max(1, rival.troops);
+        const invasionBy = incoming.reduce(
+          (total, campaign) => campaign.attacker === rivalId ? total + campaign.remaining : total,
+          0,
+        );
+        const counterattack = invasionBy > 0 && faction.troops > invasionBy * 1.35;
         // Among live wars, the enemy whose absorption advances the next tier
         // is the one an ascension-minded realm presses hardest.
         const score =
@@ -168,98 +174,108 @@ export class StrategyAiSystem implements SimulationSystem {
           (realmMatchup(state, id, rivalId) - 1) * 2.1 +
           Math.log2(border + 1) * 0.08 +
           (rival.territory / state.landTiles > 0.34 ? 0.35 : 0) +
+          (counterattack ? 0.55 : 0) +
+          (relation.lastAggressor !== id && !counterattack ? -0.3 : 0) +
           ascensionAppetite(state, id, rivalId)
             * ELEMENT_RULES.ascensionTargetPreference
             * strategyFactor(faction.strategy, "ascension") +
           random.next() * 0.16;
-        if (score > bestScore) {
-          bestScore = score;
-          target = rivalId;
-        }
+        fronts.push({ target: rivalId, score });
       }
+      fronts.sort((first, second) => second.score - first.score);
 
-      if (!target) {
-        const defensiveWar = wars.find((relation) => relation.lastAggressor !== id);
+      const filled = faction.troops / faction.troopCap;
+      const overwhelmed = totalIncoming > faction.troops * 1.1;
+      const recovering = filled < 0.24;
+      const best = fronts[0];
+
+      if (!best || overwhelmed || recovering) {
         faction.intent = {
-          target: defensiveWar ? otherParty(defensiveWar, id) : null,
-          posture: "defending",
-          confidence: 0.62,
-          plannedCommitment: 0,
-          reason: "Hold the home reserve until the aggressor commits troops to a single advancing front.",
+          target: best?.target ?? incomingCampaign?.attacker ?? null,
+          posture: overwhelmed || incomingCampaign ? "defending" : "recovering",
+          confidence: 0.6,
+          plannedCommitment: defenseCommitment,
+          reason: overwhelmed
+            ? `${compactNumber(totalIncoming)} attackers press inward against a thinner host. Blunt and hold the reserve.`
+            : recovering
+              ? "The available host is too thin. Let cities refill the army before spending more troops."
+              : "Hold the home reserve until a front worth pressing opens.",
         };
         continue;
       }
-      const outgoing = state.campaigns.find(
-        (campaign) => campaign.attacker === id && campaign.target === target,
+
+      // Priorities size the blow: defense decides what stays home, conquest
+      // decides how much of the rest marches, both inside hard bands. The
+      // spendable host is split across up to two fronts, so a realm at war
+      // with several rivals genuinely fights several rivals.
+      const reserve = Math.max(
+        faction.troopCap * 0.24 * strategyFactor(faction.strategy, "defense"),
+        totalIncoming * 0.5,
       );
-      const incomingThreat = 0;
-      const filled = faction.troops / faction.troopCap;
-      const defending = incomingThreat > faction.troops * 0.24;
-      const recovering = filled < 0.24;
+      let spendable = Math.max(0, faction.troops - defenseCommitment - reserve);
+      const desiredTotal = faction.troops * clamp(
+        clamp(0.55 + best.score * 0.06, 0.5, 0.8) * strategyFactor(faction.strategy, "conquest"),
+        0.4,
+        0.85,
+      );
+      spendable = Math.min(spendable, desiredTotal);
 
-      let posture: typeof faction.intent.posture = "mobilizing";
-      if (defending) posture = "defending";
-      else if (recovering) posture = "recovering";
-      else if (outgoing) posture = "invading";
-
+      const MAXIMUM_FRONTS = 2;
       let plannedCommitment = 0;
-      if (!recovering && !defending) {
-        // Priorities size the blow: defense decides what stays home, conquest
-        // decides how much of the rest marches, both inside hard bands.
-        const reserve = Math.max(
-          faction.troopCap * 0.24 * strategyFactor(faction.strategy, "defense"),
-          incomingThreat * 0.65,
-        );
-        const spendable = Math.max(0, faction.troops - reserve);
-        const desired = faction.troops * clamp(
-          clamp(0.55 + bestScore * 0.06, 0.5, 0.8) * strategyFactor(faction.strategy, "conquest"),
-          0.4,
-          0.85,
+      let launched = 0;
+      for (const front of fronts.slice(0, MAXIMUM_FRONTS)) {
+        if (spendable < 15_000) break;
+        if (front !== best && front.score <= 0) break;
+        const outgoing = state.campaigns.find(
+          (campaign) => campaign.attacker === id && campaign.target === front.target,
         );
         const reinforcementNeeded = outgoing && outgoing.remaining < outgoing.initialCommitted * 0.34;
-        if (!outgoing || reinforcementNeeded) {
-          plannedCommitment = Math.floor(Math.min(spendable, desired));
-        }
-      }
-
-      if (plannedCommitment >= 15_000) {
-        const landBorder = borderLength(state, id, target);
+        if (outgoing && !reinforcementNeeded) continue;
+        const share = launched === 0 ? (fronts.length > 1 ? 0.66 : 1) : 1;
+        const commitment = Math.floor(spendable * share);
+        if (commitment < 15_000) continue;
+        const landBorder = borderLength(state, id, front.target);
         if (landBorder > 0) {
           state.commands.push({
             type: "launch-campaign",
             actor: id,
-            target,
-            troops: plannedCommitment,
+            target: front.target,
+            troops: commitment,
             mode: "land",
           });
         } else {
           const routeAvailable = structureCells(state, id, "harbor").length > 0
-            && coastalCells(state, target).length > 0;
-          if (routeAvailable) {
-            state.commands.push({
-              type: "launch-campaign",
-              actor: id,
-              target,
-              troops: plannedCommitment,
-              mode: "naval",
-            });
-          }
+            && coastalCells(state, front.target).length > 0;
+          if (!routeAvailable) continue;
+          state.commands.push({
+            type: "launch-campaign",
+            actor: id,
+            target: front.target,
+            troops: commitment,
+            mode: "naval",
+          });
         }
+        spendable -= commitment;
+        plannedCommitment += commitment;
+        launched += 1;
       }
 
+      const target = best.target;
+      const outgoing = state.campaigns.find(
+        (campaign) => campaign.attacker === id && campaign.target === target,
+      );
+      const counterTarget = incoming.some((campaign) => campaign.attacker === target);
       const route = borderLength(state, id, target) > 0 ? "shared frontier" : "sea lane";
       faction.intent = {
         target,
-        posture,
-        confidence: clamp(0.5 + bestScore * 0.08, 0.36, 0.94),
-        plannedCommitment,
-        reason: defending
-          ? `${PLAYERS[target].realmName} has ${compactNumber(incomingThreat)} troops pressing inward. Preserve the reserve.`
-          : recovering
-            ? `The available host is too thin. Let cities refill the army before spending more troops.`
-            : outgoing
-              ? `${compactNumber(outgoing.remaining)} committed troops are pushing the ${route}; reinforce only if momentum fades.`
-              : `${PLAYERS[target].name} offers the best troop, terrain and elemental balance for the next ${route} campaign.`,
+        posture: outgoing || plannedCommitment > 0 ? "invading" : "mobilizing",
+        confidence: clamp(0.5 + best.score * 0.08, 0.36, 0.94),
+        plannedCommitment: plannedCommitment || defenseCommitment,
+        reason: counterTarget
+          ? `${realmLabel(state, target)}'s invasion has been blunted; the host counterattacks across the ${route} to take the ground back.`
+          : outgoing
+            ? `${compactNumber(outgoing.remaining)} committed troops are pushing the ${route}; reinforce only if momentum fades.`
+            : `${realmLabel(state, target)} offers the best troop, terrain and elemental balance for the next ${route} campaign.`,
       };
     }
   }

@@ -1,3 +1,4 @@
+import { realmTitle } from "../naming";
 import { PLAYERS, PLAYER_ORDER } from "../players";
 import { DOMAIN_LABELS, recomputePriorities } from "../strategy";
 import { realmSubject } from "../reporting";
@@ -38,7 +39,7 @@ export class StrategicPlanningSystem implements SimulationSystem {
         kind: "leadership.strategy-adopted",
         importance: "routine",
         storyKey: `strategy:${id}:${Math.floor(state.tick / 240)}`,
-        initiator: realmSubject(id),
+        initiator: realmSubject(state, id),
         targets: [],
         participants: [],
         links: {},
@@ -47,7 +48,7 @@ export class StrategicPlanningSystem implements SimulationSystem {
           to: next.focus,
           focusWeight: Math.round(next.weights[next.focus] * 1000) / 1000,
         },
-        summary: `${PLAYERS[id].realmName} turns its focus from ${DOMAIN_LABELS[previousFocus]} to ${DOMAIN_LABELS[next.focus]}: ${next.reason}`,
+        summary: `${realmTitle(state, id)} turns its focus from ${DOMAIN_LABELS[previousFocus]} to ${DOMAIN_LABELS[next.focus]}: ${next.reason}`,
       });
     }
   }

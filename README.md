@@ -88,15 +88,29 @@ a fallen realm's element tallies to its conqueror; when those tallies cover a
 compound's founding bases deeply enough (or an advanced element's compounds,
 with a long enough conquest record), the realm ascends: `dynasty.element-ascended`
 enters the report, its priorities lean toward what it became, and its combat
-matchups read its expressed element. Expression only ever upgrades, and realm
-identity — name, family, colors — never changes. `app/game/ascension.ts` owns
-the arithmetic; combat resolves matchups through the composed 25×25 table with
-graded relief for the founding bases a disadvantaged realm's history covers.
+matchups read its expressed element. Expression only ever upgrades.
+`app/game/ascension.ts` owns the arithmetic; combat resolves matchups through
+the composed 25×25 table with graded relief for the founding bases a
+disadvantaged realm's history covers.
+
+Identity now answers the story. Realms wake with plain, generic founding
+names — unique village names like "Corvale", drafted from the world seed in
+`app/game/naming.ts` — and earn grander ones as their history is written: the
+`realm-naming` system climbs a title ladder from freehold through March and
+Kingdom to "Empire of …" on conquest and held land, weaves a newly expressed
+compound or advanced element into the style ("Steam Kingdom of Corvale"), and
+folds a fallen kingdom's name into its conqueror's ("Corvale-Ashmere").
+Every change is recorded on the realm's identity history and reported as
+`dynasty.realm-renamed`, so the story system narrates the naming arc; the
+"marriage" and "decree" rename reasons are reserved for future dynastic
+systems to rename realms through the same machinery. Colors repaint the same
+way: territory, icons, emblems and legend chips all wear the color of the
+element a realm currently expresses, so combining elements visibly recolors
+the realm.
 
 Ascension is legible wherever the observer looks. Badges wear the expressed
-element's glyph with a tier numeral riding the family colors that never
-repaint — in the realm strip, the council emblem, the map's capital markers
-and the terminal standings alike. Panels carry ascension titles
+element's glyph, tier numeral and colors — in the realm strip, the council
+emblem, the map's capital markers and the terminal standings alike. Panels carry ascension titles
 ("Steam-ascended"), matchup labels name the expressed elements meeting
 ("Steam edge over Tide"), the council panel shows each court's standing
 priorities beside the moment's intent — and its power meter, when the

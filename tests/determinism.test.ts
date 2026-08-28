@@ -15,7 +15,23 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the pacing retune, and the gameplay change was the point:
+ * Re-recorded for the frontier-and-wars rework, and the gameplay changes were
+ * the point, all five of them. Streams — minor rivers carved as land lines
+ * that raise the cost of taking their banks — are a new cell field and a new
+ * world field, so every digest moves by construction, and they reshape where
+ * borders come to rest. Contested wilderness now resolves instead of
+ * deadlocking (rival settlers cancel each other at a discount, and an
+ * invasion slows the frontier program rather than freezing it), so the
+ * no-man's-land strips between neighbours close. Diplomacy dropped the
+ * one-war-per-pair engagement lock for a per-declarer war cap that leaves
+ * targets unprotected — coalitions now pile onto a weakened realm — and
+ * campaigns may be launched by either party to a war, so an overmatched
+ * defender blunts an invasion and counterattacks to take its ground back,
+ * across up to two fronts at once. Realms also carry living names (identity
+ * is new faction state) that climb a title ladder as conquest earns it, so
+ * report and story text moves with the facts.
+ *
+ * Before that, re-recorded for the pacing retune, and the gameplay change was the point:
  * wilderness settlement pressure came down more than tenfold so the world
  * settles across roughly its first hundred and fifty ticks instead of its
  * first fifty, and every income rate (land, cities, all four trade carriers,
@@ -172,25 +188,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "bc0cdbda08087dd6cbbf501abd89f890", cells: "52324152dac0d4d9" },
-      { tick: 200, world: "e4e67b07c533a25149fdaf4dbab4d6f0", cells: "8fd8a4cde17b2153" },
-      { tick: 600, world: "9f29bd4f2f1a522b53e768b0d2dff86a", cells: "23180af52fec780b", deep: true },
+      { tick: 60, world: "c70b912d091d4ef3865a1e7ed53c9164", cells: "d058e52ff49e744c" },
+      { tick: 200, world: "81e157b8a09bf8b763e6e214a7bb950b", cells: "657234015b2e4fde" },
+      { tick: 600, world: "e2f3dca70946c997a812707e9c260110", cells: "8c7fdadb9cfecd7a", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "3a344be21cf799acdb578db8bf9d6974", cells: "ee06a89f5403d54a" },
-      { tick: 200, world: "4993a89ce68e55c2066083a32ce91757", cells: "1758c70b52b57908" },
-      { tick: 600, world: "9cef83ffac27debc496453bce4257afd", cells: "0946c86911812bf8", deep: true },
+      { tick: 60, world: "34fa2fa751bf4f15634a8bca8e156034", cells: "c82e87ddc5911bed" },
+      { tick: 200, world: "08e44db10b4cfe423093089eace918b0", cells: "03baac24afa0596c" },
+      { tick: 600, world: "038c9aa1d018d439642b67daf105c42d", cells: "606a23a705965ada", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "e6d8981a846864cc2bbe09eec3d8010c", cells: "0023647e6f67d252" },
-      { tick: 200, world: "c9bf5e21629fa6692c59854f6114eb9d", cells: "3cac2f5812f76629" },
-      { tick: 600, world: "0193b3e77bdad5d7455c80f17d0a721d", cells: "659c87d5a40f71e9", deep: true },
+      { tick: 60, world: "ca96b6c54cb4f5ab4067c4d4dc760247", cells: "dd2cfa50d8d2a55b" },
+      { tick: 200, world: "ca578614e8fd6fa54c805b2ea2563bf8", cells: "70eb5f7cd3b15df1" },
+      { tick: 600, world: "2264a4e41eab366d5683f4c0972ebb4b", cells: "8a2d5ae065f89e17", deep: true },
     ],
   },
 ];

@@ -5,7 +5,7 @@ import { ascensionTitle } from "../game/ascension";
 import { getRelation, otherParty, warsFor } from "../game/diplomacy";
 import { committedTroopsFor } from "../game/campaigns";
 import { ELEMENT_ORDER, ELEMENTS, realmMatchupLabel } from "../game/elements";
-import { PLAYERS, PLAYER_ORDER, playerElement } from "../game/players";
+import { PLAYER_ORDER } from "../game/players";
 import {
   bloomIsOverextended,
   geyserSurging,
@@ -14,6 +14,7 @@ import {
   plasmaContainmentFailed,
 } from "../game/powers";
 import { latestStories } from "../game/reporting";
+import { realmLabel, realmTitle } from "../game/naming";
 import { DOMAIN_LABELS, STRATEGIC_DOMAINS } from "../game/strategy";
 import {
   ELEMENT_RULES,
@@ -238,13 +239,11 @@ export function Simulator() {
   }
 
   const chosen = world.factions[selected];
-  const chosenElement = ELEMENTS[playerElement(selected)];
   const chosenExpressed = ELEMENTS[chosen.expressedElement];
   const chosenAscension = ascensionTitle(chosen);
   const chosenPower = bespokePowerStatus(world, selected);
-  const chosenPlayer = PLAYERS[selected]!;
-  const target = chosen.intent.target ? PLAYERS[chosen.intent.target] : null;
-  const targetRelation = target ? getRelation(world, selected, target.id) : null;
+  const targetId = chosen.intent.target;
+  const targetRelation = targetId ? getRelation(world, selected, targetId) : null;
   const leader = PLAYER_ORDER.filter((id) => world.factions[id].alive).sort(
     (a, b) => world.factions[b].territory - world.factions[a].territory,
   )[0];
@@ -376,10 +375,10 @@ export function Simulator() {
               type="button"
               key={id}
               className={`balance-slice ${selected === id ? "selected" : ""}`}
-              style={{ width: `${Math.max(0.5, share)}%`, background: PLAYERS[id]!.color }}
+              style={{ width: `${Math.max(0.5, share)}%`, background: ELEMENTS[world.factions[id].expressedElement].color }}
               onClick={() => setSelected(id)}
-              aria-label={`${PLAYERS[id]!.name}: ${share.toFixed(1)} percent of sustainable land`}
-              title={`${PLAYERS[id]!.name} · ${share.toFixed(1)}%`}
+              aria-label={`${realmLabel(world, id)}: ${share.toFixed(1)} percent of sustainable land`}
+              title={`${realmLabel(world, id)} · ${share.toFixed(1)}%`}
             />
           );
         })}
@@ -393,7 +392,7 @@ export function Simulator() {
               <div>
                 <small>{world.worldName} is united</small>
                 <strong>
-                  {PLAYERS[world.champion]!.realmName}
+                  {realmTitle(world, world.champion)}
                   {ascensionTitle(world.factions[world.champion]) ? `, ${ascensionTitle(world.factions[world.champion])},` : ""} wins the age!
                 </strong>
               </div>
@@ -442,9 +441,7 @@ export function Simulator() {
           <div className="realm-strip" aria-label="Realm standings">
             {PLAYER_ORDER.map((id) => {
               const faction = world.factions[id];
-              const element = ELEMENTS[playerElement(id)];
               const expressed = ELEMENTS[faction.expressedElement];
-              const player = PLAYERS[id]!;
               const share = shareOf(world, id);
               const realmWars = warsFor(world, id).length;
               const committed = committedTroopsFor(world, id);
@@ -454,18 +451,20 @@ export function Simulator() {
                   key={id}
                   className={`realm-pill ${selected === id ? "selected" : ""} ${!faction.alive ? "fallen" : ""}`}
                   onClick={() => setSelected(id)}
-                  title={ascensionTitle(faction) ? `${player.realmName} — ${ascensionTitle(faction)}` : player.realmName}
+                  title={ascensionTitle(faction) ? `${realmTitle(world, id)} — ${ascensionTitle(faction)}` : realmTitle(world, id)}
                 >
+                  {/* The chip wears the color of the element the realm now
+                      expresses, so combining elements repaints its icon. */}
                   <span
                     className="realm-glyph"
-                    style={{ color: element.deepColor, background: element.softColor }}
+                    style={{ color: expressed.deepColor, background: expressed.softColor }}
                     aria-hidden="true"
                   >
                     {expressed.glyph}
                     {expressed.tier > 1 && <b className="tier-mark">{TIER_MARK[expressed.tier]}</b>}
                   </span>
                   <span className="realm-pill-copy">
-                    <strong>{player.name}</strong>
+                    <strong>{realmLabel(world, id)}</strong>
                     <small>
                       {faction.alive
                         ? `${compactNumber(faction.troops)} home${committed ? ` + ${compactNumber(committed)} away` : ""} · ${realmWars ? `${realmWars} war${realmWars > 1 ? "s" : ""}` : "peace"}`
@@ -474,7 +473,7 @@ export function Simulator() {
                   </span>
                   {id === leader && faction.alive && <span className="leader-crown" title="Land leader">♛</span>}
                   <span className="mini-bar" aria-hidden="true">
-                    <i style={{ width: `${share}%`, background: element.color }} />
+                    <i style={{ width: `${share}%`, background: expressed.color }} />
                   </span>
                 </button>
               );
@@ -483,11 +482,11 @@ export function Simulator() {
         </section>
 
         <aside className="war-room" aria-label="Realm intelligence">
-          <section className="panel council-panel" style={{ "--realm": chosenPlayer.color } as React.CSSProperties}>
+          <section className="panel council-panel" style={{ "--realm": chosenExpressed.color } as React.CSSProperties}>
             <div className="panel-heading">
-              {/* The emblem keeps the family's colors — identity never repaints —
-                  while the glyph and tier mark read what the realm has become. */}
-              <div className="selected-emblem" style={{ background: chosenElement.softColor, color: chosenElement.deepColor }}>
+              {/* The emblem wears the expressed element's colors, so a realm
+                  that combines elements repaints along with its territory. */}
+              <div className="selected-emblem" style={{ background: chosenExpressed.softColor, color: chosenExpressed.deepColor }}>
                 {chosenExpressed.glyph}
                 {chosenExpressed.tier > 1 && (
                   <b className="tier-mark" title={`Tier ${chosenExpressed.tier} — ${chosenExpressed.name}`}>
@@ -496,8 +495,8 @@ export function Simulator() {
                 )}
               </div>
               <div>
-                <p className="eyebrow">Council of {chosenPlayer.name}</p>
-                <h2>{chosenPlayer.realmName}</h2>
+                <p className="eyebrow">Council of {realmLabel(world, selected)}</p>
+                <h2>{realmTitle(world, selected)}</h2>
                 <span className="realm-status">
                   {chosen.alive ? chosenExpressed.title : "Its banner has fallen"}
                   {chosen.alive && chosenAscension ? ` · ${chosenAscension}` : ""}
@@ -577,11 +576,11 @@ export function Simulator() {
 
                 <div className="target-row">
                   <span>Eyes on</span>
-                  {target ? (
-                    <button type="button" onClick={() => setSelected(target.id)}>
-                      <i style={{ background: target.color }} />
-                      {target.name}
-                      <small>{targetRelation?.status} · {realmMatchupLabel(world, selected, target.id)}</small>
+                  {targetId ? (
+                    <button type="button" onClick={() => setSelected(targetId)}>
+                      <i style={{ background: ELEMENTS[world.factions[targetId].expressedElement].color }} />
+                      {realmLabel(world, targetId)}
+                      <small>{targetRelation?.status} · {realmMatchupLabel(world, selected, targetId)}</small>
                       <b aria-hidden="true">→</b>
                     </button>
                   ) : (
@@ -599,10 +598,10 @@ export function Simulator() {
                         );
                         const targetName = campaign.target === "wilderness"
                           ? "Wilderness"
-                          : PLAYERS[campaign.target]!.name;
+                          : realmLabel(world, campaign.target);
                         return (
                           <p key={campaign.id}>
-                            <i style={{ background: campaign.target === "wilderness" ? "#b7aa79" : PLAYERS[campaign.target]!.color }} />
+                            <i style={{ background: campaign.target === "wilderness" ? "#b7aa79" : ELEMENTS[world.factions[campaign.target].expressedElement].color }} />
                             <strong>{targetName}</strong>
                             <small>{compactNumber(campaign.remaining)} committed · {theaters.length} automatic {theaters.length === 1 ? "theater" : "theaters"}</small>
                           </p>
@@ -676,7 +675,6 @@ export function Simulator() {
             <div className="relation-list">
               {selectedRelations.map((relation) => {
                 const other = otherParty(relation, selected);
-                const rival = PLAYERS[other]!;
                 const rivalAlive = world.factions[other].alive;
                 const rivalTraitorTime = world.factions[other].traitorUntil - world.tick;
                 const campaign = selectedCampaigns.find(
@@ -694,14 +692,14 @@ export function Simulator() {
                   : relation.status === "truce"
                     ? `${formatWorldTime(relation.truceUntil - world.tick)} alliance · trade ${relation.tradeActive ? "open" : "closed"}`
                     : relation.truceOfferBy
-                      ? `${PLAYERS[relation.truceOfferBy]!.name} offered a truce`
+                      ? `${realmLabel(world, relation.truceOfferBy)} offered a truce`
                       : `ordinary peace · trade ${relation.tradeActive ? "open" : "closed"}`;
                 const badge = relation.status === "peace" && relation.truceOfferBy ? "offer" : relation.status;
                 return (
                   <button type="button" key={relation.key} onClick={() => setSelected(other)}>
-                    <i style={{ background: rival.color }} />
+                    <i style={{ background: ELEMENTS[world.factions[other].expressedElement].color }} />
                     <span>
-                      <strong>{rival.name}</strong>
+                      <strong>{realmLabel(world, other)}</strong>
                       <small>{!rivalAlive ? "realm fallen" : `${relationSummary}${rivalTraitorTime > 0 ? ` · traitor ${formatWorldTime(rivalTraitorTime)}` : ""}`}</small>
                     </span>
                     <b className={rivalAlive ? badge : "fallen"}>{rivalAlive ? badge : "fallen"}</b>
@@ -763,8 +761,8 @@ export function Simulator() {
                             onClick={() => setSelected(participant.realmId!)}
                             title={participant.label}
                             style={{
-                              background: ELEMENTS[playerElement(participant.realmId!)].softColor,
-                              color: ELEMENTS[playerElement(participant.realmId!)].deepColor,
+                              background: ELEMENTS[world.factions[participant.realmId!].expressedElement].softColor,
+                              color: ELEMENTS[world.factions[participant.realmId!].expressedElement].deepColor,
                             }}
                           >{ELEMENTS[world.factions[participant.realmId!].expressedElement].glyph}</button>
                         ))}
@@ -779,7 +777,7 @@ export function Simulator() {
                   const realm = event.initiator?.realmId;
                   return (
                     <li key={event.id} className={`report-event ${event.importance}`}>
-                      <span className="event-mark" style={{ background: realm ? PLAYERS[realm]!.color : "#f1c46d" }} />
+                      <span className="event-mark" style={{ background: realm ? ELEMENTS[world.factions[realm].expressedElement].color : "#f1c46d" }} />
                       <div>
                         <small>#{event.id} · tick {event.tick} · {event.kind.replaceAll(".", " / ")}</small>
                         <p>{event.summary}</p>

@@ -1,3 +1,4 @@
+import { realmTitle } from "../naming";
 import { PLAYERS, PLAYER_ORDER } from "../players";
 import { ELEMENTS } from "../elements";
 import { getRelation } from "../diplomacy";
@@ -37,11 +38,11 @@ export class RealmAccountingSystem implements SimulationSystem {
           kind: "territory.realm-conquered",
           importance: "historic",
           storyKey: relation?.storyKey ?? `conquest:${conquerorId ?? "none"}:${id}:${state.tick}`,
-          initiator: conquerorId ? realmSubject(conquerorId) : null,
-          targets: [realmSubject(id)],
+          initiator: conquerorId ? realmSubject(state, conquerorId) : null,
+          targets: [realmSubject(state, id)],
           participants: [
-            ...(conquerorId ? [realmSubject(conquerorId)] : []),
-            realmSubject(id),
+            ...(conquerorId ? [realmSubject(state, conquerorId)] : []),
+            realmSubject(state, id),
           ],
           links: relation ? { relation: relation.key } : {},
           facts: {
@@ -51,13 +52,13 @@ export class RealmAccountingSystem implements SimulationSystem {
             finalTerritory: state.factions[id].territory,
           },
           summary: conquerorId && conqueror?.alive
-            ? `${PLAYERS[conquerorId].realmName} conquered ${PLAYERS[id].realmName} and absorbed its elemental powers.`
-            : `${PLAYERS[id].realmName} lost its final territory without a surviving conqueror.`,
+            ? `${realmTitle(state, conquerorId)} conquered ${realmTitle(state, id)} and absorbed its elemental powers.`
+            : `${realmTitle(state, id)} lost its final territory without a surviving conqueror.`,
         });
         context.emit(
           conquerorId && conqueror?.alive
-            ? `${PLAYERS[conquerorId].realmName} conquers ${PLAYERS[id].realmName} and absorbs ${state.factions[id].absorbedElements.map((element) => ELEMENTS[element].name).join(" and ")}.`
-            : `${PLAYERS[id].realmName} has lost its last piece of sustainable land.`,
+            ? `${realmTitle(state, conquerorId)} conquers ${realmTitle(state, id)} and absorbs ${state.factions[id].absorbedElements.map((element) => ELEMENTS[element].name).join(" and ")}.`
+            : `${realmTitle(state, id)} has lost its last piece of sustainable land.`,
           "fall",
           conquerorId ?? id,
         );

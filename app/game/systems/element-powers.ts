@@ -1,3 +1,4 @@
+import { realmTitle } from "../naming";
 import { PLAYERS, PLAYER_ORDER } from "../players";
 import { ELEMENTS } from "../elements";
 import { advancePowerState, type PowerEvent } from "../powers";
@@ -93,13 +94,13 @@ export class ElementPowersSystem implements SimulationSystem {
       });
       if (!event) continue;
       const voice = EVENT_VOICES[event];
-      const realmName = PLAYERS[id].realmName;
+      const realmName = realmTitle(state, id);
       context.report({
         domain: "dynasty",
         kind: `dynasty.${event}`,
         importance: voice.importance,
         storyKey: `powers:${id}`,
-        initiator: realmSubject(id),
+        initiator: realmSubject(state, id),
         targets: [],
         participants: [],
         links: {},

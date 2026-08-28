@@ -11,6 +11,7 @@ import { EconomySystem } from "./economy";
 import { ElementPowersSystem } from "./element-powers";
 import { StrategicPlanningSystem } from "./strategy-plan";
 import { StrategyAiSystem } from "./strategy-ai";
+import { RealmNamingSystem } from "./naming";
 import { StorySystem } from "./story";
 import { StrategicGeographySystem } from "./strategic-geography";
 import { TheaterMapSystem } from "./theater-map";
@@ -23,6 +24,7 @@ export const DEFAULT_SYSTEMS: readonly SimulationSystem[] = [
   new DiplomacyClockSystem(),
   new RealmAccountingSystem(),
   new ElementAscensionSystem(),
+  new RealmNamingSystem(),
   new ElementPowersSystem(),
   new EconomySystem(),
   new TradeNetworkSystem(),
