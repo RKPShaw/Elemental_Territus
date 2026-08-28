@@ -84,9 +84,13 @@ The wider space is earned, not seated. Grove retired as a starting family and
 returns as the first acquirable compound: every element beyond the founding
 four — six tier-2 compounds and fifteen tier-3 advanced elements — is declared
 in `app/game/elements.ts` and expressed through ascension. Conquest transfers
-a fallen realm's element tallies to its conqueror; when those tallies cover a
-compound's founding bases deeply enough (or an advanced element's compounds,
-with a long enough conquest record), the realm ascends: `dynasty.element-ascended`
+a fallen realm's element tallies and held powers to its conqueror. A compound
+forms when the tallies cover both its founding bases deeply enough; an
+advanced element forms only by uniting its two actual compounds — the realm's
+own expression is one, and conquering a realm that holds the other (with a
+long enough conquest record) completes the union, so a magma realm that
+claims an ice realm becomes obsidian. When either happens, the realm
+ascends: `dynasty.element-ascended`
 enters the report, its priorities lean toward what it became, and its combat
 matchups read its expressed element. Expression only ever upgrades, and realm
 identity — name, family, colors — never changes. `app/game/ascension.ts` owns

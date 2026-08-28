@@ -46,6 +46,35 @@ construction-affinity lean survive from the original plan unchanged in
 spirit. Phase 7's information identities for airborne realms stack on top of
 the carrier rather than replacing it.
 
+**Addendum (Phase 6, progression corrected).** The tier 3 formation rule in
+section 7 — both compound constituents *formable by founding depth* plus a
+six-realm record — was overturned by design direction during Phase 6, after
+the sweep showed the balanced trio (mirage, obsidian, spirit) could never
+win the within-tier support race against the twelve dominant elements (a
+mathematical certainty, not bad luck: their ordered repeated/missing base
+pairs cover every combination). The corrected rule: **a tier 3 element is
+the union of its two actual tier 2 elements.** A realm must genuinely hold
+both compounds in its absorbed history — its own expression is one, and
+conquering a realm that holds the other is the way to the second. A magma
+realm that claims an ice realm becomes obsidian, never whatever its
+founding depths lean toward. Founding depth still governs tier 2 exactly as
+section 7 describes, the six-realm record still gates tier 3's pace, and
+ascension war-appetite now hunts ascended civilizations specifically — the
+path to an advanced element runs through other realms' ascensions, which is
+also what makes alliances and neighbor luck part of the climb.
+
+**Addendum (roster direction, decided but unscheduled).** The final game
+may seat a larger elemental roster — on the order of fifteen or sixteen
+elements at the start — alongside a crowd of **non-elemental realms** that
+make the early game more contested: mundane powers with no expressed
+element, neutral matchups and no trade-form identity, who begin with empty
+histories and become whatever they conquer. The engine's seams already
+lean this way (absorption implements "start as nothing, become what you
+take", and non-elementals double as ascension fuel worth fighting over),
+but it is a roster rework on the scale of Phase 3 — spawn draft, colors,
+digests, a full re-baseline — so it is recorded here as a decided
+direction awaiting its own phase rather than folded into an existing one.
+
 **Addendum (Phase 6, as built).** The five bespoke mechanics shipped as
 planned — geyser's pressure bank and eruption, tempest's decaying conquest
 momentum, bloom's ×1.5 settlement with an automatic overextension check,

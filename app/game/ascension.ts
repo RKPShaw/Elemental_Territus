@@ -13,13 +13,25 @@ import type {
  * Ascension: how a realm's conquests become a higher element.
  *
  * The element system's progression rule, filled in from the mechanics the
- * engine already had. Every conquered realm's elementCounts transfer to its
- * conqueror, and those tallies alone decide what is formable: depth in each
- * founding base accumulates from everything absorbed — a conquered Steam
- * realm feeds both ember and tide — and an element becomes expressible when
- * its constituents are covered deeply enough. Expression only ever upgrades.
- * All of it is pure arithmetic over integer tallies and exact binary
- * compositions, so recomputing is deterministic and order-independent.
+ * engine already had. The two tiers form differently, by design:
+ *
+ * - **Tier 2 is grown from founding depth.** Every conquered realm's
+ *   elementCounts transfer to its conqueror, depth in each founding base
+ *   accumulates from everything absorbed — a conquered Steam realm feeds
+ *   both ember and tide — and a compound becomes expressible when both its
+ *   founding bases are covered deeply enough.
+ * - **Tier 3 is the union of two actual tier 2 elements.** It is never
+ *   assembled from founding arithmetic: a realm must genuinely hold both
+ *   compound constituents in its absorbed history — its own expression is
+ *   one; conquering a realm that holds the other is the way to the second.
+ *   A magma realm that claims an ice realm becomes obsidian, not whatever
+ *   its founding depths lean toward. This is also what makes the balanced
+ *   trio reachable at all: candidacy is gated by the compounds actually
+ *   united, not by a support race the dominant elements always win.
+ *
+ * Expression only ever upgrades. All of it is pure arithmetic over integer
+ * tallies, exact binary compositions and the held-element set, so
+ * recomputing is deterministic and order-independent.
  */
 
 /**
@@ -53,14 +65,17 @@ export function totalRealmsAbsorbed(counts: Partial<Record<ElementId, number>>):
 }
 
 /**
- * Whether a history is deep enough to express an element: a tier 2 needs
- * both founding constituents held at depth, a tier 3 needs both compound
- * constituents formable and a long enough conquest record altogether.
+ * Whether a history can express an element: a tier 2 needs both founding
+ * constituents held at depth, a tier 3 needs both actual compound
+ * constituents present in the realm's absorbed history and a long enough
+ * conquest record altogether. Depth never substitutes for a compound — the
+ * union of the two tier 2 elements is the whole rule.
  */
 export function isFormable(
   element: ElementId,
   depths: Record<FoundingElementId, number>,
   total: number,
+  held: readonly ElementId[],
 ): boolean {
   const definition = ELEMENTS[element];
   if (definition.tier === 1) return depths[element as FoundingElementId] >= 1;
@@ -70,17 +85,21 @@ export function isFormable(
     );
   }
   return total >= ELEMENT_RULES.tier3MinimumRealms
-    && definition.bases.every((base) => isFormable(base, depths, total));
+    && definition.bases.every((base) => held.includes(base));
 }
 
 /**
  * How close a history is to forming an element, 0..1, limited by its least
- * satisfied requirement. One is formable now.
+ * satisfied requirement. One is formable now. For a tier 3 the requirement
+ * is the two compounds themselves: each constituent actually held is half
+ * the way there, and no amount of founding depth advances the other half —
+ * only conquest of a realm that holds it does.
  */
 export function formationProgress(
   element: ElementId,
   depths: Record<FoundingElementId, number>,
   total: number,
+  held: readonly ElementId[],
 ): number {
   const definition = ELEMENTS[element];
   if (definition.tier === 1) return Math.min(1, depths[element as FoundingElementId]);
@@ -93,9 +112,11 @@ export function formationProgress(
       1,
     );
   }
-  return definition.bases.reduce(
-    (least, base) => Math.min(least, formationProgress(base, depths, total)),
-    Math.min(1, total / ELEMENT_RULES.tier3MinimumRealms),
+  const heldConstituents = definition.bases.filter((base) => held.includes(base)).length;
+  return Math.min(
+    heldConstituents / definition.bases.length,
+    total / ELEMENT_RULES.tier3MinimumRealms,
+    1,
   );
 }
 
@@ -109,7 +130,7 @@ export function formationProgress(
  * demotion: history determines what a realm has learned not to forget.
  */
 export function expressionFor(
-  faction: Pick<FactionState, "expressedElement" | "elementCounts">,
+  faction: Pick<FactionState, "expressedElement" | "elementCounts" | "absorbedElements">,
 ): ElementId {
   const currentTier = ELEMENTS[faction.expressedElement].tier;
   if (currentTier === 3) return faction.expressedElement;
@@ -121,7 +142,7 @@ export function expressionFor(
   for (const element of ELEMENT_SPACE) {
     const tier = ELEMENTS[element].tier;
     if (tier <= currentTier) continue;
-    if (!isFormable(element, depths, total)) continue;
+    if (!isFormable(element, depths, total, faction.absorbedElements)) continue;
     const composition = compositionOf(element);
     // Exact arithmetic: dyadic compositions times integer depths.
     const support = FOUNDING_ELEMENTS.reduce(
@@ -143,7 +164,7 @@ export function expressionFor(
  * there is nowhere higher.
  */
 export function nextFormable(
-  faction: Pick<FactionState, "expressedElement" | "elementCounts">,
+  faction: Pick<FactionState, "expressedElement" | "elementCounts" | "absorbedElements">,
 ): { element: ElementId; progress: number } | null {
   const nextTier = ELEMENTS[faction.expressedElement].tier + 1;
   if (nextTier > 3) return null;
@@ -152,7 +173,7 @@ export function nextFormable(
   let best: { element: ElementId; progress: number } | null = null;
   for (const element of ELEMENT_SPACE) {
     if (ELEMENTS[element].tier !== nextTier) continue;
-    const progress = formationProgress(element, depths, total);
+    const progress = formationProgress(element, depths, total, faction.absorbedElements);
     if (!best || progress > best.progress) best = { element, progress };
   }
   return best;
@@ -162,7 +183,9 @@ export function nextFormable(
  * How much absorbing the target would advance the actor toward its next
  * tier, 0..1. This is the strategy system's answer to "how does the AI
  * pursue tiers": the war scorers scale it by the realm's ascension weight,
- * so a mastery-minded court hunts the histories it is missing.
+ * so a mastery-minded court hunts the histories it is missing — and above
+ * tier 1 those histories are held compounds, so an ascension-minded tier 2
+ * realm hunts other ascended civilizations specifically.
  */
 export function ascensionAppetite(
   state: WorldState,
@@ -178,12 +201,19 @@ export function ascensionAppetite(
   const merged = baseDepthsOf(rival.elementCounts);
   for (const base of FOUNDING_ELEMENTS) merged[base] += depths[base];
   const mergedTotal = total + totalRealmsAbsorbed(rival.elementCounts);
+  const mergedHeld = [...new Set([...self.absorbedElements, ...rival.absorbedElements])];
   let current = 0;
   let afterConquest = 0;
   for (const element of ELEMENT_SPACE) {
     if (ELEMENTS[element].tier !== nextTier) continue;
-    current = Math.max(current, formationProgress(element, depths, total));
-    afterConquest = Math.max(afterConquest, formationProgress(element, merged, mergedTotal));
+    current = Math.max(
+      current,
+      formationProgress(element, depths, total, self.absorbedElements),
+    );
+    afterConquest = Math.max(
+      afterConquest,
+      formationProgress(element, merged, mergedTotal, mergedHeld),
+    );
   }
   return Math.max(0, afterConquest - current);
 }

@@ -16,10 +16,13 @@ import { ELEMENT_RULES } from "../app/game/rules";
 import type { ElementId, WorldState } from "../app/game/types";
 
 /**
- * Ascension is the element system's progression rule: conquest tallies alone
- * decide what a realm can express, expression only ever upgrades, and the
- * running world keeps every realm's expression and base mask exactly what
- * recomputing them from its history would produce.
+ * Ascension is the element system's progression rule: conquest decides what
+ * a realm can express, expression only ever upgrades, and the running world
+ * keeps every realm's expression and base mask exactly what recomputing them
+ * from its history would produce. The two tiers form differently: a compound
+ * grows from founding depth, an advanced element only from actually uniting
+ * its two compound constituents — a magma realm that claims an ice realm
+ * becomes obsidian, and no founding arithmetic substitutes for the union.
  */
 
 type Counts = Partial<Record<ElementId, number>>;
@@ -49,42 +52,64 @@ test("tier 2 takes roughly three conquests with the right spread", () => {
   const twoShort: Counts = { ember: 1, tide: 1 };
   const complete: Counts = { ember: 2, tide: 2 };
   assert.equal(
-    isFormable("steam", depthsOf(twoShort), totalRealmsAbsorbed(twoShort)),
+    isFormable("steam", depthsOf(twoShort), totalRealmsAbsorbed(twoShort), ["ember"]),
     false,
   );
   assert.equal(
-    isFormable("steam", depthsOf(complete), totalRealmsAbsorbed(complete)),
+    isFormable("steam", depthsOf(complete), totalRealmsAbsorbed(complete), ["ember"]),
     true,
   );
   assert.equal(ELEMENT_RULES.tier2BaseDepth, 2);
   // Grove forms the same way from tide and stone — the Mossbound return as
   // something earned rather than given.
   const nature: Counts = { tide: 2, stone: 2 };
-  assert.ok(isFormable("grove", depthsOf(nature), totalRealmsAbsorbed(nature)));
+  assert.ok(isFormable("grove", depthsOf(nature), totalRealmsAbsorbed(nature), ["tide"]));
 });
 
-test("tier 3 needs both constituents formable and a long conquest record", () => {
-  // Geyser is steam + magma: ember 2, tide 2, stone 2 covers both compounds,
-  // but five realms absorbed is one short of the record it demands.
+test("tier 3 unites two actual compounds; founding depth never substitutes", () => {
+  // A history deep in ember, tide and stone covers geyser's founding
+  // arithmetic completely — and still cannot form it, because the realm has
+  // never actually held magma. The union of the two tier 2 elements is the
+  // whole rule.
   const deep: Counts = { ember: 2, tide: 2, stone: 2 };
   assert.equal(totalRealmsAbsorbed(deep), 6);
-  assert.ok(isFormable("geyser", depthsOf(deep), 6));
-  assert.equal(isFormable("geyser", depthsOf(deep), 5), false);
+  assert.equal(isFormable("geyser", depthsOf(deep), 6, ["ember", "steam"]), false);
+  assert.ok(isFormable("geyser", depthsOf(deep), 6, ["ember", "steam", "magma"]));
+  // The conquest record still gates the pace: both compounds held, one realm
+  // short of the record it demands.
+  assert.equal(isFormable("geyser", depthsOf(deep), 5, ["ember", "steam", "magma"]), false);
   assert.equal(ELEMENT_RULES.tier3MinimumRealms, 6);
-  // Progress is limited by the least satisfied requirement.
+  // The balanced trio forms the same way as everything else now: a magma
+  // realm that claims an ice realm can become obsidian.
+  assert.ok(isFormable("obsidian", depthsOf(deep), 6, ["ember", "magma", "ice"]));
+  // Tier 2 progress is limited by the least satisfied founding requirement.
   const partial: Counts = { ember: 2, tide: 1 };
-  assert.equal(formationProgress("steam", depthsOf(partial), 3), 0.5);
+  assert.equal(formationProgress("steam", depthsOf(partial), 3, ["ember"]), 0.5);
+  // Tier 3 progress counts held constituents: each compound is half the way.
+  assert.equal(formationProgress("geyser", depthsOf(deep), 6, ["ember", "steam"]), 0.5);
+  assert.equal(
+    formationProgress("geyser", depthsOf(deep), 6, ["ember", "steam", "magma"]),
+    1,
+  );
 });
 
 test("expression upgrades to the best-supported formable element and never demotes", () => {
   // Not yet formable: expression stands at the founding element.
   assert.equal(
-    expressionFor({ expressedElement: "ember", elementCounts: { ember: 1, tide: 1 } }),
+    expressionFor({
+      expressedElement: "ember",
+      elementCounts: { ember: 1, tide: 1 },
+      absorbedElements: ["ember"],
+    }),
     "ember",
   );
   // The single formable compound is taken.
   assert.equal(
-    expressionFor({ expressedElement: "ember", elementCounts: { ember: 2, tide: 2 } }),
+    expressionFor({
+      expressedElement: "ember",
+      elementCounts: { ember: 2, tide: 2 },
+      absorbedElements: ["ember"],
+    }),
     "steam",
   );
   // Absorbing ascended civilizations feeds every base they carried. Steam,
@@ -95,6 +120,7 @@ test("expression upgrades to the best-supported formable element and never demot
     expressionFor({
       expressedElement: "tide",
       elementCounts: { steam: 1, magma: 1, tide: 1, stone: 1 },
+      absorbedElements: ["tide", "steam", "magma"],
     }),
     "grove",
   );
@@ -103,6 +129,7 @@ test("expression upgrades to the best-supported formable element and never demot
     expressionFor({
       expressedElement: "ember",
       elementCounts: { magma: 2, steam: 1, tide: 1, stone: 1 },
+      absorbedElements: ["ember"],
     }),
     "magma",
   );
@@ -112,24 +139,55 @@ test("expression upgrades to the best-supported formable element and never demot
     expressionFor({
       expressedElement: "magma",
       elementCounts: { ember: 2, tide: 2, stone: 1 },
+      absorbedElements: ["ember", "magma"],
     }),
     "magma",
   );
-  // A history deep enough for tier 3 expresses it directly.
+  // Founding depth alone never reaches tier 3: geyser's whole arithmetic is
+  // covered here, but no second compound is held, so the best compound wins.
   assert.equal(
     expressionFor({
       expressedElement: "ember",
       elementCounts: { ember: 2, tide: 2, stone: 2 },
+      absorbedElements: ["ember"],
+    }),
+    "grove",
+  );
+  // Uniting two actual compounds is the tier 3 rule: a steam realm that
+  // absorbed a magma civilization expresses geyser.
+  assert.equal(
+    expressionFor({
+      expressedElement: "steam",
+      elementCounts: { ember: 2, tide: 2, stone: 2 },
+      absorbedElements: ["ember", "steam", "magma"],
     }),
     "geyser",
   );
+  // And the balanced trio is reachable the same way: a magma realm that
+  // claims an ice realm becomes obsidian, not whatever its depths lean to.
+  assert.equal(
+    expressionFor({
+      expressedElement: "magma",
+      elementCounts: { ember: 2, stone: 2, tide: 1, gale: 1 },
+      absorbedElements: ["ember", "magma", "ice"],
+    }),
+    "obsidian",
+  );
   // Tier 3 is the apex: nothing higher exists to upgrade into.
   assert.equal(
-    expressionFor({ expressedElement: "geyser", elementCounts: { ember: 9, gale: 9 } }),
+    expressionFor({
+      expressedElement: "geyser",
+      elementCounts: { ember: 9, gale: 9 },
+      absorbedElements: ["ember", "steam", "magma", "geyser"],
+    }),
     "geyser",
   );
   assert.equal(
-    nextFormable({ expressedElement: "geyser", elementCounts: { ember: 9 } }),
+    nextFormable({
+      expressedElement: "geyser",
+      elementCounts: { ember: 9 },
+      absorbedElements: ["ember", "steam", "magma", "geyser"],
+    }),
     null,
   );
 });
@@ -138,10 +196,43 @@ test("ascension appetite rises exactly when a conquest advances the next tier", 
   const state = {
     factions: {
       // One tide conquest away from steam.
-      seeker: { expressedElement: "ember", elementCounts: { ember: 2, tide: 1 } },
-      completes: { expressedElement: "tide", elementCounts: { tide: 1 } },
-      redundant: { expressedElement: "ember", elementCounts: { ember: 1 } },
-      apex: { expressedElement: "geyser", elementCounts: { ember: 4, tide: 4 } },
+      seeker: {
+        expressedElement: "ember",
+        elementCounts: { ember: 2, tide: 1 },
+        absorbedElements: ["ember"],
+      },
+      completes: {
+        expressedElement: "tide",
+        elementCounts: { tide: 1 },
+        absorbedElements: ["tide"],
+      },
+      redundant: {
+        expressedElement: "ember",
+        elementCounts: { ember: 1 },
+        absorbedElements: ["ember"],
+      },
+      apex: {
+        expressedElement: "geyser",
+        elementCounts: { ember: 4, tide: 4 },
+        absorbedElements: ["ember", "steam", "magma", "geyser"],
+      },
+      // A tier 2 realm's next rung is a union of compounds, so its appetite
+      // points at other ascended civilizations, not at founding depth.
+      stormSeeker: {
+        expressedElement: "steam",
+        elementCounts: { ember: 2, tide: 2 },
+        absorbedElements: ["ember", "steam"],
+      },
+      holdsMagma: {
+        expressedElement: "magma",
+        elementCounts: { ember: 2, stone: 2 },
+        absorbedElements: ["ember", "magma"],
+      },
+      plainStone: {
+        expressedElement: "stone",
+        elementCounts: { stone: 3 },
+        absorbedElements: ["stone"],
+      },
     },
   } as unknown as WorldState;
   const completing = ascensionAppetite(state, "seeker", "completes");
@@ -149,6 +240,15 @@ test("ascension appetite rises exactly when a conquest advances the next tier", 
   assert.ok(completing > 0, "a target that completes the history is wanted");
   assert.equal(useless, 0, "a target adding nothing to the next tier is not");
   assert.equal(ascensionAppetite(state, "apex", "completes"), 0, "the apex wants nothing");
+  assert.ok(
+    ascensionAppetite(state, "stormSeeker", "holdsMagma") > 0,
+    "a compound realm hungers for the compound it is missing",
+  );
+  assert.equal(
+    ascensionAppetite(state, "stormSeeker", "plainStone"),
+    0,
+    "founding depth no longer advances an advanced element",
+  );
 });
 
 test("a running world keeps expression, masks and held powers exactly consistent", () => {
