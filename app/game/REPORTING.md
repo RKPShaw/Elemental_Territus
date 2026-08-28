@@ -69,3 +69,18 @@ and `dynasty.plasma-containment-failed` are `major`, while
 `dynasty.tempest-crested` and `dynasty.bloom-overextended` are `notable`
 meter transitions. Each carries the expressed element and, for the windowed
 releases, the window length in ticks as facts.
+
+`leadership.strategy-adopted` is the reserved `leadership.*` namespace's
+live resident: the strategic-planning system reports each realm's change of
+focus as `routine` leadership history under era-bucketed keys
+(`strategy:<realm>:<era>`), so a court's restlessness reads as a handful of
+era arcs rather than a stream of disconnected notes.
+
+Each of these residents has its own telling in the correlator. Ascension
+arcs headline the climb ("The Ripple Court IV rises to Steam") and track
+ascensions, tier and realms absorbed as metrics; the mechanics' arcs count
+every eruption, crest, overextension, containment failure and shattering
+under "*realm* wields *element*"; and leadership arcs — a story kind of
+their own — read "*realm* turns to conquest" with the era's turn count.
+Anything else arriving in an extension namespace keeps the generic telling
+until it earns a reducer, exactly as the guidance above intends.

@@ -100,6 +100,42 @@ No batch counters were added: the identities emit no report events to
 count, deliberately — they are ambient, not dramatic — and the sweep
 metrics can revisit that if balance work needs it.
 
+**Addendum (Phase 8, as built).** The legibility phase shipped as the
+roadmap row promised — badges, titles, the council panel's priorities,
+story surfacing, docs — with the identity rule of critiques 6 and 10
+applied literally: family names and colors never repaint, and the expressed
+element's glyph with a tier numeral rides *on top of* them, in the web
+panels, the realm strip, the map's capital markers and the terminal
+standings alike. Matchup labels name the expressed elements meeting
+("Steam edge over Tide"), the council panel shows the standing priority
+list beside the moment's intent plus the power meter where a bespoke
+mechanic is expressed, and `inspect stories` grew a `--kind` filter,
+because important arcs sort first and a mature world's page is otherwise
+all historic wars. Three seams were decided during implementation:
+
+1. **Story surfacing is a correlator change, and the digests say so.**
+   Story arcs are hashed world memory, so retelling them moved every world
+   digest; the phase's proof is that every cell digest held at all nine
+   checkpoints — narration changed, gameplay did not. Leadership joined the
+   story kinds (strategy turns had been consolidating as unlabelled "world"
+   arcs), ascension arcs now read the climb ("rises to Steam"), and the
+   five mechanics' arcs count their eruptions, crests and shatterings
+   instead of borrowing the future marriage headline. No report event,
+   chronicle line or rule changed.
+2. **The map had been drawing the roster rework's ghost.** The capital and
+   campaign markers still indexed the player table for element colors and
+   glyphs that moved to the element definitions in Phase 3 — capitals had
+   been rendering the literal text "undefined". Repaired to family colors,
+   with the capital glyph reading the expressed element of the realm whose
+   capital it was, so ascension shows on the map and a captured capital
+   stays storied ground: the conqueror's ring around the fallen realm's
+   mark.
+3. **No new counters, no new systems.** Everything reads existing state —
+   expressedElement, strategy, power — through existing seams; the doctor,
+   batch metrics and report kinds are untouched, and this review's stale
+   "fourteen systems" README note resolved long ago: the count verified
+   accurate at eighteen.
+
 ---
 
 ## 1. Verdict

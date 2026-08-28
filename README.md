@@ -93,6 +93,18 @@ identity — name, family, colors — never changes. `app/game/ascension.ts` own
 the arithmetic; combat resolves matchups through the composed 25×25 table with
 graded relief for the founding bases a disadvantaged realm's history covers.
 
+Ascension is legible wherever the observer looks. Badges wear the expressed
+element's glyph with a tier numeral riding the family colors that never
+repaint — in the realm strip, the council emblem, the map's capital markers
+and the terminal standings alike. Panels carry ascension titles
+("Steam-ascended"), matchup labels name the expressed elements meeting
+("Steam edge over Tide"), the council panel shows each court's standing
+priorities beside the moment's intent — and its power meter, when the
+expressed element carries a bespoke mechanic. One realm's ascensions, power
+releases and strategy turns each consolidate into story arcs of their own;
+`npm run sim -- inspect stories --kind dynasty` reaches them under the
+historic wars.
+
 An advanced element also *does* something. Five tier-3 identities carry a
 bespoke mechanic — geyser banks pressure and erupts into its wars, tempest
 gathers conquest momentum that decays when pinned down, bloom settles half

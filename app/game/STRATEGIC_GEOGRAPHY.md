@@ -12,9 +12,10 @@ The simulation deliberately separates geography from politics and campaigns:
 
 Every twelve ticks, the geography system rebuilds four shared data layers:
 terrain productivity, relief, infrastructure density and combined strategic
-value. Cities, capitals, factories, harbors, forts and durable rail are diffused
-into commerce basins. Relief and productivity are independently smoothed, so
-ridges, valleys and changes in useful land remain visible to the partition.
+value. Cities, capitals, factories, harbors, power plants, skyports, forts and
+durable rail are diffused into commerce basins. Relief and productivity are
+independently smoothed, so ridges, valleys and changes in useful land remain
+visible to the partition.
 
 Each region measures the value-weighted center of its current cells, then moves
 its anchor with a damped alpha-beta estimator and a strict maximum step. An
@@ -41,7 +42,9 @@ troops: active theater allocations normalize to the campaign's usable reserve.
 Theater priority combines:
 
 - productive land and economic depth;
-- cities, factories, harbors, capitals and rail corridors ahead of the front;
+- cities, factories, harbors, plants, skyports, capitals and rail corridors
+  ahead of the front — an enemy work weighed higher when its builder heritage
+  trades the forms the attacker's expressed element can run natively;
 - supply from friendly neighboring cells;
 - terrain and fort resistance;
 - wilderness neglect and late-settlement completion pressure.

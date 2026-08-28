@@ -105,8 +105,13 @@ function commandWatch(): void {
     if (engine.tick >= until || champion !== null) {
       // The frame for this tick has already been drawn, so only the verdict is
       // left to print; drawing again would report an empty event feed.
+      const championTitle = champion
+        ? engine.observe((state) => ascensionTitle(state.factions[champion]))
+        : null;
       write(dim(
-        champion ? `${PLAYERS[champion]!.realmName} united the world at tick ${engine.tick}` : `stopped at tick ${engine.tick}`,
+        champion
+          ? `${PLAYERS[champion]!.realmName}${championTitle ? `, ${championTitle},` : ""} united the world at tick ${engine.tick}`
+          : `stopped at tick ${engine.tick}`,
         color,
       ));
       return;
@@ -336,8 +341,15 @@ function inspectElements(state: WorldState): void {
 }
 
 function inspectStories(state: WorldState): void {
-  write(heading("story arcs"));
-  for (const story of latestStories(state.stories).slice(0, 12)) {
+  // Important arcs sort first, so a mature world's page is all historic wars;
+  // --kind reaches the quieter tellings (dynasty ascensions, leadership turns).
+  const kind = args.flag("kind");
+  const limit = args.integer("limit", 12);
+  const stories = latestStories(state.stories)
+    .filter((story) => !kind || story.kind === kind);
+  write(heading(kind ? `story arcs · ${kind}` : "story arcs"));
+  if (stories.length === 0) write(dim("  no arcs of that kind yet", color));
+  for (const story of stories.slice(0, limit)) {
     write(`  ${story.importance.padEnd(8)} ${story.kind.padEnd(12)} ${story.status.padEnd(10)} ${story.headline}`);
     write(dim(`    ${story.summary}`, color));
   }
@@ -462,6 +474,7 @@ function commandHelp(): void {
   write(dim("  npm run sim -- map --tick 900 --mode regions", color));
   write(dim("  npm run sim -- events --domain trade --limit 20", color));
   write(dim("  npm run sim -- inspect trade --tick 900", color));
+  write(dim("  npm run sim -- inspect stories --kind dynasty --tick 1200", color));
   write(dim("  npm run sim -- doctor", color));
   write(dim("  npm run sim -- viability --tick 1200 --seeds 0x240823,0x5eed01", color));
 }

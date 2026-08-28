@@ -692,15 +692,23 @@ export function realmMatchup(
   return 1 + edge * (1 - ELEMENT_RULES.absorbedBaseRelief * coverage);
 }
 
+/**
+ * The matchup read as the observer should read it: by the expressed elements
+ * actually meeting, so an ascended realm's title reaches the label. "Steam
+ * edge over Tide" tells the whole story — who the realm has become, who it
+ * faces, and which way the ground tilts.
+ */
 export function realmMatchupLabel(
   state: WorldState,
   attacker: PlayerId,
   defender: PlayerId,
 ): string {
   const value = realmMatchup(state, attacker, defender);
-  if (value > 1) return "elemental edge";
-  if (value < 1) return "elemental risk";
-  return "even elements";
+  const attack = ELEMENTS[state.factions[attacker].expressedElement].name;
+  const defense = ELEMENTS[state.factions[defender].expressedElement].name;
+  if (value > 1) return `${attack} edge over ${defense}`;
+  if (value < 1) return `${attack} risk against ${defense}`;
+  return `${attack} and ${defense} even`;
 }
 
 /**
