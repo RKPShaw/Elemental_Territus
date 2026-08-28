@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getRelation } from "../game/diplomacy";
 import { ELEMENTS } from "../game/elements";
 import { PLAYERS, PLAYER_ORDER, playerElement } from "../game/players";
 import {
@@ -13,19 +12,24 @@ import {
 } from "../game/grid";
 import {
   STRUCTURE_RULES,
-  TERRAIN_RULES,
   compactNumber,
 } from "../game/rules";
 import {
   THEATER_LAYER_LABELS,
   evaluateTheaterCellMaps,
 } from "../game/theater-intelligence";
-import type { TheaterCellMaps, TheaterIntelligence, TheaterLayer } from "../game/theater-intelligence";
+import type { TheaterCellMaps, TheaterLayer } from "../game/theater-intelligence";
 import {
+  RASTER_PLAYER_INDEX,
   RASTER_PLAYER_ORDER,
-  RASTER_TERRAIN_ORDER,
+  RASTER_TERRAIN_INDEX,
 } from "../game/map-raster-protocol";
-import type { MapRasterRequest, MapRasterResult } from "../game/map-raster-protocol";
+import type {
+  MapRasterRequest,
+  MapRasterResult,
+  RasterBufferRecycle,
+} from "../game/map-raster-protocol";
+import { politicalFieldArrays } from "../game/political-field";
 import type { PlayerId, WorldState } from "../game/types";
 import { isValidWaterPath } from "../game/water-navigation";
 
@@ -47,35 +51,6 @@ interface MapGeometry {
   cellHeight: number;
 }
 
-interface RgbColor {
-  red: number;
-  green: number;
-  blue: number;
-}
-
-const COLOR_CACHE = new Map<string, RgbColor>();
-
-function rgb(hex: string): RgbColor {
-  const cached = COLOR_CACHE.get(hex);
-  if (cached) return cached;
-  const value = Number.parseInt(hex.slice(1), 16);
-  const color = {
-    red: (value >> 16) & 255,
-    green: (value >> 8) & 255,
-    blue: value & 255,
-  };
-  COLOR_CACHE.set(hex, color);
-  return color;
-}
-
-function mix(base: RgbColor, overlay: RgbColor, amount: number): RgbColor {
-  return {
-    red: Math.round(base.red + (overlay.red - base.red) * amount),
-    green: Math.round(base.green + (overlay.green - base.green) * amount),
-    blue: Math.round(base.blue + (overlay.blue - base.blue) * amount),
-  };
-}
-
 /**
  * Raster pixels per authoritative cell.
  *
@@ -89,10 +64,22 @@ function mix(base: RgbColor, overlay: RgbColor, amount: number): RgbColor {
  */
 const STATIC_FIELD_GRID_SCALE = 4;
 
-function geometry(state: WorldState, canvas: HTMLCanvasElement): MapGeometry {
+/**
+ * The map's logical coordinate space, in CSS pixels.
+ *
+ * The canvas backing store is this times the device pixel ratio, and every
+ * drawing context is scaled to match, so all draw code works in one stable
+ * space while glyphs, borders and moving vehicles stay crisp on dense
+ * displays -- sub-pixel motion that a 1x backing store rounds into visible
+ * one-pixel steps.
+ */
+const MAP_WIDTH = 1180;
+const MAP_HEIGHT = 730;
+
+function geometry(state: WorldState): MapGeometry {
   return {
-    cellWidth: canvas.width / state.config.width,
-    cellHeight: canvas.height / state.config.height,
+    cellWidth: MAP_WIDTH / state.config.width,
+    cellHeight: MAP_HEIGHT / state.config.height,
   };
 }
 
@@ -144,344 +131,17 @@ function drawTerrainTexture(
   context.restore();
 }
 
-const NEUTRAL_FIELD = PLAYER_ORDER.length;
-const WATER_FIELD = PLAYER_ORDER.length + 1;
-
-interface PoliticalField {
-  fill: HTMLCanvasElement;
-  borders: HTMLCanvasElement;
-}
-
 const CAMPAIGN_LABEL_POSITIONS = new Map<string, { x: number; y: number }>();
-
-function fieldIndex(owner: PlayerId | null, terrain: WorldState["cells"][number]["terrain"]): number {
-  if (owner) return PLAYER_ORDER.indexOf(owner);
-  return terrain === "water" ? WATER_FIELD : NEUTRAL_FIELD;
-}
-
-/**
- * The same sparse ownership field the raster worker uses, for the frames drawn
- * before the worker answers. Held densely it was one channel per realm, so the
- * fallback alone churned megabytes a frame at fifty players; a cell only ever
- * carries the claims actually on it.
- */
-const CLAIMS_PER_CELL = 6;
-const BLUR_KERNEL = [1, 2, 1, 2, 4, 2, 1, 2, 1];
-
-function blurClaims(
-  rawIds: Int16Array,
-  rawWeights: Float32Array,
-  width: number,
-  height: number,
-): { ids: Int16Array; weights: Float32Array } {
-  const cells = width * height;
-  const ids = new Int16Array(cells * CLAIMS_PER_CELL).fill(-1);
-  const weights = new Float32Array(cells * CLAIMS_PER_CELL);
-  const scratchIds = new Int16Array(18);
-  const scratchWeights = new Float64Array(18);
-
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      let found = 0;
-      for (let k = 0; k < 9; k += 1) {
-        const ny = Math.max(0, Math.min(height - 1, y + Math.floor(k / 3) - 1));
-        const nx = Math.max(0, Math.min(width - 1, x + (k % 3) - 1));
-        const weight = BLUR_KERNEL[k]! / 16;
-        const source = (ny * width + nx) * 2;
-        for (let slot = 0; slot < 2; slot += 1) {
-          const id = rawIds[source + slot]!;
-          if (id < 0) continue;
-          const value = rawWeights[source + slot]! * weight;
-          if (value <= 0) continue;
-          let at = -1;
-          for (let e = 0; e < found; e += 1) {
-            if (scratchIds[e] === id) { at = e; break; }
-          }
-          if (at < 0) { at = found; scratchIds[at] = id; scratchWeights[at] = 0; found += 1; }
-          scratchWeights[at]! += value;
-        }
-      }
-      const target = (y * width + x) * CLAIMS_PER_CELL;
-      const keep = Math.min(found, CLAIMS_PER_CELL);
-      for (let slot = 0; slot < keep; slot += 1) {
-        let best = -1;
-        let bestValue = -1;
-        for (let e = 0; e < found; e += 1) {
-          if (scratchWeights[e]! > bestValue) { bestValue = scratchWeights[e]!; best = e; }
-        }
-        ids[target + slot] = scratchIds[best]!;
-        weights[target + slot] = bestValue;
-        scratchWeights[best] = -1;
-      }
-    }
-  }
-  return { ids, weights };
-}
-
-function renderPoliticalField(
-  state: WorldState,
-  selected: PlayerId,
-  rasterWidth: number,
-  rasterHeight: number,
-): PoliticalField {
-  const { width, height } = state.config;
-  const rawIds = new Int16Array(width * height * 2).fill(-1);
-  const rawWeights = new Float32Array(width * height * 2);
-  for (let index = 0; index < state.cells.length; index += 1) {
-    const cell = state.cells[index]!;
-    const owner = fieldIndex(cell.owner, cell.terrain);
-    const pressure = cell.pressureBy && cell.pressureBy !== cell.owner
-      ? Math.max(0, Math.min(1, cell.pressure))
-      : 0;
-    rawIds[index * 2] = owner;
-    rawWeights[index * 2] = 1 - pressure;
-    if (pressure > 0) {
-      rawIds[index * 2 + 1] = fieldIndex(cell.pressureBy, cell.terrain);
-      rawWeights[index * 2 + 1] = pressure;
-    }
-  }
-  const claims = blurClaims(rawIds, rawWeights, width, height);
-  const fill = document.createElement("canvas");
-  const borders = document.createElement("canvas");
-  fill.width = borders.width = rasterWidth;
-  fill.height = borders.height = rasterHeight;
-  const fillContext = fill.getContext("2d");
-  const borderContext = borders.getContext("2d");
-  if (!fillContext || !borderContext) return { fill, borders };
-  const fillImage = fillContext.createImageData(rasterWidth, rasterHeight);
-  const borderImage = borderContext.createImageData(rasterWidth, rasterHeight);
-  const mergedIds = new Int16Array(CLAIMS_PER_CELL * 4);
-  const mergedWeights = new Float64Array(CLAIMS_PER_CELL * 4);
-
-  for (let py = 0; py < rasterHeight; py += 1) {
-    const gridY = ((py + 0.5) / rasterHeight) * height - 0.5;
-    const y0 = Math.max(0, Math.min(height - 1, Math.floor(gridY)));
-    const y1 = Math.min(height - 1, y0 + 1);
-    const ty = Math.max(0, Math.min(1, gridY - Math.floor(gridY)));
-    for (let px = 0; px < rasterWidth; px += 1) {
-      const gridX = ((px + 0.5) / rasterWidth) * width - 0.5;
-      const x0 = Math.max(0, Math.min(width - 1, Math.floor(gridX)));
-      const x1 = Math.min(width - 1, x0 + 1);
-      const tx = Math.max(0, Math.min(1, gridX - Math.floor(gridX)));
-      const corners = [
-        { cell: y0 * width + x0, share: (1 - tx) * (1 - ty) },
-        { cell: y0 * width + x1, share: tx * (1 - ty) },
-        { cell: y1 * width + x0, share: (1 - tx) * ty },
-        { cell: y1 * width + x1, share: tx * ty },
-      ];
-      let merged = 0;
-      for (const corner of corners) {
-        if (corner.share <= 0) continue;
-        const base = corner.cell * CLAIMS_PER_CELL;
-        for (let slot = 0; slot < CLAIMS_PER_CELL; slot += 1) {
-          const id = claims.ids[base + slot]!;
-          if (id < 0) break;
-          const value = claims.weights[base + slot]! * corner.share;
-          let at = -1;
-          for (let e = 0; e < merged; e += 1) {
-            if (mergedIds[e] === id) { at = e; break; }
-          }
-          if (at < 0) { at = merged; mergedIds[at] = id; mergedWeights[at] = 0; merged += 1; }
-          mergedWeights[at]! += value;
-        }
-      }
-      let first = -1;
-      let firstValue = 0;
-      let second = -1;
-      let secondValue = 0;
-      for (let e = 0; e < merged; e += 1) {
-        const value = mergedWeights[e]!;
-        if (first < 0 || value > firstValue) {
-          second = first; secondValue = firstValue;
-          first = mergedIds[e]!; firstValue = value;
-        } else if (second < 0 || value > secondValue) {
-          second = mergedIds[e]!; secondValue = value;
-        }
-      }
-
-      const nearestX = Math.max(0, Math.min(width - 1, Math.round(gridX)));
-      const nearestY = Math.max(0, Math.min(height - 1, Math.round(gridY)));
-      const nearestCell = state.cells[nearestY * width + nearestX]!;
-      const winner = first < PLAYER_ORDER.length ? PLAYER_ORDER[first]! : null;
-      const terrain = rgb(TERRAIN_RULES[first === WATER_FIELD ? "water" : nearestCell.terrain].fill);
-      const fillColor = winner
-        ? mix(terrain, rgb(PLAYERS[winner]!.color), winner === selected ? 0.76 : 0.66)
-        : first === NEUTRAL_FIELD
-          ? mix(terrain, rgb("#d8cfb1"), 0.16)
-          : terrain;
-      const pixel = (py * rasterWidth + px) * 4;
-      fillImage.data[pixel] = fillColor.red;
-      fillImage.data[pixel + 1] = fillColor.green;
-      fillImage.data[pixel + 2] = fillColor.blue;
-      fillImage.data[pixel + 3] = 255;
-
-      if (second < 0 || secondValue < 0.055) continue;
-      const gap = firstValue - secondValue;
-      const strength = Math.max(0, Math.min(1, 1 - gap / 0.25));
-      if (strength <= 0) continue;
-      const firstOwner = first < PLAYER_ORDER.length ? PLAYER_ORDER[first]! : null;
-      const secondOwner = second < PLAYER_ORDER.length ? PLAYER_ORDER[second]! : null;
-      const core = gap <= 0.16;
-      const atWar = firstOwner && secondOwner
-        ? getRelation(state, firstOwner, secondOwner).status === "war"
-        : false;
-      const line = core
-        ? { red: 12, green: 16, blue: 18 }
-        : atWar
-          ? { red: 145, green: 55, blue: 58 }
-          : { red: 12, green: 16, blue: 18 };
-      // The opaque core makes every frontier unmistakable. At half-resolution
-      // it becomes a smooth, two-display-pixel frontier after compositing.
-      const alpha = core ? 1 : Math.pow(strength, 0.72) * (atWar ? 0.9 : 0.78);
-      borderImage.data[pixel] = line.red;
-      borderImage.data[pixel + 1] = line.green;
-      borderImage.data[pixel + 2] = line.blue;
-      borderImage.data[pixel + 3] = Math.round(alpha * 255);
-    }
-  }
-  fillContext.putImageData(fillImage, 0, 0);
-  borderContext.putImageData(borderImage, 0, 0);
-  return { fill, borders };
-}
-
-function theaterHeat(value: number): RgbColor {
-  const red = rgb("#d65a52");
-  const middle = rgb("#dfbc55");
-  const green = rgb("#4ba56f");
-  if (value <= 0.5) return mix(red, middle, value * 2);
-  return mix(middle, green, (value - 0.5) * 2);
-}
-
-function addRegionCandidate(
-  ids: Int16Array,
-  weights: Float32Array,
-  count: number,
-  regionId: number,
-  weight: number,
-): number {
-  for (let candidate = 0; candidate < count; candidate += 1) {
-    if (ids[candidate] !== regionId) continue;
-    weights[candidate] += weight;
-    return count;
-  }
-  ids[count] = regionId;
-  weights[count] = weight;
-  return count + 1;
-}
-
-function renderTheaterField(
-  state: WorldState,
-  evaluations: readonly TheaterIntelligence[],
-  rasterWidth: number,
-  rasterHeight: number,
-): HTMLCanvasElement {
-  const { width, height } = state.config;
-  const values = new Map(evaluations.map((evaluation) => [evaluation.regionId, evaluation.normalizedValue]));
-  const layer = document.createElement("canvas");
-  layer.width = rasterWidth;
-  layer.height = rasterHeight;
-  const context = layer.getContext("2d");
-  if (!context) return layer;
-  const image = context.createImageData(rasterWidth, rasterHeight);
-  const candidateIds = new Int16Array(4);
-  const candidateWeights = new Float32Array(4);
-
-  for (let py = 0; py < rasterHeight; py += 1) {
-    const gridY = ((py + 0.5) / rasterHeight) * height - 0.5;
-    const y0 = Math.max(0, Math.min(height - 1, Math.floor(gridY)));
-    const y1 = Math.min(height - 1, y0 + 1);
-    const ty = Math.max(0, Math.min(1, gridY - Math.floor(gridY)));
-    for (let px = 0; px < rasterWidth; px += 1) {
-      const gridX = ((px + 0.5) / rasterWidth) * width - 0.5;
-      const x0 = Math.max(0, Math.min(width - 1, Math.floor(gridX)));
-      const x1 = Math.min(width - 1, x0 + 1);
-      const tx = Math.max(0, Math.min(1, gridX - Math.floor(gridX)));
-      candidateIds.fill(-2);
-      candidateWeights.fill(0);
-      let candidateCount = 0;
-      candidateCount = addRegionCandidate(candidateIds, candidateWeights, candidateCount, state.regionByCell[y0 * width + x0]!, (1 - tx) * (1 - ty));
-      candidateCount = addRegionCandidate(candidateIds, candidateWeights, candidateCount, state.regionByCell[y0 * width + x1]!, tx * (1 - ty));
-      candidateCount = addRegionCandidate(candidateIds, candidateWeights, candidateCount, state.regionByCell[y1 * width + x0]!, (1 - tx) * ty);
-      candidateCount = addRegionCandidate(candidateIds, candidateWeights, candidateCount, state.regionByCell[y1 * width + x1]!, tx * ty);
-      let winner = -1;
-      let winnerWeight = -1;
-      let runnerUp = -1;
-      let runnerUpWeight = -1;
-      for (let candidate = 0; candidate < candidateCount; candidate += 1) {
-        const weight = candidateWeights[candidate]!;
-        if (weight > winnerWeight) {
-          runnerUp = winner;
-          runnerUpWeight = winnerWeight;
-          winner = candidateIds[candidate]!;
-          winnerWeight = weight;
-        } else if (weight > runnerUpWeight) {
-          runnerUp = candidateIds[candidate]!;
-          runnerUpWeight = weight;
-        }
-      }
-      const nearestX = Math.max(0, Math.min(width - 1, Math.round(gridX)));
-      const nearestY = Math.max(0, Math.min(height - 1, Math.round(gridY)));
-      const nearestCell = state.cells[nearestY * width + nearestX]!;
-      const neutralTerrain = rgb(nearestCell.terrain === "water" ? TERRAIN_RULES.water.fill : "#e4dcc6");
-      const fillColor = winner < 0
-        ? neutralTerrain
-        : mix(neutralTerrain, theaterHeat(values.get(winner) ?? 0), 0.84);
-      const pixel = (py * rasterWidth + px) * 4;
-      image.data[pixel] = fillColor.red;
-      image.data[pixel + 1] = fillColor.green;
-      image.data[pixel + 2] = fillColor.blue;
-      image.data[pixel + 3] = 255;
-
-      if (runnerUp === winner || runnerUpWeight <= 0) continue;
-      const gap = winnerWeight - runnerUpWeight;
-      if (gap > 0.24) continue;
-      const alpha = Math.max(0.35, 1 - gap / 0.24);
-      const borderColor = mix(fillColor, { red: 13, green: 18, blue: 20 }, alpha);
-      image.data[pixel] = borderColor.red;
-      image.data[pixel + 1] = borderColor.green;
-      image.data[pixel + 2] = borderColor.blue;
-      image.data[pixel + 3] = 255;
-    }
-  }
-  context.putImageData(image, 0, 0);
-  return layer;
-}
-
-function drawTheaterLabels(
-  context: CanvasRenderingContext2D,
-  state: WorldState,
-  evaluations: readonly TheaterIntelligence[],
-  shape: MapGeometry,
-): void {
-  const scores = new Map(evaluations.map((evaluation) => [evaluation.regionId, evaluation.score]));
-  context.save();
-  context.font = "900 8px ui-rounded, sans-serif";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  for (const region of state.strategicRegions) {
-    const [x, y] = centerFor(region.centroidIndex, state, shape);
-    const label = String(scores.get(region.id) ?? 0);
-    const labelWidth = context.measureText(label).width + 7;
-    context.fillStyle = "rgba(15, 23, 24, 0.72)";
-    context.beginPath();
-    context.roundRect(x - labelWidth / 2, y - 6, labelWidth, 12, 5);
-    context.fill();
-    context.fillStyle = "#fff8df";
-    context.fillText(label, x, y + 0.4);
-  }
-  context.restore();
-}
 
 function drawFieldLayer(
   context: CanvasRenderingContext2D,
   layer: HTMLCanvasElement,
-  canvas: HTMLCanvasElement,
   smoothing = false,
 ) {
   context.save();
   context.imageSmoothingEnabled = smoothing;
   if (smoothing) context.imageSmoothingQuality = "high";
-  context.drawImage(layer, 0, 0, canvas.width, canvas.height);
+  context.drawImage(layer, 0, 0, MAP_WIDTH, MAP_HEIGHT);
   context.restore();
 }
 
@@ -819,6 +479,7 @@ function drawCampaigns(
   selected: PlayerId,
   showAllTheaters: boolean,
   extrapolatedTicks = 0,
+  labelBlend = 0.12,
 ) {
   const activeLabels = new Set<string>();
   for (const campaign of state.campaigns) {
@@ -878,8 +539,8 @@ function drawCampaigns(
       const desiredX = (targetX + attackerX) / 2;
       const desiredY = (targetY + attackerY) / 2;
       const previous = CAMPAIGN_LABEL_POSITIONS.get(theater.id);
-      const x = previous ? previous.x + (desiredX - previous.x) * 0.12 : desiredX;
-      const y = previous ? previous.y + (desiredY - previous.y) * 0.12 : desiredY;
+      const x = previous ? previous.x + (desiredX - previous.x) * labelBlend : desiredX;
+      const y = previous ? previous.y + (desiredY - previous.y) * labelBlend : desiredY;
       CAMPAIGN_LABEL_POSITIONS.set(theater.id, { x, y });
       activeLabels.add(theater.id);
       const label = campaign.target === "wilderness"
@@ -933,74 +594,153 @@ function drawWarships(
   }
 }
 
-function drawVignette(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
+function drawVignette(context: CanvasRenderingContext2D) {
   const vignette = context.createRadialGradient(
-    canvas.width / 2,
-    canvas.height / 2,
-    canvas.height * 0.25,
-    canvas.width / 2,
-    canvas.height / 2,
-    canvas.width * 0.68,
+    MAP_WIDTH / 2,
+    MAP_HEIGHT / 2,
+    MAP_HEIGHT * 0.25,
+    MAP_WIDTH / 2,
+    MAP_HEIGHT / 2,
+    MAP_WIDTH * 0.68,
   );
   vignette.addColorStop(0, "rgba(24, 35, 40, 0)");
   vignette.addColorStop(1, "rgba(18, 35, 44, 0.17)");
   context.fillStyle = vignette;
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
 }
 
-function canvasFromPixels(
-  pixels: Uint8ClampedArray,
+/**
+ * Reused canvases for compositing static frames.
+ *
+ * The interpolated display pipeline composes a new static frame many times a
+ * second; allocating fresh canvases for each one made the garbage collector a
+ * regular guest in the animation. Three pooled layers cover the crossfade pair
+ * plus the frame being composed, the scratch pair holds the raster pixels on
+ * their way to the GPU, and the decor pair caches everything that only changes
+ * per authoritative snapshot -- terrain marks, trade routes, structures,
+ * alliance chains and the vignette -- so a field frame costs four blits.
+ */
+interface MapLayerResources {
+  pool: HTMLCanvasElement[];
+  poolIndex: number;
+  fillScratch: HTMLCanvasElement | null;
+  borderScratch: HTMLCanvasElement | null;
+  decorFor: WorldState | null;
+  underDecor: HTMLCanvasElement | null;
+  overDecor: HTMLCanvasElement | null;
+}
+
+function createLayerResources(): MapLayerResources {
+  return {
+    pool: [],
+    poolIndex: 0,
+    fillScratch: null,
+    borderScratch: null,
+    decorFor: null,
+    underDecor: null,
+    overDecor: null,
+  };
+}
+
+function sizedCanvas(
+  existing: HTMLCanvasElement | null,
   width: number,
   height: number,
 ): HTMLCanvasElement {
-  const layer = document.createElement("canvas");
-  layer.width = width;
-  layer.height = height;
-  const context = layer.getContext("2d");
-  if (context) context.putImageData(new ImageData(pixels, width, height), 0, 0);
+  const canvas = existing ?? document.createElement("canvas");
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  return canvas;
+}
+
+function acquirePooledLayer(
+  resources: MapLayerResources,
+  width: number,
+  height: number,
+): HTMLCanvasElement {
+  while (resources.pool.length < 3) resources.pool.push(document.createElement("canvas"));
+  const layer = sizedCanvas(resources.pool[resources.poolIndex]!, width, height);
+  resources.pool[resources.poolIndex] = layer;
+  resources.poolIndex = (resources.poolIndex + 1) % resources.pool.length;
   return layer;
 }
 
-function composeStaticWorld(
+function composeDecorLayers(
+  resources: MapLayerResources,
   state: WorldState,
-  selected: PlayerId,
-  mapMode: MapMode,
-  raster: MapRasterResult,
+  scale: number,
   width: number,
   height: number,
+): void {
+  const shape = geometry(state);
+  const under = sizedCanvas(resources.underDecor, width, height);
+  const over = sizedCanvas(resources.overDecor, width, height);
+  resources.underDecor = under;
+  resources.overDecor = over;
+  const underContext = under.getContext("2d");
+  const overContext = over.getContext("2d");
+  if (!underContext || !overContext) return;
+  underContext.setTransform(scale, 0, 0, scale, 0, 0);
+  underContext.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+  for (let index = 0; index < state.cells.length; index += 1) {
+    drawTerrainTexture(underContext, state, shape, index);
+  }
+  drawTradeRoutes(underContext, state, shape);
+  overContext.setTransform(scale, 0, 0, scale, 0, 0);
+  overContext.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+  drawAllianceChains(overContext, state, shape);
+  for (let index = 0; index < state.cells.length; index += 1) {
+    drawStructure(overContext, state, shape, index);
+  }
+  drawVignette(overContext);
+  resources.decorFor = state;
+}
+
+function composeStaticWorld(
+  resources: MapLayerResources,
+  job: RasterJob,
+  raster: MapRasterResult,
+  scale: number,
 ): HTMLCanvasElement {
-  const layer = document.createElement("canvas");
-  layer.width = width;
-  layer.height = height;
+  const layer = acquirePooledLayer(resources, job.canvasWidth, job.canvasHeight);
   const context = layer.getContext("2d");
   if (!context) return layer;
-  const shape = geometry(state, layer);
-  drawFieldLayer(
-    context,
-    canvasFromPixels(raster.fill, raster.rasterWidth, raster.rasterHeight),
-    layer,
-    true,
-  );
-  if (mapMode === "theaters") {
-    drawVignette(context, layer);
+  context.setTransform(scale, 0, 0, scale, 0, 0);
+  context.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+
+  const fillScratch = sizedCanvas(resources.fillScratch, raster.rasterWidth, raster.rasterHeight);
+  resources.fillScratch = fillScratch;
+  fillScratch
+    .getContext("2d")
+    ?.putImageData(new ImageData(raster.fill, raster.rasterWidth, raster.rasterHeight), 0, 0);
+  drawFieldLayer(context, fillScratch, true);
+  if (job.mapMode === "theaters") {
+    drawVignette(context);
     return layer;
   }
 
-  for (let index = 0; index < state.cells.length; index += 1) {
-    drawTerrainTexture(context, state, shape, index);
+  if (
+    resources.decorFor !== job.state ||
+    resources.underDecor?.width !== job.canvasWidth ||
+    resources.underDecor?.height !== job.canvasHeight
+  ) {
+    composeDecorLayers(resources, job.state, scale, job.canvasWidth, job.canvasHeight);
   }
-  drawTradeRoutes(context, state, shape);
+  if (resources.underDecor) drawFieldLayer(context, resources.underDecor);
   if (raster.borders) {
-    drawFieldLayer(
-      context,
-      canvasFromPixels(raster.borders, raster.rasterWidth, raster.rasterHeight),
-      layer,
-      true,
-    );
+    const borderScratch = sizedCanvas(resources.borderScratch, raster.rasterWidth, raster.rasterHeight);
+    resources.borderScratch = borderScratch;
+    const borderContext = borderScratch.getContext("2d");
+    if (borderContext) {
+      borderContext.putImageData(
+        new ImageData(raster.borders, raster.rasterWidth, raster.rasterHeight),
+        0,
+        0,
+      );
+      drawFieldLayer(context, borderScratch, true);
+    }
   }
-  drawAllianceChains(context, state, shape);
-  for (let index = 0; index < state.cells.length; index += 1) drawStructure(context, state, shape, index);
-  drawVignette(context, layer);
+  if (resources.overDecor) drawFieldLayer(context, resources.overDecor);
   return layer;
 }
 
@@ -1016,6 +756,8 @@ interface RasterJob {
 function createRasterRequest(
   requestId: number,
   state: WorldState,
+  previous: WorldState | null,
+  blend: number,
   selected: PlayerId,
   mapMode: MapMode,
   maps: TheaterCellMaps | null,
@@ -1025,7 +767,7 @@ function createRasterRequest(
 ): MapRasterRequest {
   const terrains = new Uint8Array(state.cells.length);
   for (let index = 0; index < state.cells.length; index += 1) {
-    terrains[index] = RASTER_TERRAIN_ORDER.indexOf(state.cells[index]!.terrain);
+    terrains[index] = RASTER_TERRAIN_INDEX.get(state.cells[index]!.terrain)!;
   }
   const common = {
     type: "render" as const,
@@ -1040,29 +782,19 @@ function createRasterRequest(
     if (!maps) throw new Error("Theater raster requested without theater intelligence fields");
     return { ...common, mode: "theaters", values: maps[theaterLayer].slice() };
   }
-  const owners = new Int8Array(state.cells.length);
-  const pressureOwners = new Int8Array(state.cells.length);
-  const pressures = new Float32Array(state.cells.length);
-  owners.fill(-1);
-  pressureOwners.fill(-1);
-  for (let index = 0; index < state.cells.length; index += 1) {
-    const cell = state.cells[index]!;
-    if (cell.owner) owners[index] = RASTER_PLAYER_ORDER.indexOf(cell.owner);
-    if (cell.pressureBy) pressureOwners[index] = RASTER_PLAYER_ORDER.indexOf(cell.pressureBy);
-    pressures[index] = cell.pressure;
-  }
+  const { owners, pressureOwners, pressures } = politicalFieldArrays(previous, state, blend);
   const warMatrix = new Uint8Array(RASTER_PLAYER_ORDER.length ** 2);
   for (const relation of Object.values(state.relations)) {
     if (relation.status !== "war") continue;
-    const first = RASTER_PLAYER_ORDER.indexOf(relation.parties[0]);
-    const second = RASTER_PLAYER_ORDER.indexOf(relation.parties[1]);
+    const first = RASTER_PLAYER_INDEX.get(relation.parties[0])!;
+    const second = RASTER_PLAYER_INDEX.get(relation.parties[1])!;
     warMatrix[first * RASTER_PLAYER_ORDER.length + second] = 1;
     warMatrix[second * RASTER_PLAYER_ORDER.length + first] = 1;
   }
   return {
     ...common,
     mode: "political",
-    selected: RASTER_PLAYER_ORDER.indexOf(selected),
+    selected: RASTER_PLAYER_INDEX.get(selected)!,
     owners,
     pressureOwners,
     pressures,
@@ -1089,9 +821,28 @@ interface StaticFrames {
   previous: HTMLCanvasElement | null;
   current: HTMLCanvasElement | null;
   transitionStarted: number;
+  /** Crossfade length, matched to how quickly field frames actually arrive. */
+  transitionDuration: number;
 }
 
-const STATIC_TRANSITION_MS = 240;
+/**
+ * The two most recent authoritative snapshots, and the wall-clock rhythm they
+ * arrive at. The display loop renders the field at a moment gliding from the
+ * older to the newer one, so fronts move continuously instead of stepping
+ * once per snapshot.
+ */
+interface FieldTimeline {
+  previous: WorldState | null;
+  current: WorldState;
+  arrivedAt: number;
+  intervalMs: number;
+}
+
+const STATIC_TRANSITION_FALLBACK_MS = 240;
+/** Floor between field renders; the raster worker's own pace is the ceiling. */
+const FIELD_FRAME_MIN_GAP_MS = 30;
+/** Skip re-rendering the field until the blend has moved at least this far. */
+const FIELD_FRAME_MIN_BLEND_STEP = 0.05;
 
 export function WorldMap({
   state,
@@ -1113,11 +864,30 @@ export function WorldMap({
   const worldRef = useRef(state);
   const selectedRef = useRef(selected);
   const modeRef = useRef(mapMode);
+  const theaterLayerRef = useRef(theaterLayer);
+  const theaterMapsRef = useRef<TheaterCellMaps | null>(null);
   const playbackRef = useRef(playbackTicksPerSecond);
   const visualTickRef = useRef(state.tick);
   const visualSeedRef = useRef(state.seed);
   const lastAnimationAtRef = useRef(0);
-  const framesRef = useRef<StaticFrames>({ previous: null, current: null, transitionStarted: 0 });
+  const framesRef = useRef<StaticFrames>({
+    previous: null,
+    current: null,
+    transitionStarted: 0,
+    transitionDuration: STATIC_TRANSITION_FALLBACK_MS,
+  });
+  const resourcesRef = useRef<MapLayerResources>(createLayerResources());
+  const timelineRef = useRef<FieldTimeline>({
+    previous: null,
+    current: state,
+    arrivedAt: 0,
+    intervalMs: 250,
+  });
+  const fieldDirtyRef = useRef(true);
+  const dispatchedBlendRef = useRef(1);
+  const lastDispatchAtRef = useRef(0);
+  const lastStaticFrameAtRef = useRef(0);
+  const pixelScaleRef = useRef(1);
   const [hoveredCell, setHoveredCell] = useState<number | null>(null);
   const theaterMaps = useMemo(
     () => mapMode === "theaters" ? evaluateTheaterCellMaps(state, selected) : null,
@@ -1135,6 +905,80 @@ export function WorldMap({
     worker.postMessage(job.request, rasterTransferables(job.request));
   }
 
+  /**
+   * The field render pump, called once per display frame.
+   *
+   * A frame is rendered when something changed (a new snapshot, a new
+   * selection, a mode switch) or while the political field is still gliding
+   * between the previous and current snapshot. The worker's own pace, a
+   * modest floor, and a minimum blend step together decide the actual rate,
+   * so a fast machine gets fluid fronts and a slow one degrades to exactly
+   * the old snapshot-at-a-time behaviour.
+   */
+  function maybeDispatchFieldFrame(now: number): void {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const timeline = timelineRef.current;
+    const mode = modeRef.current;
+    const blend = timeline.previous
+      ? Math.max(0, Math.min(1, (now - timeline.arrivedAt) / timeline.intervalMs))
+      : 1;
+    const interpolating = mode === "political"
+      && timeline.previous !== null
+      && dispatchedBlendRef.current < 1;
+    if (!fieldDirtyRef.current && !interpolating) return;
+    if (rasterBusyRef.current) return;
+    if (now - lastDispatchAtRef.current < FIELD_FRAME_MIN_GAP_MS) return;
+    if (
+      !fieldDirtyRef.current &&
+      blend < 1 &&
+      blend - dispatchedBlendRef.current < FIELD_FRAME_MIN_BLEND_STEP
+    ) return;
+    if (mode === "theaters" && !theaterMapsRef.current) return;
+    const current = timeline.current;
+    const requestId = nextRasterRequestRef.current + 1;
+    nextRasterRequestRef.current = requestId;
+    latestRasterRequestRef.current = requestId;
+    const fieldWidth = Math.max(1, Math.min(canvas.width, current.config.width * STATIC_FIELD_GRID_SCALE));
+    const fieldHeight = Math.max(1, Math.min(canvas.height, current.config.height * STATIC_FIELD_GRID_SCALE));
+    const job: RasterJob = {
+      request: createRasterRequest(
+        requestId,
+        current,
+        mode === "political" ? timeline.previous : null,
+        blend,
+        selectedRef.current,
+        mode,
+        theaterMapsRef.current,
+        theaterLayerRef.current,
+        fieldWidth,
+        fieldHeight,
+      ),
+      state: current,
+      selected: selectedRef.current,
+      mapMode: mode,
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+    };
+    fieldDirtyRef.current = false;
+    dispatchedBlendRef.current = blend;
+    lastDispatchAtRef.current = now;
+    dispatchRasterJob(job);
+  }
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const scale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    pixelScaleRef.current = scale;
+    const width = Math.round(MAP_WIDTH * scale);
+    const height = Math.round(MAP_HEIGHT * scale);
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+  }, []);
+
   useEffect(() => {
     const worker = new Worker(new URL("../game/map-raster.worker.ts", import.meta.url), { type: "module" });
     rasterWorkerRef.current = worker;
@@ -1144,20 +988,27 @@ export function WorldMap({
       pendingRasterJobsRef.current.delete(event.data.requestId);
       rasterBusyRef.current = false;
       if (job && event.data.requestId === latestRasterRequestRef.current) {
+        const now = performance.now();
         const next = composeStaticWorld(
-          job.state,
-          job.selected,
-          job.mapMode,
+          resourcesRef.current,
+          job,
           event.data,
-          job.canvasWidth,
-          job.canvasHeight,
+          pixelScaleRef.current,
         );
         framesRef.current = {
           previous: framesRef.current.current,
           current: next,
-          transitionStarted: performance.now(),
+          transitionStarted: now,
+          transitionDuration: lastStaticFrameAtRef.current > 0
+            ? Math.max(40, Math.min(320, now - lastStaticFrameAtRef.current))
+            : STATIC_TRANSITION_FALLBACK_MS,
         };
+        lastStaticFrameAtRef.current = now;
       }
+      // The pixels have been composited; hand the buffers back for reuse.
+      const buffers: ArrayBuffer[] = [event.data.fill.buffer];
+      if (event.data.borders) buffers.push(event.data.borders.buffer);
+      worker.postMessage({ type: "recycle", buffers } satisfies RasterBufferRecycle, buffers);
       const queued = queuedRasterRef.current;
       queuedRasterRef.current = null;
       if (queued) dispatchRasterJob(queued);
@@ -1180,41 +1031,38 @@ export function WorldMap({
     worldRef.current = state;
     selectedRef.current = selected;
     modeRef.current = mapMode;
+    theaterLayerRef.current = theaterLayer;
+    theaterMapsRef.current = theaterMaps;
+    const now = performance.now();
+    const timeline = timelineRef.current;
     if (visualSeedRef.current !== state.seed) {
       visualSeedRef.current = state.seed;
       visualTickRef.current = state.tick;
+      timelineRef.current = {
+        previous: null,
+        current: state,
+        arrivedAt: now,
+        intervalMs: timeline.intervalMs,
+      };
+      dispatchedBlendRef.current = 1;
     } else {
       visualTickRef.current = Math.max(visualTickRef.current, state.tick);
+      if (timeline.current !== state) {
+        const gap = Math.max(90, Math.min(1000, now - timeline.arrivedAt));
+        timelineRef.current = {
+          // Only glide when the world actually advanced; a re-published tick
+          // (pausing, aggression changes) has nothing to interpolate.
+          previous: state.tick > timeline.current.tick ? timeline.current : null,
+          current: state,
+          arrivedAt: now,
+          intervalMs: timeline.arrivedAt > 0
+            ? timeline.intervalMs * 0.5 + gap * 0.5
+            : timeline.intervalMs,
+        };
+        dispatchedBlendRef.current = 0;
+      }
     }
-  }, [state, selected, mapMode]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const requestId = nextRasterRequestRef.current + 1;
-    nextRasterRequestRef.current = requestId;
-    latestRasterRequestRef.current = requestId;
-    const fieldWidth = Math.max(1, Math.min(canvas.width, state.config.width * STATIC_FIELD_GRID_SCALE));
-    const fieldHeight = Math.max(1, Math.min(canvas.height, state.config.height * STATIC_FIELD_GRID_SCALE));
-    const job: RasterJob = {
-      request: createRasterRequest(
-        requestId,
-        state,
-        selected,
-        mapMode,
-        theaterMaps,
-        theaterLayer,
-        fieldWidth,
-        fieldHeight,
-      ),
-      state,
-      selected,
-      mapMode,
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
-    };
-    if (rasterBusyRef.current) queuedRasterRef.current = job;
-    else dispatchRasterJob(job);
+    fieldDirtyRef.current = true;
   }, [state, selected, mapMode, theaterLayer, theaterMaps]);
 
   useEffect(() => {
@@ -1236,25 +1084,30 @@ export function WorldMap({
           world.tick,
           Math.min(world.tick + 8, visualTickRef.current + elapsedSeconds * playbackRef.current),
         );
-        context.clearRect(0, 0, canvas.width, canvas.height);
+        maybeDispatchFieldFrame(time);
+        const scale = pixelScaleRef.current;
+        context.setTransform(scale, 0, 0, scale, 0, 0);
+        context.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
         const frames = framesRef.current;
         const transition = Math.max(
           0,
-          Math.min(1, (time - frames.transitionStarted) / STATIC_TRANSITION_MS),
+          Math.min(1, (time - frames.transitionStarted) / frames.transitionDuration),
         );
         if (frames.previous && transition >= 1) frames.previous = null;
-        if (frames.previous && transition < 1) drawFieldLayer(context, frames.previous, canvas);
+        if (frames.previous && transition < 1) drawFieldLayer(context, frames.previous);
         if (frames.current) {
           context.save();
           context.globalAlpha = frames.previous ? transition : 1;
-          drawFieldLayer(context, frames.current, canvas);
+          drawFieldLayer(context, frames.current);
           context.restore();
         }
         if (modeRef.current === "political") {
-          const shape = geometry(world, canvas);
+          const shape = geometry(world);
           const extrapolatedTicks = Math.max(0, visualTickRef.current - world.tick);
+          // Frame-rate-independent easing for the campaign labels.
+          const labelBlend = 1 - Math.exp(-elapsedSeconds * 9);
           drawTradeVehicles(context, world, shape, extrapolatedTicks);
-          drawCampaigns(context, world, shape, selectedRef.current, showAllTheaters, extrapolatedTicks);
+          drawCampaigns(context, world, shape, selectedRef.current, showAllTheaters, extrapolatedTicks, labelBlend);
           drawWarships(context, world, shape, world.tick + extrapolatedTicks);
         }
         if (renderMarker !== undefined) canvas.dataset.renderedMarker = renderMarker;

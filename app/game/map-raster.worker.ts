@@ -7,8 +7,8 @@ import {
   RASTER_TERRAIN_ORDER,
 } from "./map-raster-protocol";
 import type {
-  MapRasterRequest,
   MapRasterResult,
+  MapRasterWorkerMessage,
   PoliticalRasterRequest,
   TheaterRasterRequest,
 } from "./map-raster-protocol";
@@ -121,6 +121,24 @@ function blurClaims(
   return { ids, weights };
 }
 
+/**
+ * Buffers returned by the display thread after compositing, reused for the
+ * next frame instead of allocating megabytes per raster.
+ */
+const BUFFER_POOL: ArrayBuffer[] = [];
+const BUFFER_POOL_LIMIT = 6;
+
+function leasePixels(byteLength: number, zeroed: boolean): Uint8ClampedArray<ArrayBuffer> {
+  for (let at = 0; at < BUFFER_POOL.length; at += 1) {
+    if (BUFFER_POOL[at]!.byteLength !== byteLength) continue;
+    const buffer = BUFFER_POOL.splice(at, 1)[0]!;
+    const pixels = new Uint8ClampedArray(buffer);
+    if (zeroed) pixels.fill(0);
+    return pixels;
+  }
+  return new Uint8ClampedArray(byteLength);
+}
+
 function fieldIndex(owner: number, terrain: number): number {
   if (owner >= 0) return owner;
   return RASTER_TERRAIN_ORDER[terrain] === "water" ? WATER_FIELD : NEUTRAL_FIELD;
@@ -147,8 +165,9 @@ function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
   }
 
   const claims = blurClaims(rawIds, rawWeights, gridWidth, gridHeight);
-  const fill = new Uint8ClampedArray(rasterWidth * rasterHeight * 4);
-  const borders = new Uint8ClampedArray(fill.length);
+  // Every fill pixel is written below; only the borders need a clean slate.
+  const fill = leasePixels(rasterWidth * rasterHeight * 4, false);
+  const borders = leasePixels(fill.length, true);
   // Four corners of the bilinear sample, each carrying its own claims.
   const mergedIds = new Int16Array(CLAIMS_PER_CELL * 4);
   const mergedWeights = new Float64Array(CLAIMS_PER_CELL * 4);
@@ -254,7 +273,7 @@ function theaterHeat(value: number): RgbColor {
 
 function renderTheaters(request: TheaterRasterRequest): MapRasterResult {
   const { gridWidth, gridHeight, rasterWidth, rasterHeight } = request;
-  const fill = new Uint8ClampedArray(rasterWidth * rasterHeight * 4);
+  const fill = leasePixels(rasterWidth * rasterHeight * 4, false);
   const sampledValues = new Float32Array(rasterWidth * rasterHeight);
   const landMask = new Uint8Array(rasterWidth * rasterHeight);
 
@@ -351,7 +370,14 @@ function renderTheaters(request: TheaterRasterRequest): MapRasterResult {
   };
 }
 
-self.addEventListener("message", (event: MessageEvent<MapRasterRequest>) => {
+self.addEventListener("message", (event: MessageEvent<MapRasterWorkerMessage>) => {
+  if (event.data.type === "recycle") {
+    for (const buffer of event.data.buffers) {
+      if (BUFFER_POOL.length >= BUFFER_POOL_LIMIT) break;
+      if (buffer.byteLength > 0) BUFFER_POOL.push(buffer);
+    }
+    return;
+  }
   const result = event.data.mode === "political"
     ? renderPolitical(event.data)
     : renderTheaters(event.data);
