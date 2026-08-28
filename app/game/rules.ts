@@ -472,6 +472,54 @@ export const POWER_RULES = {
 } as const;
 
 /**
+ * The information-identity surface.
+ *
+ * Three advanced elements — and the airborne trade form — express through the
+ * belief layer instead of through combat or economy: what a realm knows, and
+ * what its rivals wrongly believe, is the whole of the power. None of these
+ * constants ever touches the world itself; they bend observations on the way
+ * into a belief store and readings on the way out, so a fooled realm makes a
+ * worse decision rather than suffering a worse fact.
+ */
+export const INFORMATION_RULES = {
+  /**
+   * Observations per interval for swift-sight realms: glass, whose identity
+   * is seeing first, and any realm whose expressed element trades by air —
+   * the skyward view was air's identity before it was air's carrier, and it
+   * stacks on the skyports rather than being replaced by them.
+   */
+  swiftObservationCadence: 2,
+  /**
+   * How much of a rival's measurement of mist ground is pulled back toward
+   * what that rival already believed. The veil never blocks a look — it
+   * thickens it, so beliefs about the Veilfolk's country converge slower and
+   * act staler. Standing in the region pierces it entirely.
+   */
+  mistVeilBlend: 0.7,
+  /**
+   * The share of a region's cells an observer must hold for its measurement
+   * to pierce the mist — a real foothold, against a sliver at the hem. A
+   * region reading is an aggregate of the whole country, and owning a border
+   * village does not reveal a country; pressing a front there always does.
+   */
+  mistPierceFoothold: 0.04,
+  /**
+   * What rivals believe mist and worth of mirage ground to be: the believed
+   * prize and openness both read at this share of the truth, so the ground
+   * looks poorer and better held than it is. Read-side only — the stores
+   * keep honest measurements, the illusion sits in the reading.
+   */
+  mirageDistortion: 0.6,
+  /**
+   * Sight-group members with contact on the region it takes to collapse the
+   * mirage. One line of contact can be fooled; a second, pooled through an
+   * alliance or a live trade route, corroborates — "an informed opponent can
+   * collapse the illusion" as arithmetic.
+   */
+  mirageCollapseContacts: 2,
+} as const;
+
+/**
  * The strategic-priority surface.
  *
  * Every realm carries normalized weights over the strategic domains, seeded

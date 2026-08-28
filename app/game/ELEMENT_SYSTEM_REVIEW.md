@@ -62,6 +62,44 @@ profiles so accumulate/release postures ride the priority system, and the
 mist–mirage–glass trio stays deliberately neutral for Phase 7's information
 identities.
 
+**Addendum (Phase 7, as built).** The information identities shipped on the
+belief layer as planned — Glass observes twice per interval, Mist blends
+rivals' measurements of its plurality regions toward their stale beliefs,
+Mirage reads at ×0.6 believed prize and openness collapsing under two
+corroborating contacts, airborne realms share the swift sight stacked on
+their carrier, and no fog-of-war system, no new simulation system and no
+new state were built: everything lives in `information.ts` at the belief
+layer's two doors (the observation write in `refreshTheaterMap`, the belief
+read in `believedValue`). Three seams were decided during implementation:
+
+1. **Swift sight is a second slot on the same rotation**, half an interval
+   offset from a realm's roster slot, read from the *expressed* element — so
+   an ascension into any airborne-trading element earns it mid-game, and the
+   wrapped second slots mean gale's twelve realms see the difference inside
+   the very first interval.
+2. **"Pierced by contact" was sharpened to a foothold.** Observation itself
+   already requires contact, so piercing on any contact would have left the
+   veil nothing to veil (measured on a running world: 48 veilable
+   observer-pairs across the whole map). As built, piercing means truly
+   standing in the region — holding at least 4% of its cells or pressing a
+   front there — while adjacency slivers and trade corridors measure through
+   the veil. Sight-group pooling pierces exactly as the design hoped, with
+   no extra rule: the mist realm's own clear readings, and any present
+   ally's, are what the group pools.
+3. **Mirage distorts at the read boundary, not the store.** Every consumer
+   of beliefs, present and future, inherits the illusion; the stores stay
+   honest so shared sight shares truth; the viewer itself counts among the
+   corroborating members, and plurality is strict — a contested region veils
+   and distorts for nobody.
+
+The doctor gained the promised belief-asymmetry assertion (swift realms'
+current beliefs must average fresher than the rest of the roster — always
+evidencable with gale seated) plus mist and mirage evidence lines that
+report `inconclusive` until a realm expresses them, the powers convention.
+No batch counters were added: the identities emit no report events to
+count, deliberately — they are ambient, not dramatic — and the sweep
+metrics can revisit that if balance work needs it.
+
 ---
 
 ## 1. Verdict

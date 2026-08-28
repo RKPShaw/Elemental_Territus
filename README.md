@@ -104,6 +104,21 @@ chokepoints. `app/game/powers.ts` owns the meters and factors, the
 `element-powers` system advances them, and each mechanic's weakness triggers
 mechanically from world state rather than relying on rival AI cleverness.
 
+Three identities are information instead. Every realm acts on remembered,
+imperfect beliefs about the ground (`app/game/theater-map.ts`), and the
+mist–mirage–glass trio expresses entirely on that layer: glass observes
+twice per interval and acts on fresher ground than anyone; the regions the
+Veilfolk hold in plurality veil distant rivals' measurements toward what
+those rivals already believed, pierced only by a real foothold, a pressing
+front, or an ally standing there whose clear reading pools through the
+sight group; and rivals read the prize and openness of the Falselights'
+plurality regions at a fraction of what their own stores honestly hold,
+an illusion that collapses for any viewer whose sight group has two members
+with contact on the region. Realms whose expressed element trades by air
+share glass's swift sight — the view from above stacks on the skyport
+carrier. `app/game/information.ts` owns all of it; no fog-of-war system
+exists, and no other system knows the identities are there.
+
 Starts are drafted rather than fixed. Terrain is generated first, then each
 player in turn takes the best site still available to it, scoring the shared
 strategic value field against how well the surrounding terrain suits its
@@ -235,6 +250,16 @@ drive the same simulation safely.
   constituents, tier 3 needs both compound constituents formable and six realms
   absorbed altogether. Expression upgrades once and never demotes, and an
   ascended realm keeps its name and colors — titles, not rebrands.
+- Information identities act only on beliefs, never on the world. A glass or
+  airborne-trading realm observes twice per interval instead of once; a mist
+  realm's plurality regions blend distant rivals' measurements 70% back
+  toward what those rivals already believed, pierced by holding 4% of the
+  region's cells or pressing a front there; a mirage realm's plurality
+  regions read at 60% of their believed prize and openness, collapsing for
+  any viewer whose sight group holds two members with contact on the region.
+  Belief stores stay honest under mirage — the illusion lives in the reading
+  — and a veiled look still stamps fresh, so mist ground is never invisible,
+  only chronically misjudged.
 - Trade forms lean construction through the same strategy quotas: a realm
   whose expressed element trades by waterway wants harbors at a 34% share of
   its trade buildings instead of 22% and reaches for them first; energy

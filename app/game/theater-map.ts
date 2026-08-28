@@ -1,5 +1,11 @@
 import { PLAYER_ORDER } from "./players";
-import { getRelation } from "./diplomacy";
+import {
+  mirageDistortionFor,
+  mistVeilFor,
+  observationCadenceOf,
+  regionIntelligence,
+  sightGroup,
+} from "./information";
 import { THEATER_MAP_RULES } from "./rules";
 import type { PlayerId, TheaterMapState, RegionObservation, WorldState } from "./types";
 
@@ -33,6 +39,15 @@ import type { PlayerId, TheaterMapState, RegionObservation, WorldState } from ".
  * few thousand floats, and cell-level detail is derived on demand from the
  * common-knowledge fields shaded by the region's remembered observation --
  * which is also the honest resolution for a belief formed at a distance.
+ *
+ * The information identities live on this layer (information.ts). Swift-sight
+ * realms -- glass, and anyone whose expressed element trades by air -- observe
+ * twice per interval instead of once; a mist realm's plurality regions veil
+ * distant rivals' measurements toward what those rivals already believed; a
+ * mirage realm's plurality regions distort what rivals read out of their own
+ * beliefs. Observation and reading are the only doors into a belief, so the
+ * three identities are complete here without any other system knowing they
+ * exist.
  */
 
 export const OBSERVED_LAYERS = ["infrastructure", "access", "undefended", "prize"] as const;
@@ -98,49 +113,6 @@ function observe(store: RegionObservation, index: number, measurement: number): 
   store.trend[index] = store.trend[index]! + THEATER_MAP_RULES.trendBeta * residual;
 }
 
-const SIGHT_GROUPS = new WeakMap<object, { tick: number; groups: Map<PlayerId, PlayerId[]> }>();
-
-/**
- * Who a player sees through as well as with: itself, its allies, and the
- * partners it actually runs a route with.
- *
- * Deliberately narrow. Merely not being at war is not intelligence sharing --
- * that would put nearly the whole roster in every group and quietly undo the
- * fog. An alliance or a live trade route is a relationship someone chose and
- * can lose, which is what makes shared sight a reward rather than a default.
- */
-export function sightGroup(state: WorldState, viewer: PlayerId): readonly PlayerId[] {
-  const cached = SIGHT_GROUPS.get(state);
-  if (cached && cached.tick === state.tick) {
-    const hit = cached.groups.get(viewer);
-    if (hit) return hit;
-  }
-  const store = cached && cached.tick === state.tick
-    ? cached
-    : { tick: state.tick, groups: new Map<PlayerId, PlayerId[]>() };
-
-  const group: PlayerId[] = [viewer];
-  const included = new Set<PlayerId>([viewer]);
-  for (const other of PLAYER_ORDER) {
-    if (other === viewer || !state.factions[other]!.alive) continue;
-    if (getRelation(state, viewer, other).status !== "truce") continue;
-    group.push(other);
-    included.add(other);
-  }
-  for (const route of state.tradeRoutes) {
-    const [first, second] = route.parties;
-    const partner = first === viewer ? second : second === viewer ? first : null;
-    if (partner === null || included.has(partner)) continue;
-    if (!state.factions[partner]!.alive) continue;
-    group.push(partner);
-    included.add(partner);
-  }
-
-  store.groups.set(viewer, group);
-  SIGHT_GROUPS.set(state, store);
-  return group;
-}
-
 export interface RegionBelief {
   value: number;
   /** Tick the reading was taken, or NEVER_OBSERVED. */
@@ -157,6 +129,12 @@ export interface RegionBelief {
  * well as an economic one, and it is why observations are stored per observer
  * rather than merged in place -- a merged store could not tell whose reading it
  * was holding, and could never un-share when an alliance ends.
+ *
+ * A mirage bends the reading on its way out: what a rival believes about the
+ * prize and openness of the Falselights' plurality regions is a fraction of
+ * what its store honestly holds, unless enough of its sight group has contact
+ * on the region to corroborate the truth. The stores stay honest and shared
+ * sight stays honest -- the illusion exists only in the looking.
  */
 export function believedValue(
   state: WorldState,
@@ -180,7 +158,7 @@ export function believedValue(
     value = store.value[index]!;
   }
   return {
-    value,
+    value: value * mirageDistortionFor(state, viewer, regionId, layer),
     observedAt: best,
     age: best === NEVER_OBSERVED ? Number.POSITIVE_INFINITY : state.tick - best,
   };
@@ -233,55 +211,6 @@ function measureRegion(state: WorldState, regionId: number, layer: ObservedLayer
 }
 
 /**
- * Regions each player can currently see into.
- *
- * Contact is ground held, ground next to it, the length of a trade route, and a
- * live front. Built for every player in one pass over the map, because doing it
- * per observer is the players-by-cells sweep this codebase has spent a lot of
- * effort deleting.
- */
-function contactByPlayer(state: WorldState): Map<PlayerId, Set<number>> {
-  const contact = new Map<PlayerId, Set<number>>();
-  const { width, height } = state.config;
-  const cells = state.cells;
-  const regionByCell = state.regionByCell;
-
-  const touch = (player: PlayerId, regionId: number): void => {
-    if (regionId < 0) return;
-    const seen = contact.get(player);
-    if (seen) seen.add(regionId);
-    else contact.set(player, new Set([regionId]));
-  };
-
-  for (let index = 0; index < cells.length; index += 1) {
-    const owner = cells[index]!.owner;
-    if (owner === null) continue;
-    touch(owner, regionByCell[index]!);
-    const x = index % width;
-    const y = (index - x) / width;
-    for (let side = 0; side < 4; side += 1) {
-      const nx = side === 1 ? x + 1 : side === 3 ? x - 1 : x;
-      const ny = side === 0 ? y - 1 : side === 2 ? y + 1 : y;
-      if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-      touch(owner, regionByCell[ny * width + nx]!);
-    }
-  }
-
-  for (const route of state.tradeRoutes) {
-    for (const index of route.pathIndices) {
-      const regionId = regionByCell[index]!;
-      for (const party of route.parties) touch(party, regionId);
-    }
-  }
-
-  for (const theater of state.theaters) {
-    touch(theater.attacker, theater.regionId);
-  }
-
-  return contact;
-}
-
-/**
  * Refresh a slice of the roster's beliefs.
  *
  * Only a fraction of players re-observe on any tick, on a rotation. That is not
@@ -299,25 +228,46 @@ export function refreshTheaterMap(state: WorldState): void {
   // Each player's slot in the interval is derived from its roster position, so
   // every player observes exactly once per interval however long the interval
   // or however large the roster, and the load spreads evenly across its ticks.
+  // Swift-sight realms -- glass, and anyone whose expressed element trades by
+  // air -- take further observations at even offsets from their slot, so they
+  // ride the same rotation at a higher cadence.
   const interval = THEATER_MAP_RULES.observationInterval;
   const slot = state.tick % interval;
   const due: PlayerId[] = [];
   for (let index = 0; index < PLAYER_ORDER.length; index += 1) {
-    if (Math.floor((index * interval) / PLAYER_ORDER.length) !== slot) continue;
     const player = PLAYER_ORDER[index]!;
-    if (state.factions[player]!.alive) due.push(player);
+    const faction = state.factions[player]!;
+    if (!faction.alive) continue;
+    const base = Math.floor((index * interval) / PLAYER_ORDER.length);
+    const cadence = observationCadenceOf(faction.expressedElement);
+    for (let round = 0; round < cadence; round += 1) {
+      if ((base + Math.floor((round * interval) / cadence)) % interval !== slot) continue;
+      due.push(player);
+      break;
+    }
   }
   if (due.length === 0) return;
 
-  const contact = contactByPlayer(state);
+  const { contact } = regionIntelligence(state);
   for (const player of due) {
     const store = map.byPlayer[player]!;
     const visible = contact.get(player);
     if (!visible) continue;
     for (const regionId of visible) {
       if (regionId >= map.regionCount) continue;
+      // A mist veil thickens the look without blocking it: the measurement
+      // arrives blended toward what this observer already believed, so the
+      // reading is stamped fresh while staying mostly stale. Standing in the
+      // region measures clear.
+      const veil = mistVeilFor(state, player, regionId);
       for (const layer of OBSERVED_LAYERS) {
-        observe(store, layerOffset(regionId, layer), measureRegion(state, regionId, layer));
+        const index = layerOffset(regionId, layer);
+        let measurement = measureRegion(state, regionId, layer);
+        if (veil > 0) {
+          const believed = store.value[index]! + store.trend[index]!;
+          measurement = believed * veil + measurement * (1 - veil);
+        }
+        observe(store, index, measurement);
       }
       store.observedAt[regionId] = state.tick;
     }

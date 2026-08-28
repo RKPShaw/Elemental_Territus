@@ -15,7 +15,23 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded when the advanced elements gained their powers. Every faction now
+ * Re-recorded when the information identities landed on the belief layer.
+ * Swift sight is the mover: glass and every realm whose expressed element
+ * trades by air now observe twice per observation interval, so the twelve
+ * gale realms' belief stores differ from the first interval — wrapped second
+ * slots fire inside the opening eighty ticks — and settlers steer by what
+ * they believe, so the cell digests move with the world digests from the
+ * tick-60 checkpoint on. The mist veil (rivals' measurements of the
+ * Veilfolk's plurality regions blend toward what the rival already believed,
+ * pierced by a real foothold or a front) and the mirage distortion (rivals
+ * read the prize and openness of the Falselights' plurality regions at 0.6
+ * of what their stores hold, collapsing for any viewer whose sight group has
+ * two members with contact on the region) are also live, but no realm
+ * expresses either inside 600 ticks, so their contribution to these digests
+ * is provably nothing: the mechanics wait, dormant, for a tier 3 ascension —
+ * new behavior at the observation boundary, and only the boundary.
+ *
+ * Before that, re-recorded when the advanced elements gained their powers. Every faction now
  * carries a power meter (FactionState.power — new state, so every world
  * digest moves by construction) behind five bespoke tier 3 mechanics: geyser
  * banks pressure and erupts into its wars, tempest gathers conquest momentum
@@ -131,25 +147,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "78b22061b78a8fbfd63b6f4a8e3d1009", cells: "c533d5f1040b2ff1" },
-      { tick: 200, world: "9893e9fa15cce98342363c87575f9d7e", cells: "77cd275d067b3ff9" },
-      { tick: 600, world: "608f8bc1429a30afbc48bfa5dabd066c", cells: "eab8adb502d9fa68", deep: true },
+      { tick: 60, world: "cf4c12abe042d7e583d534e3498a88b7", cells: "629af1312b4f3fa9" },
+      { tick: 200, world: "b6f3b4e4e5b4f5d7751510d285e8486f", cells: "9be20ce70518e538" },
+      { tick: 600, world: "0eb719b866418c60d1df601a48aea681", cells: "e62118e3a07cad0b", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "783db8fc02b939cd5a4f8c1ae0d84fe9", cells: "7b32593869bea912" },
-      { tick: 200, world: "61fdf95862d2854d9edd9fc18419ad00", cells: "f6872f718ea82adf" },
-      { tick: 600, world: "1ab7373e52d8c8bf1c4d606c2d424366", cells: "4d81f25e9737955e", deep: true },
+      { tick: 60, world: "928391a2532453020bbb0f445ea07678", cells: "276de65e7315dcf1" },
+      { tick: 200, world: "e16512745a7359a1147a4633e34e8629", cells: "b08bbbcba3a1e819" },
+      { tick: 600, world: "bd1edecfffb3f5838d1e21df66764419", cells: "45611db072c12f6c", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "b60cac264d5cfa6a770e8c59baa0fb6e", cells: "d3e68b9445214f1d" },
-      { tick: 200, world: "9ce8d9a35ca06c3d96a6d1573daff2f5", cells: "e85bd3d4fa2f8088" },
-      { tick: 600, world: "d2a8449e1f8fa4c1334a42ef49b9d001", cells: "66215bb9de10b8ae", deep: true },
+      { tick: 60, world: "ff67731dbbf1b621e30ab9932cc493d8", cells: "dff14e1783896ee1" },
+      { tick: 200, world: "7212a23be4557b7b1da88cfd13e13eba", cells: "441ef46b90bcf0e2" },
+      { tick: 600, world: "4983e5992f2da74317d27e98a7af45d3", cells: "be9b534a0f34203a", deep: true },
     ],
   },
 ];
