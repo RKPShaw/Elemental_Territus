@@ -19,6 +19,13 @@ export const RASTER_TERRAIN_ORDER: readonly TerrainId[] = [
   "mountains",
 ];
 
+export const RASTER_PLAYER_INDEX: ReadonlyMap<PlayerId, number> = new Map(
+  RASTER_PLAYER_ORDER.map((id, index) => [id, index]),
+);
+export const RASTER_TERRAIN_INDEX: ReadonlyMap<TerrainId, number> = new Map(
+  RASTER_TERRAIN_ORDER.map((id, index) => [id, index]),
+);
+
 interface RasterRequestBase {
   type: "render";
   requestId: number;
@@ -45,12 +52,27 @@ export interface TheaterRasterRequest extends RasterRequestBase {
 
 export type MapRasterRequest = PoliticalRasterRequest | TheaterRasterRequest;
 
+/**
+ * Pixel buffers handed back to the worker once a frame has been composited.
+ *
+ * The interpolated display loop asks for many rasters a second, and each one
+ * is megabytes of pixels; recycling the buffers keeps the steady state free of
+ * large allocations on both sides, which is what keeps the garbage collector
+ * out of the animation.
+ */
+export interface RasterBufferRecycle {
+  type: "recycle";
+  buffers: ArrayBuffer[];
+}
+
+export type MapRasterWorkerMessage = MapRasterRequest | RasterBufferRecycle;
+
 export interface MapRasterResult {
   type: "rendered";
   requestId: number;
   mode: MapRasterRequest["mode"];
   rasterWidth: number;
   rasterHeight: number;
-  fill: Uint8ClampedArray;
-  borders: Uint8ClampedArray | null;
+  fill: Uint8ClampedArray<ArrayBuffer>;
+  borders: Uint8ClampedArray<ArrayBuffer> | null;
 }
