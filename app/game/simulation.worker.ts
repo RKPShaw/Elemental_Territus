@@ -27,6 +27,10 @@ function publish(replaceHistory = false): void {
     : world.reports.slice(publishedReportCount);
   publishedReportCount = world.reports.length;
   world.reports = [];
+  // Everything up to the watermark is now delivered; let the engine forget it.
+  // The display thread keeps the full archive, so retaining a second complete
+  // copy here only grew worker memory until postMessage could no longer clone.
+  publishedReportCount -= engine.pruneConsumedReports(publishedReportCount);
   const event: SimulationWorkerEvent = { type: "snapshot", world, reportDelta, replaceHistory };
   self.postMessage(event);
   previousPublish = performance.now();

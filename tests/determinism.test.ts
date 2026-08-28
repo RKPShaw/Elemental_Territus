@@ -15,7 +15,19 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded when legibility rebuilt the story surfacing. The consolidated
+ * Re-recorded for the pacing retune, and the gameplay change was the point:
+ * wilderness settlement pressure came down more than tenfold so the world
+ * settles across roughly its first hundred and fifty ticks instead of its
+ * first fifty, and every income rate (land, cities, all four trade carriers,
+ * with plasma's upkeep scaled to match) was cut about fivefold so economies
+ * take four to eight times as long to get busy while combat's own arithmetic
+ * is untouched. The same change capped each story arc's retained evidence ids
+ * (eventCount now carries the true total -- new state, so every world digest
+ * moves by construction) and retired the longest-untouched arcs past a
+ * retention mark, bounding what a long game keeps in memory. Cell digests
+ * move everywhere too, exactly as a settlement-pace change must make them.
+ *
+ * Before that, re-recorded when legibility rebuilt the story surfacing. The consolidated
  * story arcs are part of the world's memory — the digest hashes their
  * headlines and summaries — and the correlator now tells the arcs the element
  * system created: ascension arcs read the climb ("rises to Steam") instead of
@@ -160,25 +172,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "edf4b568b2e4828ce110b8f8e3849321", cells: "0cc88d49fe150097" },
-      { tick: 200, world: "814104efc5f114120ba59b27cd7dc49d", cells: "2a604bb4cdfc71c6" },
-      { tick: 600, world: "c3383f8adfa1bde96ee83454d02083e5", cells: "eb00cfb195bc449d", deep: true },
+      { tick: 60, world: "bc0cdbda08087dd6cbbf501abd89f890", cells: "52324152dac0d4d9" },
+      { tick: 200, world: "e4e67b07c533a25149fdaf4dbab4d6f0", cells: "8fd8a4cde17b2153" },
+      { tick: 600, world: "9f29bd4f2f1a522b53e768b0d2dff86a", cells: "23180af52fec780b", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "6d6473bc9fda13996f9c822bb89572f8", cells: "3430cfdf82dfeb8d" },
-      { tick: 200, world: "50b823a3b12de983de294d530d11065d", cells: "e99f4f00ed1cd703" },
-      { tick: 600, world: "f6135b2a90384b3e2de0ed14391727a9", cells: "7e4e8aeacaa49108", deep: true },
+      { tick: 60, world: "3a344be21cf799acdb578db8bf9d6974", cells: "ee06a89f5403d54a" },
+      { tick: 200, world: "4993a89ce68e55c2066083a32ce91757", cells: "1758c70b52b57908" },
+      { tick: 600, world: "9cef83ffac27debc496453bce4257afd", cells: "0946c86911812bf8", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "a656588e3453cd543a5179e35ed55315", cells: "e71029ca38e2ca6b" },
-      { tick: 200, world: "4e678da9defa6a601a96ed78bde3769f", cells: "73dc66619972b0c8" },
-      { tick: 600, world: "7fca664e7e1232806076dd2dd4e60f88", cells: "989acf54f7f0a2a6", deep: true },
+      { tick: 60, world: "e6d8981a846864cc2bbe09eec3d8010c", cells: "0023647e6f67d252" },
+      { tick: 200, world: "c9bf5e21629fa6692c59854f6114eb9d", cells: "3cac2f5812f76629" },
+      { tick: 600, world: "0193b3e77bdad5d7455c80f17d0a721d", cells: "659c87d5a40f71e9", deep: true },
     ],
   },
 ];

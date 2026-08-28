@@ -626,7 +626,14 @@ export interface StoryArc {
   headline: string;
   summary: string;
   participants: ReportSubject[];
+  /**
+   * The most recent supporting facts, capped -- an arc that runs for a whole
+   * game (a realm's expansion, a busy trade lane) would otherwise accumulate
+   * an id for every event it ever consolidated, and the live worker clones
+   * every arc into each published snapshot. eventCount keeps the true total.
+   */
   eventIds: number[];
+  eventCount: number;
   metrics: Record<string, number>;
 }
 
