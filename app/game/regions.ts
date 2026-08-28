@@ -238,36 +238,103 @@ export function strategicHeatField(
   return buildStrategicMetaMap(state).value;
 }
 
+/**
+ * Splits the land into its separate landmasses (8-connected components).
+ * Regions can only grow within a landmass, so anchor placement must respect
+ * where the sea actually divides the world.
+ */
+function landComponents(state: Pick<WorldState, "cells" | "config">): number[][] {
+  const { width, height } = state.config;
+  const seen = new Uint8Array(state.cells.length);
+  const components: number[][] = [];
+  for (let start = 0; start < state.cells.length; start += 1) {
+    if (seen[start] || state.cells[start]!.terrain === "water") continue;
+    const component = [start];
+    seen[start] = 1;
+    for (let cursor = 0; cursor < component.length; cursor += 1) {
+      for (const neighbor of surroundingIndices(component[cursor]!, width, height)) {
+        if (seen[neighbor] || state.cells[neighbor]!.terrain === "water") continue;
+        seen[neighbor] = 1;
+        component.push(neighbor);
+      }
+    }
+    components.push(component);
+  }
+  return components;
+}
+
 function initialAnchors(
   state: Pick<WorldState, "cells" | "config">,
   heat: Float32Array,
   count: number,
 ): RegionAnchor[] {
-  const land = state.cells.flatMap((cell, index) => cell.terrain === "water" ? [] : [index]);
-  const anchors: RegionAnchor[] = [];
-  const chosen = new Uint8Array(state.cells.length);
-  let seed = land.reduce((best, index) => heat[index]! > heat[best]! ? index : best, land[0]!);
-
-  for (let id = 0; id < count; id += 1) {
-    const [x, y] = cellCoordinates(seed, state.config.width);
-    anchors.push({ x, y, velocityX: 0, velocityY: 0 });
-    chosen[seed] = 1;
-    let best = -1;
-    let bestScore = -1;
-    for (const index of land) {
-      if (chosen[index]) continue;
-      const [candidateX, candidateY] = cellCoordinates(index, state.config.width);
-      let nearest = Number.POSITIVE_INFINITY;
-      for (const anchor of anchors) {
-        nearest = Math.min(nearest, (candidateX - anchor.x) ** 2 + (candidateY - anchor.y) ** 2);
-      }
-      const score = nearest * (1 + heat[index]! * STRATEGIC_REGION_RULES.seedHeatBias);
-      if (score > bestScore) {
-        best = index;
-        bestScore = score;
-      }
+  // Anchors are budgeted to each landmass by its share of the world's land
+  // (largest-remainder rounding keeps the total exact). Farthest-point
+  // sampling over all land together handed sprawling continents more anchors
+  // than their area warranted, and every region on them then opened under the
+  // common area budget with no way for the partition to fix it -- regions
+  // cannot grow across the sea.
+  const components = landComponents(state).sort((a, b) => b.length - a.length);
+  const landTotal = components.reduce((total, component) => total + component.length, 0);
+  const budgets = components.map((component) =>
+    Math.floor((count * component.length) / landTotal),
+  );
+  const remainders = components.map((component, index) =>
+    (count * component.length) / landTotal - budgets[index]!,
+  );
+  let assigned = budgets.reduce((total, budget) => total + budget, 0);
+  while (assigned < count) {
+    let best = 0;
+    for (let index = 1; index < remainders.length; index += 1) {
+      if (remainders[index]! > remainders[best]!) best = index;
     }
-    if (best >= 0) seed = best;
+    budgets[best]! += 1;
+    remainders[best] = -1;
+    assigned += 1;
+  }
+
+  const anchors: RegionAnchor[] = [];
+  for (let componentId = 0; componentId < components.length; componentId += 1) {
+    const land = components[componentId]!;
+    const budget = budgets[componentId]!;
+    if (budget === 0) continue;
+    let seed = land.reduce((best, index) => heat[index]! > heat[best]! ? index : best, land[0]!);
+    const placed: RegionAnchor[] = [];
+    const seedCells: number[] = [];
+    // Distance is walked over the land itself rather than measured through the
+    // air: a peninsula behind a mountain choke is far away on foot however
+    // close it sits on the map, and it needs its own anchor or the one region
+    // that can reach it is forced over the area budget.
+    const distance = new Int32Array(state.cells.length);
+    const { width, height } = state.config;
+    for (let id = 0; id < budget; id += 1) {
+      const [x, y] = cellCoordinates(seed, state.config.width);
+      placed.push({ x, y, velocityX: 0, velocityY: 0 });
+      seedCells.push(seed);
+      distance.fill(-1);
+      const queue: number[] = [...seedCells];
+      for (const cell of seedCells) distance[cell] = 0;
+      for (let cursor = 0; cursor < queue.length; cursor += 1) {
+        for (const neighbor of surroundingIndices(queue[cursor]!, width, height)) {
+          if (distance[neighbor] >= 0 || state.cells[neighbor]!.terrain === "water") continue;
+          distance[neighbor] = distance[queue[cursor]!]! + 1;
+          queue.push(neighbor);
+        }
+      }
+      let best = -1;
+      let bestScore = -1;
+      for (const index of land) {
+        if (distance[index]! <= 0) continue;
+        const score = distance[index]! * distance[index]!
+          * (1 + heat[index]! * STRATEGIC_REGION_RULES.seedHeatBias);
+        if (score > bestScore) {
+          best = index;
+          bestScore = score;
+        }
+      }
+      if (best >= 0) seed = best;
+    }
+    anchors.push(...placed);
   }
   return anchors;
 }

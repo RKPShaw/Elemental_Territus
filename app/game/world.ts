@@ -2,7 +2,7 @@ import { relationKey } from "./diplomacy";
 import { baseMaskOf } from "./elements";
 import { neighborIndices } from "./grid";
 import { PLAYERS, PLAYER_ORDER, playerElement } from "./players";
-import { SeededRandom, smoothCellNoise } from "./random";
+import { SeededRandom, cellNoise, smoothCellNoise } from "./random";
 import { createEconomyLedger } from "./economics";
 import { createStrategicRegions } from "./regions";
 import { createTheaterMap } from "./theater-map";
@@ -72,63 +72,310 @@ const WORLD_LAST = [
   "march",
 ] as const;
 
-function ellipse(
-  nx: number,
-  ny: number,
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-): number {
-  return Math.pow((nx - cx) / rx, 2) + Math.pow((ny - cy) / ry, 2);
+/**
+ * Sea level in the elevation field. Everything below it is ocean; land terrain
+ * is banded by height above it.
+ */
+const SEA_LEVEL = 0.5;
+
+interface ContinentSeed {
+  x: number;
+  y: number;
+  /** Radius in normalised (0..1, width-relative) units. */
+  radius: number;
+  /** How tall the landmass core rises above sea level. */
+  lift: number;
 }
 
-function landAt(seed: number, x: number, y: number, config: SimulationConfig): boolean {
-  const nx = x / (config.width - 1);
-  const ny = y / (config.height - 1);
-  const broadNoise =
-    smoothCellNoise(seed ^ 0x6a09e667, x, y, config.width / 14) - 0.5;
-  const fineNoise =
-    smoothCellNoise(seed ^ 0xbb67ae85, x, y, config.width / 48) - 0.5;
-  const coastWobble = broadNoise * 0.3 + fineNoise * 0.055;
-  // Continents sit inside the frame rather than running off it. They used to
-  // span past both edges and be cut off by the border guard, so the world read
-  // as a crop of something larger with no sea beyond the coast -- and a coast
-  // that is a straight line down the edge of the screen is the one shape no
-  // coastline ever has.
-  const west = ellipse(nx, ny, 0.30, 0.50, 0.235, 0.385) < 1 + coastWobble;
-  const east = ellipse(nx, ny, 0.70, 0.50, 0.235, 0.385) < 1 + coastWobble;
-  const tideNorth = ellipse(nx, ny, 0.50, 0.205, 0.095, 0.125) < 1 + coastWobble * 0.7;
-  const tideSouth = ellipse(nx, ny, 0.50, 0.775, 0.085, 0.105) < 1 + coastWobble * 0.7;
-  const land = west || east || tideNorth || tideSouth;
-
-  // Open water all the way round, wide enough to read as ocean rather than as
-  // a hairline. Scaled to the map so it survives a change of size.
-  const margin = Math.max(3, Math.round(Math.min(config.width, config.height) * 0.045));
-  if (
-    x < margin || y < margin
-    || x >= config.width - margin || y >= config.height - margin
-  ) return false;
-  return land;
+/**
+ * Where the continents sit. Positions and sizes are drawn from the world seed
+ * rather than authored, so every world has its own arrangement of landmasses
+ * instead of the same two ellipses -- but they are placed to keep apart, so
+ * the ocean between them reads as real channels rather than accidents.
+ */
+function draftContinents(seed: number): ContinentSeed[] {
+  const random = new SeededRandom((seed ^ 0x1f83d9ab) >>> 0 || 0x1f83d9ab);
+  const count = random.int(4, 6);
+  const seeds: ContinentSeed[] = [];
+  for (let attempt = 0; attempt < 400 && seeds.length < count; attempt += 1) {
+    const major = seeds.length < 2;
+    const candidate: ContinentSeed = {
+      x: 0.16 + random.next() * 0.68,
+      y: 0.2 + random.next() * 0.6,
+      radius: major ? 0.23 + random.next() * 0.08 : 0.14 + random.next() * 0.07,
+      lift: 0.42 + random.next() * 0.24,
+    };
+    // Keep the cores apart by roughly the sum of their radii, so continents
+    // stay distinct landmasses instead of merging into one supercontinent.
+    const crowded = seeds.some((other) => {
+      // The map is wider than it is tall; distances compare in the same
+      // width-relative units the radii use.
+      const distance = Math.hypot(candidate.x - other.x, (candidate.y - other.y) * 0.62);
+      return distance < (candidate.radius + other.radius) * 0.82;
+    });
+    if (!crowded) seeds.push(candidate);
+  }
+  return seeds;
 }
 
-function terrainAt(
+/**
+ * The raw height of the world at a cell: continental masses with noise-warped
+ * outlines, plus rolling detail that raises interior ranges and roughens the
+ * coasts. Ocean sits below SEA_LEVEL, and rivers descend this same field, so
+ * water always flows downhill to a coast that really is lower ground.
+ */
+function elevationAt(
   seed: number,
   x: number,
   y: number,
   config: SimulationConfig,
-): TerrainId {
-  const elevation =
-    smoothCellNoise(seed ^ 0x3c6ef372, x, y, config.width / 11) * 0.72 +
-    smoothCellNoise(seed ^ 0xa54ff53a, x, y, config.width / 43) * 0.28;
-  const moisture =
+  continents: readonly ContinentSeed[],
+): number {
+  const nx = x / (config.width - 1);
+  const ny = y / (config.height - 1);
+  // Domain warp: coastlines follow bent space rather than clean radii, which
+  // is what gives them peninsulas and bays instead of circular shores.
+  const warpX = (smoothCellNoise(seed ^ 0x6a09e667, x, y, config.width / 10) - 0.5) * 0.16;
+  const warpY = (smoothCellNoise(seed ^ 0xbb67ae85, x, y, config.width / 10) - 0.5) * 0.16;
+  const wx = nx + warpX;
+  const wy = ny + warpY;
+
+  let mass = 0;
+  for (const continent of continents) {
+    const distance = Math.hypot(wx - continent.x, (wy - continent.y) * 0.62);
+    const falloff = 1 - distance / continent.radius;
+    if (falloff <= 0) continue;
+    // Smooth dome per continent; overlapping shelves add rather than max, so
+    // near-neighbours can fuse into one landmass with an isthmus.
+    mass += continent.lift * falloff * falloff * (3 - 2 * falloff);
+  }
+
+  const detail =
+    (smoothCellNoise(seed ^ 0x3c6ef372, x, y, config.width / 11) - 0.5) * 0.6 +
+    (smoothCellNoise(seed ^ 0xa54ff53a, x, y, config.width / 27) - 0.5) * 0.28 +
+    (smoothCellNoise(seed ^ 0x428a2f98, x, y, config.width / 60) - 0.5) * 0.12;
+
+  // Open water all the way round, wide enough to read as ocean rather than as
+  // a hairline. Scaled to the map so it survives a change of size.
+  const margin = Math.max(3, Math.round(Math.min(config.width, config.height) * 0.045));
+  const edge = Math.min(x, y, config.width - 1 - x, config.height - 1 - y);
+  const edgePress = edge < margin * 2 ? (1 - edge / (margin * 2)) : 0;
+  if (edge < margin) return 0;
+
+  return Math.max(0, SEA_LEVEL - 0.13 + mass + detail * 0.3 - edgePress * 0.5);
+}
+
+function moistureAt(seed: number, x: number, y: number, config: SimulationConfig): number {
+  return (
     smoothCellNoise(seed ^ 0x510e527f, x, y, config.width / 13) * 0.74 +
-    smoothCellNoise(seed ^ 0x9b05688c, x, y, config.width / 46) * 0.26;
-  if (elevation > 0.78) return "mountains";
-  if (elevation > 0.63) return "hills";
-  if (moisture > 0.64) return "forest";
-  if (elevation < 0.42 && moisture > 0.39) return "farmland";
-  return "plains";
+    smoothCellNoise(seed ^ 0x9b05688c, x, y, config.width / 46) * 0.26
+  );
+}
+
+const RIVER_STEPS = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1, 0], [1, 0],
+  [-1, 1], [0, 1], [1, 1],
+] as const;
+
+/**
+ * Carves rivers into the elevation field, returning the set of cells that
+ * become running water.
+ *
+ * Each river starts high in the interior and walks steepest-descent to the
+ * sea, so it winds down valleys the way water actually does. Where the walk
+ * bottoms out in a basin it spills over the lowest rim -- the carved course
+ * doubles as the lake's outlet -- so every river reaches a coast rather than
+ * dying in a puddle mid-continent.
+ */
+function carveRivers(
+  seed: number,
+  elevation: Float32Array,
+  config: SimulationConfig,
+): Set<number> {
+  const { width, height } = config;
+  const random = new SeededRandom((seed ^ 0x5be0cd19) >>> 0 || 0x5be0cd19);
+  const rivers = new Set<number>();
+  const targetCount = Math.max(5, Math.round(Math.min(width, height) / 11));
+  const sources: number[] = [];
+  const minSourceGap = Math.min(width, height) / 5;
+
+  // Sources sit on genuinely high ground, spread apart so each range drains
+  // its own watershed instead of one massif hosting every river.
+  for (let attempt = 0; attempt < 900 && sources.length < targetCount; attempt += 1) {
+    const x = random.int(0, width - 1);
+    const y = random.int(0, height - 1);
+    const index = y * width + x;
+    if (elevation[index]! < SEA_LEVEL + 0.13) continue;
+    const spaced = sources.every((other) => {
+      const ox = other % width;
+      const oy = (other - ox) / width;
+      return Math.hypot(x - ox, y - oy) >= minSourceGap;
+    });
+    if (spaced) sources.push(index);
+  }
+
+  for (const source of sources) {
+    const course: number[] = [];
+    const visited = new Set<number>([source]);
+    let current = source;
+    const maxLength = width + height;
+    while (course.length < maxLength) {
+      course.push(current);
+      if (elevation[current]! < SEA_LEVEL || rivers.has(current)) break;
+      const cx = current % width;
+      const cy = (current - cx) / width;
+      let next = -1;
+      let lowest = Number.POSITIVE_INFINITY;
+      for (const [dx, dy] of RIVER_STEPS) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const neighbor = ny * width + nx;
+        if (visited.has(neighbor)) continue;
+        // A whisper of noise in the comparison keeps the course from running
+        // dead straight down a smooth slope.
+        const wobble = (cellNoise(seed ^ 0x2b7e1516, neighbor, course.length) - 0.5) * 0.004;
+        const height_ = elevation[neighbor]! + wobble;
+        if (height_ < lowest) {
+          lowest = height_;
+          next = neighbor;
+        }
+      }
+      if (next < 0) break;
+      // A diagonal step also carves the lower of the two cells it corners
+      // past, so the channel is watertight: no pinhole crossings for armies,
+      // and no banks left touching only corner-to-corner.
+      const nx = next % width;
+      const ny = (next - nx) / width;
+      if (nx !== cx && ny !== cy) {
+        const sideA = cy * width + nx;
+        const sideB = ny * width + cx;
+        course.push(elevation[sideA]! <= elevation[sideB]! ? sideA : sideB);
+      }
+      visited.add(next);
+      current = next;
+    }
+    // A course that never made it off the highlands would read as a scratch,
+    // not a river; only keep ones that reached water (sea or another river).
+    const mouth = course[course.length - 1]!;
+    if (elevation[mouth]! < SEA_LEVEL || rivers.has(mouth)) {
+      for (const index of course) rivers.add(index);
+    }
+  }
+  return rivers;
+}
+
+interface GeneratedTerrain {
+  terrain: TerrainId[];
+  rivers: Set<number>;
+}
+
+/**
+ * Land and terrain for the whole map in one pass: continents from the
+ * elevation field, rivers carved down it, and biomes banded by height above
+ * the sea with fertile floodplains along the riverbanks.
+ */
+function generateTerrain(seed: number, config: SimulationConfig): GeneratedTerrain {
+  const { width, height } = config;
+  const continents = draftContinents(seed);
+  const elevation = new Float32Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      elevation[y * width + x] = elevationAt(seed, x, y, config, continents);
+    }
+  }
+
+  const rivers = carveRivers(seed, elevation, config);
+
+  // Band terrain by where a cell sits in this world's own height distribution
+  // rather than by absolute height: continents of different bulk then still
+  // get mountain crowns, hill shoulders and lowland skirts in believable
+  // proportion, whatever the seed drew.
+  const landHeights: number[] = [];
+  for (let index = 0; index < elevation.length; index += 1) {
+    if (elevation[index]! >= SEA_LEVEL && !rivers.has(index)) landHeights.push(elevation[index]!);
+  }
+  landHeights.sort((a, b) => a - b);
+  const quantile = (share: number) =>
+    landHeights.length === 0
+      ? Number.POSITIVE_INFINITY
+      : landHeights[Math.min(landHeights.length - 1, Math.floor(share * landHeights.length))]!;
+  const mountainLine = quantile(0.88);
+  const hillLine = quantile(0.74);
+  const valleyLine = quantile(0.55);
+
+  const terrain: TerrainId[] = new Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (elevation[index]! < SEA_LEVEL || rivers.has(index)) {
+        terrain[index] = "water";
+        continue;
+      }
+      const height_ = elevation[index]!;
+      const moisture = moistureAt(seed, x, y, config);
+      if (height_ >= mountainLine) terrain[index] = "mountains";
+      else if (height_ >= hillLine) terrain[index] = "hills";
+      else if (height_ < valleyLine && nearRiver(rivers, index, width, height)) {
+        // Floodplains: the low country along a river is the richest land in
+        // the world, which makes the rivers worth fighting over as well as
+        // hard to fight across.
+        terrain[index] = "farmland";
+      } else if (moisture > 0.64) terrain[index] = "forest";
+      else if (height_ < valleyLine && moisture > 0.42) terrain[index] = "farmland";
+      else terrain[index] = "plains";
+    }
+  }
+  sinkIslets(terrain, width, height);
+  return { terrain, rivers };
+}
+
+/**
+ * Sinks land fragments too small to matter back into the sea. Noise and river
+ * carving both shed one-to-few-cell islets, and land that small can neither
+ * seat a strategic region nor host play -- it reads as speckle, not geography.
+ */
+function sinkIslets(terrain: TerrainId[], width: number, height: number): void {
+  const seen = new Uint8Array(terrain.length);
+  let landTotal = 0;
+  for (const id of terrain) if (id !== "water") landTotal += 1;
+  const minimumSize = Math.max(24, Math.round(landTotal * 0.012));
+  for (let start = 0; start < terrain.length; start += 1) {
+    if (seen[start] || terrain[start] === "water") continue;
+    const component = [start];
+    seen[start] = 1;
+    for (let cursor = 0; cursor < component.length; cursor += 1) {
+      const index = component[cursor]!;
+      const x = index % width;
+      const y = (index - x) / width;
+      for (const [dx, dy] of RIVER_STEPS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const neighbor = ny * width + nx;
+        if (!seen[neighbor] && terrain[neighbor] !== "water") {
+          seen[neighbor] = 1;
+          component.push(neighbor);
+        }
+      }
+    }
+    if (component.length < minimumSize) {
+      for (const index of component) terrain[index] = "water";
+    }
+  }
+}
+
+function nearRiver(rivers: Set<number>, index: number, width: number, height: number): boolean {
+  const x = index % width;
+  const y = (index - x) / width;
+  for (const [dx, dy] of RIVER_STEPS) {
+    const nx = x + dx;
+    const ny = y + dy;
+    if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+    if (rivers.has(ny * width + nx)) return true;
+  }
+  return false;
 }
 
 function emptyStructures(): StructureCounts {
@@ -178,14 +425,14 @@ function makeFaction(id: PlayerId, seed: number): FactionState {
 
 export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
   const random = new SeededRandom(seed);
+  const { terrain } = generateTerrain(seed, config);
   const cells: Cell[] = [];
   for (let y = 0; y < config.height; y += 1) {
     for (let x = 0; x < config.width; x += 1) {
-      const land = landAt(seed, x, y, config);
       cells.push({
         // Ownership is decided by the spawn draft once the whole map exists.
         owner: null,
-        terrain: land ? terrainAt(seed, x, y, config) : "water",
+        terrain: terrain[y * config.width + x]!,
         structure: null,
         structureLevel: 0,
         capitalOf: null,
