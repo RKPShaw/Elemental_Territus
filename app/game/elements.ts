@@ -70,6 +70,15 @@ export const ELEMENT_SPACE: readonly ElementId[] = [
   "crystal",
 ] as const;
 
+/**
+ * Every element's documented colors live here and are assigned once at module
+ * load; ELEMENT_COLORS.md is the reference table. `color` is the banner every
+ * realm expressing the element paints its territory with — one color per
+ * element, shared by the whole family — while `softColor` and `deepColor` are
+ * its light and dark companions for UI chrome and markers. The map reads
+ * these through each realm's *expressed* element, so a conquest that forges a
+ * new tier repaints the realm in the new element's color.
+ */
 export const ELEMENTS: Record<ElementId, ElementDefinition> = {
   ember: {
     id: "ember",

@@ -42,6 +42,21 @@ export interface PoliticalRasterRequest extends RasterRequestBase {
   owners: Int8Array;
   pressureOwners: Int8Array;
   pressures: Float32Array;
+  /**
+   * The advancing claimant per cell in raster player order (-1 where none)
+   * and how far its claim has swept, from the political field smoother. The
+   * border pass tints a contested line with a darker shade of the advancing
+   * realm's color, so the direction of a push is readable from the border.
+   */
+  pushOwners: Int16Array;
+  pushStrengths: Float32Array;
+  /**
+   * RGB per player in raster player order, three bytes each: the documented
+   * color of the element each realm currently expresses. Sent per frame
+   * rather than baked into the worker so a realm repaints the moment a
+   * conquest forges it a new tier of element.
+   */
+  playerColors: Uint8Array;
   warMatrix: Uint8Array;
 }
 

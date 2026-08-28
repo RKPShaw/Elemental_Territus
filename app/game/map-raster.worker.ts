@@ -1,6 +1,5 @@
 /// <reference lib="webworker" />
 
-import { PLAYERS } from "./players";
 import { TERRAIN_RULES } from "./rules";
 import {
   RASTER_PLAYER_ORDER,
@@ -251,16 +250,27 @@ export function renderPolitical(request: PoliticalRasterRequest): MapRasterResul
     terrainLut[index * 3 + 1] = color.green;
     terrainLut[index * 3 + 2] = color.blue;
   }
+  // Realm colors arrive with the request: the documented color of the element
+  // each realm currently expresses, so ascension repaints territory the frame
+  // it happens. The push tint is the same banner darkened, which is what lets
+  // a border tinted by the attacker still read as that attacker's color.
   const overlayLut = new Float64Array(fieldCount * 3);
   const overlayAmount = new Float64Array(fieldCount);
+  const pushLut = new Float64Array(fieldCount * 3);
+  const PUSH_DARKEN = 0.65;
+  const neutral = rgb("#d8cfb1");
   for (let field = 0; field < fieldCount; field += 1) {
-    const color = field < RASTER_PLAYER_ORDER.length
-      ? rgb(PLAYERS[RASTER_PLAYER_ORDER[field]!]!.color)
-      : rgb("#d8cfb1");
-    overlayLut[field * 3] = color.red;
-    overlayLut[field * 3 + 1] = color.green;
-    overlayLut[field * 3 + 2] = color.blue;
-    overlayAmount[field] = field < RASTER_PLAYER_ORDER.length ? 0.66 : 0.16;
+    const player = field < RASTER_PLAYER_ORDER.length;
+    const red = player ? request.playerColors[field * 3]! : neutral.red;
+    const green = player ? request.playerColors[field * 3 + 1]! : neutral.green;
+    const blue = player ? request.playerColors[field * 3 + 2]! : neutral.blue;
+    overlayLut[field * 3] = red;
+    overlayLut[field * 3 + 1] = green;
+    overlayLut[field * 3 + 2] = blue;
+    overlayAmount[field] = player ? 0.66 : 0.16;
+    pushLut[field * 3] = red * PUSH_DARKEN;
+    pushLut[field * 3 + 1] = green * PUSH_DARKEN;
+    pushLut[field * 3 + 2] = blue * PUSH_DARKEN;
   }
   const WATER_STEPS = 48;
   const waterLut = new Uint8ClampedArray(WATER_STEPS * 3);
@@ -440,20 +450,44 @@ export function renderPolitical(request: PoliticalRasterRequest): MapRasterResul
       }
       if (secondValue < 0.055) continue;
       const gap = firstValue - secondValue;
-      const strength = Math.max(0, Math.min(1, 1 - gap / 0.25));
+      // Halved from 0.25/0.16: the blur spreads a border's transition over a
+      // couple of cells, and these thresholds decide how much of that
+      // transition wears the line. Half the span is half the width, and the
+      // thinner stroke lets intricate frontiers keep their detail.
+      const strength = Math.max(0, Math.min(1, 1 - gap / 0.13));
       if (strength <= 0) continue;
       const firstOwner = first < RASTER_PLAYER_ORDER.length ? first : -1;
       const secondOwner = second < RASTER_PLAYER_ORDER.length ? second : -1;
-      const core = gap <= 0.16;
+      const core = gap <= 0.08;
       const atWar = firstOwner >= 0 && secondOwner >= 0
         ? request.warMatrix[firstOwner * RASTER_PLAYER_ORDER.length + secondOwner] === 1
         : false;
-      const line = core
-        ? { red: 12, green: 16, blue: 18 }
-        : atWar
+      // Push direction: when one of the two claims meeting here is actively
+      // advancing, the line wears a darker shade of that realm's own color,
+      // so which way the border is moving reads off the border itself.
+      let pushField = -1;
+      let pushStrength = 0;
+      for (let corner = 0; corner < 4; corner += 1) {
+        const cellIndex = cornerCells[corner]!;
+        const candidate = request.pushOwners[cellIndex]!;
+        if (candidate < 0 || (candidate !== first && candidate !== second)) continue;
+        const value = request.pushStrengths[cellIndex]!;
+        if (value > pushStrength) {
+          pushStrength = value;
+          pushField = candidate;
+        }
+      }
+      const pushing = pushField >= 0 && pushField < RASTER_PLAYER_ORDER.length && pushStrength > 0.04;
+      const line = pushing
+        ? {
+            red: Math.round(pushLut[pushField * 3]!),
+            green: Math.round(pushLut[pushField * 3 + 1]!),
+            blue: Math.round(pushLut[pushField * 3 + 2]!),
+          }
+        : !core && atWar
           ? { red: 145, green: 55, blue: 58 }
           : { red: 12, green: 16, blue: 18 };
-      const alpha = core ? 1 : Math.pow(strength, 0.72) * (atWar ? 0.9 : 0.78);
+      const alpha = core ? 1 : Math.pow(strength, 0.72) * (atWar || pushing ? 0.9 : 0.78);
       if (borders[pixel + 3]! < Math.round(alpha * 255)) {
         borders[pixel] = line.red;
         borders[pixel + 1] = line.green;

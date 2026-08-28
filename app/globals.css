@@ -1432,6 +1432,13 @@ canvas:focus-visible {
   box-shadow: 0 0 3px #9d4148;
 }
 
+.map-legend .legend-push {
+  height: 4px;
+  /* A stand-in for "the attacker's color, darkened": the tint follows
+     whichever realm is pushing, so the swatch shows the idea as a ramp. */
+  background: linear-gradient(90deg, #8e2f35, #176375);
+}
+
 .map-legend .legend-alliance {
   height: 5px;
   border: 1px solid #214936;
