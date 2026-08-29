@@ -140,11 +140,21 @@ test("structure ladders, spacing, and stacked-city capacity share one rule bound
   assert.equal(actor.gold, 942_000);
   assert.equal(cityStationMultiplier(2), 1.5);
 
-  const tooClose = neighborIndices(cityIndex, state.config.width, state.config.height)
-    .find((index) => state.cells[index]!.owner === "ember-1" && state.cells[index]!.terrain !== "water");
-  assert.notEqual(tooClose, undefined);
-  assert.ok(distanceBetween(state, cityIndex, tooClose!) < STRUCTURE_MIN_SPACING);
-  assert.equal(canPlaceStructureSite(state, tooClose!), false);
+  // Spacing is now tighter than a single cell, so whether a neighbouring tile
+  // is a legal site depends on the rule rather than on being a neighbour --
+  // which is exactly what this asserts. The occupied tile is always refused;
+  // every other tile is refused precisely when it sits inside the spacing.
+  const neighbors = neighborIndices(cityIndex, state.config.width, state.config.height)
+    .filter((index) => state.cells[index]!.owner === "ember-1" && state.cells[index]!.terrain !== "water");
+  assert.ok(neighbors.length > 0, "the capital should have claimed dry neighbours");
+  assert.equal(canPlaceStructureSite(state, cityIndex), false);
+  for (const index of neighbors) {
+    assert.equal(
+      canPlaceStructureSite(state, index),
+      distanceBetween(state, cityIndex, index) >= STRUCTURE_MIN_SPACING,
+      `spacing and placement disagree about the tile ${index} cells from the capital`,
+    );
+  }
 });
 
 test("capturing a capital hands the captor the defender's whole realm", () => {
@@ -165,10 +175,16 @@ test("capturing a capital hands the captor the defender's whole realm", () => {
   // Staked up front: under the slow opening economy no realm funds enough
   // conquest to storm a capital inside this horizon, and the assertion under
   // test is the annexation contract, not the pacing.
+  //
+  // The stake and the horizon both grew with the pacing retune. Gold pays
+  // for the war but people fight it, and population now grows at a sixth of
+  // the old rate, so a host that spends itself on a capital takes about six
+  // times as long to be worth spending again. A fully staked world on this
+  // seed storms its first capital around tick 1640.
   engine.observe((state) => {
-    for (const faction of Object.values(state.factions)) faction.gold = 200_000;
+    for (const faction of Object.values(state.factions)) faction.gold = 1_000_000;
   });
-  engine.advance(700);
+  engine.advance(1_800);
   assert.ok(observed > 0, "the calibration world should see a capital fall");
 });
 
@@ -294,7 +310,7 @@ test("each realm evaluates every strategic theater through its own priorities", 
     const scores = new Set(byRealm.map((evaluations) => evaluations[region.id]!.score));
     return scores.size >= 3;
   }), "realm geography and elemental affinity should create different theater values");
-  assert.equal(TRADE_RULES.trainRadius, 5);
+  assert.equal(TRADE_RULES.trainRadius, 0.83);
 });
 
 test("visible theater intelligence is continuous, layered, and realm-specific", () => {
@@ -405,12 +421,51 @@ test("merchant ships retain contiguous water-only routes", () => {
   assert.ok(observedShips > 0, "the calibration world should launch merchant ships");
 });
 
+test("air freight stays inside the skyport flight band", () => {
+  const engine = new ElementalWarEngine(0x240823);
+  // Staked, as the other trade calibrations are: skyports sit rungs up the
+  // slowed ladder, and this is about where a flight may go rather than about
+  // how long a court saves for the apron.
+  engine.observe((world) => {
+    for (const faction of Object.values(world.factions)) faction.gold = 1_000_000;
+  });
+  let observedFlights = 0;
+  for (let tick = 0; tick < 320; tick += 1) {
+    const state = engine.step();
+    for (const flyer of state.tradeVehicles.filter((vehicle) => vehicle.kind === "flyer")) {
+      observedFlights += 1;
+      const distance = distanceBetween(state, flyer.startIndex, flyer.endIndex);
+      // Air is the one carrier whose reach was created rather than divided --
+      // a skyport used to fly to any apron in the world -- so both edges of
+      // the band are rules: under the minimum a hop is not worth wings, past
+      // the radius the apron cannot reach at all.
+      assert.ok(
+        distance >= TRADE_RULES.minimumFlightDistance,
+        `${flyer.id} flew ${distance.toFixed(2)}, under the ${TRADE_RULES.minimumFlightDistance} minimum`,
+      );
+      assert.ok(
+        distance <= TRADE_RULES.flightRadius,
+        `${flyer.id} flew ${distance.toFixed(2)}, past the ${TRADE_RULES.flightRadius} flight radius`,
+      );
+    }
+  }
+  assert.ok(observedFlights > 0, "the calibration world should lift air freight");
+});
+
 test("rail routes stay contiguous, land-only and anchored to their stations", () => {
   // Rail paths come out of a shared multi-source search, so a single wrong
   // reconstruction would hand trains a route that skips cells or crosses water.
   let observedRoutes = 0;
   for (const seed of [0x240823, 0x5eed01]) {
     const engine = new ElementalWarEngine(seed);
+    // Staked up front, as the merchant-ship calibration is: income was cut
+    // twentyfold for the slower world, so a realm saving its own way to a
+    // factory does not lay track for thousands of ticks. This test is about
+    // whether the paths a network produces are well formed, not about how
+    // long a court takes to afford one.
+    engine.observe((world) => {
+      for (const faction of Object.values(world.factions)) faction.gold = 1_000_000;
+    });
     let previous = 0;
     for (const tick of [200, 600, 1000]) {
       engine.advance(tick - previous);
@@ -448,6 +503,13 @@ test("rail routes stay contiguous, land-only and anchored to their stations", ()
  */
 test("each trade building respects its berths and its launch cooldown", () => {
   const engine = new ElementalWarEngine(0x240823);
+  // Staked up front for the same reason the merchant-ship calibration is:
+  // the berth and cooldown invariants need vehicles actually moving, and in
+  // a twentyfold-slower economy a realm saving its own way to a trade
+  // building launches nothing at all inside this window.
+  engine.observe((world) => {
+    for (const faction of Object.values(world.factions)) faction.gold = 1_000_000;
+  });
   let state = engine.snapshot();
   let previousRailIds = new Set<string>();
   for (let tick = 0; tick < 520; tick += 1) {
@@ -526,7 +588,16 @@ test("each trade building respects its berths and its launch cooldown", () => {
 test("train stops pay the fixed values, scaled by stacks and trade-form rewards", () => {
   // Adaptive theaters alter the deterministic diplomatic frontier enough that
   // this seed's first international railway matures later than its first line.
-  const state = new ElementalWarEngine(0x240823).step(900);
+  // Staked up front, as the other trade calibrations are: this test is about
+  // what a stop pays, not about how long a court saves for the factory that
+  // sends the convoy. A staked world on this seed serves its first domestic
+  // stop around tick 80 and its first foreign one around tick 730, so the
+  // horizon still covers both with room to spare.
+  const engine = new ElementalWarEngine(0x240823);
+  engine.observe((world) => {
+    for (const faction of Object.values(world.factions)) faction.gold = 1_000_000;
+  });
+  const state = engine.step(900);
   const stops = state.reports.filter((event) => event.kind === "trade.train-stop-served");
   const domestic = stops.find((event) => event.facts.foreign === false);
   const foreign = stops.find((event) => event.facts.foreign === true);
@@ -597,7 +668,7 @@ test("train stops pay the fixed values, scaled by stacks and trade-form rewards"
     TRADE_RULES.foreignTrainStopPayout * 2,
     TRADE_RULES.domesticTrainStopPayout * 4,
   );
-  assert.equal(TRADE_RULES.shipPayoutPerTravelTick, 800);
+  assert.equal(TRADE_RULES.shipPayoutPerTravelTick, 35);
 });
 
 test("future feature namespaces feed the same story system", () => {

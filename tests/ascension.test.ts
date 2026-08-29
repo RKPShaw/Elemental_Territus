@@ -187,18 +187,37 @@ test("a running world keeps expression, masks and held powers exactly consistent
 });
 
 test("conquest histories produce ascensions and report them as dynasty facts", () => {
-  // The horizon followed funded mobilization out: wars now open when each
-  // realm's chest and frontier allow rather than all on the first legal
-  // tick, so the conquest histories that assemble a tier 2 arrive a couple
-  // of hundred ticks later on this seed (first ascension ~1420). The slow
-  // opening economy pushed them out again, past any horizon this test can
-  // afford to run — so realms are staked war chests up front, and the test
-  // stays about ascension mechanics rather than about how long saving takes.
+  // This horizon kept following the pace out. Funded mobilization moved the
+  // first ascension a couple of hundred ticks (~1420 on this seed); the slow
+  // opening economy moved it past what the test could afford and staking war
+  // chests bought it back. The pacing retune moves it again and much further,
+  // and no stake buys it back this time: what conquest is short of now is
+  // people, not gold. Population grows at a sixth of the old rate, so a war
+  // of attrition takes about six times as long to end a realm, and the four
+  // conquests a tier 2 needs assemble tens of thousands of ticks out.
+  //
+  // So the history is handed over rather than waited for. Ascension reads a
+  // realm's conquest tallies and nothing else (see expressionFor), so a realm
+  // given the tallies four conquests would have left it ascends through the
+  // real system on a real running world and reports exactly what a besieger's
+  // would. What this test is about — that an ascension happens and that it is
+  // reported as a well-formed dynasty fact — is unchanged; only the waiting
+  // is gone.
   const engine = new ElementalWarEngine(0x240823);
+  engine.step(200);
   engine.observe((world) => {
-    for (const faction of Object.values(world.factions)) faction.gold = 1_000_000;
+    const faction = world.factions["ember-1"]!;
+    // Depth two in both of steam's founding bases: its own ember stock, a
+    // second ember, and two tides.
+    faction.elementCounts.ember = 2;
+    faction.elementCounts.tide = 2;
+    for (const element of ["ember", "tide"] as const) {
+      if (!faction.absorbedElements.includes(element)) faction.absorbedElements.push(element);
+    }
   });
-  const state = engine.step(1_500);
+  // Two ticks: one for the ascension system to crown it, one for the story
+  // correlator to pick the report up.
+  const state = engine.step(2);
   const ascensions = state.reports.filter(
     (event) => event.kind === "dynasty.element-ascended",
   );

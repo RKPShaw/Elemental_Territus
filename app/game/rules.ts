@@ -110,7 +110,7 @@ export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
     name: "Harbor",
     glyph: "⚓",
     cost: 18_000,
-    description: "Shares the trade-building ladder and earns 800 gold for every second of its completed water voyage.",
+    description: "Shares the trade-building ladder and earns 35 gold for every second of its completed water voyage.",
   },
   plant: {
     id: "plant",
@@ -124,23 +124,43 @@ export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
     name: "Skyport",
     glyph: "✈",
     cost: 18_000,
-    description: "Airborne realms only. Flies freight in a straight line to any other skyport in the world.",
+    description: "Airborne realms only. Flies freight in a straight line to any other skyport within its flight radius.",
   },
 };
 
 export const WARSHIP_COST = 165_000;
 
 export const FORT_RADIUS = 4;
-export const STRUCTURE_MIN_SPACING = 2.2;
+/**
+ * World units between any two structures.
+ *
+ * Divided by six alongside every trade radius. The two numbers are one
+ * setting, not two: a trade radius is only meaningful against the closest a
+ * neighbouring station may stand, and shrinking reach without shrinking
+ * spacing would have left every carrier reaching for stations that could
+ * never be built inside it — no rail seed link, no conduit, no plant site.
+ * Scaled together, the trade geography is simply six times tighter: networks
+ * still form, they just form locally, out of short hops between close
+ * neighbours instead of long lines across a province.
+ *
+ * Packing structures this close does not make realms build more of them.
+ * Construction is gold-bound, not space-bound, once income is cut twentyfold
+ * below — the ladder rung a court is saving for arrives long before it runs
+ * out of ground to put the building on.
+ */
+export const STRUCTURE_MIN_SPACING = 0.37;
 
 /**
  * The opening economy is deliberately slow, and this ladder is where the
  * pace lives. Realms open with a token treasury (see makeFaction), so the
- * first rung is saved for out of tax — roughly a hundred and fifty ticks at
- * an opening realm's ~110-gold-a-tick land-and-capital income, landing just
- * as the frontier closes and wars become legal. The rung is priced against
- * the 20K mobilization floor on purpose: one savings pot, three critical
- * ways to spend it. A court that banks for its first factory cannot also
+ * first rung is saved for out of tax. That saving now takes an age rather
+ * than a season: ECONOMY_RULES cut land and capital income twentyfold, so an
+ * opening realm banks a couple of gold a tick and reaches its first rung
+ * some two thousand ticks in — which also reverses the order the milestone
+ * used to arrive in. The first factory used to land as the frontier closed;
+ * now the frontier closes first and the realm is still saving. The rung is
+ * priced against the 20K mobilization floor on purpose: one savings pot,
+ * three critical ways to spend it. A court that banks for its first factory cannot also
  * fund a war chest, and the rival that bought a city instead holds +10K
  * troop cap when the border turns hostile. The founding capital does not
  * count as a purchase (see nextStructureCost), so the first built city and
@@ -646,16 +666,46 @@ export const STRATEGY_RULES = {
  * whole build program inside the first hundred ticks: the world should take
  * several ages to get busy, not one. Costs stayed put, so the same ladder is
  * climbed at a quarter to an eighth of the old pace.
+ *
+ * The pacing re-tune cut everything a further twentyfold. Ground and capitals
+ * take it here as a flat divide, because neither has a lever but its rate;
+ * the carriers take the same twentyfold from three levers at once — longer
+ * waits between dispatches, slower vehicles, smaller rewards — so trade
+ * reads as sparse and unhurried rather than merely cheap. See TRADE_RULES.
  */
 export const ECONOMY_RULES = {
-  landIncomeScale: 0.48,
-  cityIncome: 100,
+  landIncomeScale: 0.024,
+  cityIncome: 5,
   maximumTreasury: 100_000_000,
 } as const;
 
+/**
+ * The trade surface, re-tuned for a slower world.
+ *
+ * Two changes run through everything below. Every reach is divided by six,
+ * alongside STRUCTURE_MIN_SPACING, so each carrier serves its own
+ * neighbourhood instead of a province — air included, which had no reach
+ * limit at all and now has one. And every carrier's income rate is divided by
+ * twenty, drawn from three levers rather than from the reward alone: longer
+ * waits between dispatches, slower vehicles, smaller payouts.
+ *
+ * Splitting the cut three ways matters because the levers are not
+ * interchangeable. A carrier paid by the second (ships, flyers) earns the
+ * same gold per tick however fast it moves — halving its speed doubles the
+ * voyage and doubles the fare with it — so for those two the twentyfold has
+ * to come out of the rate, and slowing them buys the look of the thing
+ * rather than the economics. A carrier paid by the delivery (trains, pulses)
+ * feels every lever directly: a slower vehicle and a longer turnaround each
+ * cut its deliveries per tick, so its payout carries only what the clock
+ * does not. Each carrier's own note below records which levers did its work.
+ */
 export const TRADE_RULES = {
-  trainRadius: 5,
-  railSnapDistance: 1.25,
+  /**
+   * How far a factory's coverage reaches, and the longest link a new network
+   * may open with. Divided by six with the rest of the trade geography.
+   */
+  trainRadius: 0.83,
+  railSnapDistance: 0.21,
   railExistingTrackCost: 0.08,
   /**
    * What it costs a line to run through a station rather than around it.
@@ -665,9 +715,18 @@ export const TRADE_RULES = {
   railStationCost: 0.2,
   railMaximumNewLinksPerRebuild: 10,
   networkRebuildTicks: 120,
-  trainSpawnIntervalTicks: 24,
-  shipSpawnIntervalTicks: 12,
-  vehicleTurnaroundTicks: 30,
+  /**
+   * The dispatch clock, tripled across the board. This is the first of the
+   * three levers: a site that used to turn a vehicle around in thirty ticks
+   * now takes ninety, and the world's rail sweep runs every seventy-two ticks
+   * instead of every twenty-four. Tripling all four together keeps their
+   * relationship intact — the stagger still spreads sites across the cycle,
+   * the turnaround still outlasts the launch interval — so trade thins out
+   * evenly rather than clumping somewhere new.
+   */
+  trainSpawnIntervalTicks: 72,
+  shipSpawnIntervalTicks: 36,
+  vehicleTurnaroundTicks: 90,
   /**
    * Vehicles a single site may have out at once.
    *
@@ -692,40 +751,103 @@ export const TRADE_RULES = {
    * consecutive ticks and then sit idle, and every harbour would do it in
    * lockstep. Sites are also given a starting offset from their own position on
    * the map, so trade leaves port in a steady trickle rather than in waves.
+   *
+   * Tripled with the rest of the dispatch clock.
    */
-  launchIntervalTicks: 7,
+  launchIntervalTicks: 21,
   trainLimit: 75,
   shipLimit: 1_000,
   pulseLimit: 150,
   flyerLimit: 150,
-  trainVelocity: 0.12,
-  shipVelocity: 0.38,
-  /** Energy moves fast; a pulse spends little time on the wire. */
-  pulseVelocity: 0.85,
-  flyerVelocity: 0.5,
+  /**
+   * Carrier speeds, the second lever. Everything is halved; ships take a
+   * fifth instead.
+   *
+   * Boats are the one carrier that gains no reach limit — a harbour still
+   * sails to any harbour in the world its owner can trade with, because a
+   * sea lane is not a thing anyone builds and there is nothing to shrink.
+   * Extra slowness is what stands in for the radius the others got: a voyage
+   * that used to cross the map in a season is now most of an age, so a port's
+   * reach costs it time even though nothing forbids the distance.
+   */
+  trainVelocity: 0.06,
+  shipVelocity: 0.076,
+  /** Energy still moves fastest; a pulse spends little time on the wire. */
+  pulseVelocity: 0.425,
+  flyerVelocity: 0.25,
   trainStopDwellTicks: 2,
-  domesticTrainStopPayout: 10_000,
-  foreignTrainStopPayout: 20_000,
-  shipPayoutPerTravelTick: 800,
+  /**
+   * The convoy reward, and the lever that carries the land carrier's whole
+   * twentyfold on its own.
+   *
+   * That was not the plan and it is worth recording why. A train is paid by
+   * the delivery, so halving its speed and tripling its turnaround should
+   * each cut its stops per tick — but the tighter network cancels both. A
+   * journey across a six-times-smaller graph is over in a fraction of the
+   * ticks it used to take, which very nearly pays back the slower vehicle
+   * and the longer wait: measured against the old world, convoys serve
+   * stops at about the rate they always did. So the reward takes the full
+   * divide. Foreign stops stay worth exactly double domestic ones.
+   */
+  domesticTrainStopPayout: 500,
+  foreignTrainStopPayout: 1_000,
+  /**
+   * Sea freight per travel tick. A voyage is priced by its duration, so this
+   * rate *is* the harbour's income per tick at sea and the whole twentyfold
+   * had to come out of it — slowing the boats moved no gold at all, it only
+   * made each voyage a longer, larger delivery. Cut a little past twenty to
+   * pay for that: a slower ship spends proportionally less of its cycle
+   * turning around in port, so its berth sits idle less often.
+   */
+  shipPayoutPerTravelTick: 35,
   /**
    * The energy carrier. A power plant strings straight conduits to the
    * nearest few stations within reach, and each delivered pulse pays a flat
    * value — energy trade is frequency, not distance.
    */
-  conduitRadius: 5.5,
+  conduitRadius: 0.92,
   conduitLinksPerPlant: 3,
-  energyDeliveryPayout: 9_000,
   /**
-   * The airborne carrier. Skyports fly straight to any other skyport, so
-   * the payout is bought with distance like a voyage. Air's premium is
-   * reach, not rate: it pays slightly under sea freight per travel tick —
-   * every flight the whole world over is a straight line — because the
-   * first sweep priced it above and gale realms took nearly half of all
-   * wins on flight income alone. A hop shorter than the minimum is not
-   * worth wings.
+   * Flat per delivery, so a plant's income is purely how often it can send.
+   * Here the clock does bite — a plant's cycle is turnaround-bound and the
+   * turnaround tripled — so the three levers land about a threefold cut
+   * between them and the reward carries the remaining seven.
    */
-  airPayoutPerTravelTick: 720,
-  minimumFlightDistance: 4,
+  energyDeliveryPayout: 1_300,
+  /**
+   * The airborne carrier, and the one structure that had no reach at all:
+   * a skyport used to fly to any other skyport anywhere in the world, which
+   * is why air's identity was reach and why its rate had to be held under
+   * sea freight to stop gale realms winning on flight income alone.
+   *
+   * flightRadius is that missing limit, created here at the same six-times-
+   * tighter scale as every other reach — set at three times the train radius,
+   * so air still travels furthest of the networked carriers and the identity
+   * survives its own bounding. The minimum moves with it: a hop shorter than
+   * minimumFlightDistance is still not worth wings, and that floor is divided
+   * by six too, or every legal flight would be shorter than the shortest one
+   * allowed.
+   *
+   * Bounding the flight inverts the old rate comparison, which is expected
+   * rather than a regression. Air is still paid by the second flown, but a
+   * bounded flight is over in a handful of ticks and the ninety-tick
+   * turnaround now dominates a skyport's cycle, so it earns for a small
+   * fraction of its life and needs a high rate to be worth building at all.
+   * Compare the structures, not the rates: two berths flying the band's
+   * middle distance spend about a sixteenth of their cycle in the air, which
+   * puts a skyport's income per tick below a harbour's — where it sat
+   * before, and the comparison the old note was really making.
+   *
+   * The other cost of the bound is that air is now a carrier a realm has to
+   * grow into. A skyport used to reach every apron in the world, so one was
+   * enough to earn; now a realm needs two of its own inside the band before
+   * either flies, and the placement scoring aims the second at the middle of
+   * it. Airborne realms therefore open silent and turn on together once the
+   * second apron is bought, which is late in a twentyfold-slower economy.
+   */
+  airPayoutPerTravelTick: 460,
+  flightRadius: 2.5,
+  minimumFlightDistance: 0.67,
   foreignHostShare: 0.18,
   alliedHostShare: 0.35,
 } as const;
@@ -741,12 +863,35 @@ export const TROOP_CAP_RULES = {
  * Population is the strategic economy. Only people at home reproduce; anyone
  * committed to a campaign still consumes capacity but contributes no growth.
  * The curve deliberately rewards a healthy, uncrowded realm near 65% of cap.
+ *
+ * The peak rate is divided by six from 0.018 for the slower opening. Only the
+ * rate moves: the curve's shape, its thresholds and its 65% optimum are all
+ * unchanged, so a realm is rewarded for exactly the same demographic balance
+ * it always was — it simply takes six times as long to get anywhere.
+ *
+ * Where that lands is worth knowing, because it is not evenly spread.
+ * Settlement barely notices: claiming ground costs people
+ * (CLAIM_RULES.populationCostPerCell) but is paced by pressurePerTick, so a
+ * world that used to be fully claimed around tick twelve hundred is fully
+ * claimed around tick two thousand instead. War notices enormously. A host
+ * spent on a campaign is replaced six times slower, so offensives that used
+ * to be renewed in a season now need an age, and conquest runs at something
+ * like a sixth of its old pace: on the calibration seed, with war chests
+ * staked so gold is not the constraint, the old world was down to five
+ * realms by tick three thousand where this one is still at forty.
+ *
+ * That is the intended shape of a slower game — the map fills at close to
+ * the pace it did, and then the empires take an age to form on top of it —
+ * but the war and diplomacy clocks were not rescaled with it, so wars now
+ * reach their exhaustion and stalemate horizons having achieved perhaps a
+ * third of what they used to. DIPLOMACY_RULES is where that would be
+ * corrected if the shorter, less decisive war is not what is wanted.
  */
 export const POPULATION_RULES = {
   lowGrowthThreshold: 0.2,
   peakGrowthRatio: 0.65,
   highGrowthThreshold: 0.82,
-  peakGrowthPerTick: 0.018,
+  peakGrowthPerTick: 0.003,
   minimumExpansionRatio: 0.2,
   matureExpansionReserveRatio: 0.5,
 } as const;

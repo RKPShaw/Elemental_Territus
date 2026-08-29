@@ -141,6 +141,26 @@ function bestBuildTile(
       return [...hubs.factory, ...hubs.city];
     });
 
+  // Every placement preference that answers to a trade network is expressed
+  // against that carrier's reach rather than in bare world units. The scales
+  // here are 1 at the reaches these preferences were originally tuned for (a
+  // five-unit train radius, a five-and-a-half-unit conduit), so every
+  // coefficient below still evaluates to the literal it used to be -- but
+  // when the reach changes the whole build pattern rescales with it instead
+  // of keeping slopes that no longer mean anything.
+  //
+  // That is not cosmetic. Reach was divided by six for the slower economy,
+  // and a preference that sheds half a point per world unit cannot tell a
+  // good site from a bad one across a network less than a world unit wide:
+  // factories scattered over territory they could no longer lay track across,
+  // and rail all but stopped forming.
+  const railScale = TRADE_RULES.trainRadius / 5;
+  const conduitScale = TRADE_RULES.conduitRadius / 5.5;
+  // Skyports want a partner inside the flight band; the middle of it is the
+  // gap the placement aims for.
+  const idealSkyportGap =
+    (TRADE_RULES.minimumFlightDistance + TRADE_RULES.flightRadius) / 2;
+
   for (const index of sites.cellsByOwner.get(owner) ?? []) {
     const cell = state.cells[index]!;
     if (cell.terrain === "water" || reserved.has(index)) continue;
@@ -184,10 +204,12 @@ function bestBuildTile(
         // not a town beside the track that every journey skips.
         if (requireRail && nearestRail !== 0) continue;
         score += TERRAIN_RULES[cell.terrain].sustain * 2.4;
-        score += Number.isFinite(nearestRail) ? Math.max(0, 5.5 - nearestRail * 1.15) : 0;
+        score += Number.isFinite(nearestRail)
+          ? Math.max(0, 5.5 - nearestRail * (1.15 / railScale))
+          : 0;
         const citySpacing = nearestDistance(context, index, ownCities);
         score += Number.isFinite(citySpacing)
-          ? Math.max(0, 2.6 - Math.abs(citySpacing - 4.2) * 0.48)
+          ? Math.max(0, 2.6 - Math.abs(citySpacing - 4.2 * railScale) * (0.48 / railScale))
           : 0;
       }
     }
@@ -199,13 +221,25 @@ function bestBuildTile(
       const nearestCity = nearestDistance(context, index, ownCities, desiredCityGap);
       const nearestRail = nearestFromField(state, railField, index);
       const nearestForeign = nearestDistance(context, index, peacefulForeignHubs);
-      score += Math.max(0, 6.2 - Math.abs(nearestFactory - desiredFactoryGap) * 0.52);
-      score += Math.max(0, 4.4 - Math.abs(nearestCity - desiredCityGap) * 0.48);
+      score += Math.max(
+        0,
+        6.2 - Math.abs(nearestFactory - desiredFactoryGap) * (0.52 / railScale),
+      );
+      score += Math.max(
+        0,
+        4.4 - Math.abs(nearestCity - desiredCityGap) * (0.48 / railScale),
+      );
       score += Number.isFinite(nearestRail)
-        ? Math.max(0, 3.2 - Math.abs(nearestRail - TRADE_RULES.trainRadius * 0.75) * 0.34)
+        ? Math.max(
+          0,
+          3.2 - Math.abs(nearestRail - TRADE_RULES.trainRadius * 0.75) * (0.34 / railScale),
+        )
         : 0;
       score += Number.isFinite(nearestForeign)
-        ? Math.max(0, 4.2 - Math.abs(nearestForeign - TRADE_RULES.trainRadius * 1.5) * 0.36)
+        ? Math.max(
+          0,
+          4.2 - Math.abs(nearestForeign - TRADE_RULES.trainRadius * 1.5) * (0.36 / railScale),
+        )
         : 0;
     }
     if (structure === "harbor") {
@@ -222,20 +256,32 @@ function bestBuildTile(
       );
       if (nearestStation > TRADE_RULES.conduitRadius * 0.85) continue;
       score += TERRAIN_RULES[cell.terrain].goldYield * 0.4;
-      score += Math.max(0, 4.5 - nearestStation * 0.9);
+      score += Math.max(0, 4.5 - nearestStation * (0.9 / conduitScale));
       const nearestPlant = nearestDistance(context, index, ownSites.plant);
       score += Number.isFinite(nearestPlant)
-        ? Math.max(0, 3 - Math.abs(nearestPlant - TRADE_RULES.conduitRadius) * 0.5)
+        ? Math.max(
+          0,
+          3 - Math.abs(nearestPlant - TRADE_RULES.conduitRadius) * (0.5 / conduitScale),
+        )
         : 0;
     }
     if (structure === "skyport") {
-      // Skyports serve people and want the world: beside a city, far from
-      // each other, because a flight shorter than the minimum flies nowhere.
+      // Skyports serve people and want a partner in reach: beside a city, and
+      // spaced inside the flight band -- far enough apart that a flight is
+      // worth wings, near enough that the apron has anywhere to fly at all.
+      // Aprons used to be pushed as far from each other as the map allowed,
+      // which was free advice while flights were unbounded and is now the one
+      // way to build a skyport that never launches: past flightRadius its
+      // siblings stop being destinations. So the reward peaks in the middle of
+      // the band and falls to nothing at either edge of it.
       const nearestCity = nearestDistance(context, index, ownCities);
-      score += nearestCity < 5 ? 2.2 - nearestCity * 0.3 : 0;
+      score += nearestCity < 5 * railScale ? 2.2 - nearestCity * (0.3 / railScale) : 0;
       const nearestSkyport = nearestDistance(context, index, ownSites.skyport);
       score += Number.isFinite(nearestSkyport)
-        ? clamp(nearestSkyport - TRADE_RULES.minimumFlightDistance, -4, 4) * 0.8
+        ? Math.max(
+          0,
+          3.2 - Math.abs(nearestSkyport - idealSkyportGap) * (3.2 / idealSkyportGap),
+        )
         : 1.5;
     }
     if (structure === "fort") {

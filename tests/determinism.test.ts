@@ -15,7 +15,22 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the rivers-and-slow-money rework, and the gameplay changes
+ * Re-recorded for the slow-world pacing retune, and the gameplay change was
+ * the whole point. Population grows at a sixth of the old rate, which slows
+ * the frontier as much as the head count because settling ground is paid for
+ * in people. Every income rate is a twentieth of what it was: land and city
+ * yields divided outright, and each trade carrier divided by three levers at
+ * once -- a tripled dispatch clock, halved vehicle speeds (ships a fifth,
+ * since a harbour is the one site that gains no reach limit), and smaller
+ * rewards. Every trade reach is a sixth of what it was, alongside the
+ * structure spacing that gives a reach its meaning, and the airborne carrier
+ * gained the reach limit it never had. Two systems had to follow the
+ * geometry to keep working at it: rail may now open a network wherever a
+ * factory has a station in radius, instead of only in a world with no track
+ * at all, and every placement preference that answers to a trade network is
+ * measured in that carrier's reach rather than in bare world units.
+ *
+ * Before that, re-recorded for the rivers-and-slow-money rework, and the gameplay changes
  * were the point, all of them. Watercourses now hold a heading (a turn
  * penalty in the carve walk stops steepest-descent from coiling around flat
  * basins), and stream courses are trimmed to land, so the map itself moves —
@@ -214,25 +229,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "a4ea7699c73689cc5f443f08f7e5a22c", cells: "3c6f4e0154e16267" },
-      { tick: 200, world: "62edb718759924b093e5be7516b2d665", cells: "dd1bcdd1c3034f11" },
-      { tick: 600, world: "2a3e8ce58f416a1cf7c0cb6a7008e67a", cells: "d2ddb95a93780801", deep: true },
+      { tick: 60, world: "89db66719f66e39ac1ecbad2fc04a944", cells: "5c256131f10ccfa6" },
+      { tick: 200, world: "7883f496400058b3c16d5cb380a8e32f", cells: "3d0cf504f6c58474" },
+      { tick: 600, world: "f13d0240c2c1b8e062b7e7c976e2acaf", cells: "be7c707d97db71d7", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "2e125f531fa43222653d0fc0d2eb3e51", cells: "471cca811b42bb97" },
-      { tick: 200, world: "687830fabcbb61e3f7c2330dc465da04", cells: "1a7a6dba904c0b91" },
-      { tick: 600, world: "ae1523e7d0dcb4a242f81fbefaa12945", cells: "8200937aa1518b97", deep: true },
+      { tick: 60, world: "c53b4561c5dcca9e750c84a1f3ff4bcd", cells: "d77fa915b0677514" },
+      { tick: 200, world: "1aab93e6b4bd1451275ee50851a1a5a8", cells: "f69fa69d161638c8" },
+      { tick: 600, world: "829b79374d9db4ac53eed6d65f41ddb1", cells: "bef5aa95b2cdb19f", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "cacc5b56e09313937c402c35682a1fce", cells: "5eb456e30833eb9d" },
-      { tick: 200, world: "bec2198397afded26db4ba45b0bbe573", cells: "dc9636ec3112ff06" },
-      { tick: 600, world: "0da7debeddcd388f05488a5e963de9b5", cells: "b2b4176081366551", deep: true },
+      { tick: 60, world: "91094f6832e318feac13fed1a32dc246", cells: "fa1fc353e16583ad" },
+      { tick: 200, world: "65125d983367b2284f1a8826fd18d6ff", cells: "233e65f367600aa6" },
+      { tick: 600, world: "24a10a6344d72b049c493294bba52c4a", cells: "635b1378b18b92be", deep: true },
     ],
   },
 ];
