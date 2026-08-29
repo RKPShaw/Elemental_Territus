@@ -30,7 +30,6 @@ export interface PlayerCumulativeMetrics {
   citySitesLost: number;
   structureSpend: number;
   warshipSpend: number;
-  navalSpend: number;
   nominalPassiveIncome: number;
   trainIncomeEarned: number;
   trainIncomeHosted: number;
@@ -203,7 +202,6 @@ function emptyPlayerMetrics(): PlayerCumulativeMetrics {
     citySitesLost: 0,
     structureSpend: 0,
     warshipSpend: 0,
-    navalSpend: 0,
     nominalPassiveIncome: 0,
     trainIncomeEarned: 0,
     trainIncomeHosted: 0,
@@ -342,7 +340,6 @@ export class BatchMetricsCollector {
       this.players[actor].warshipSpend += Number(event.facts.cost ?? 0);
     }
     if ((event.kind === "military.campaign-launched" || event.kind === "military.campaign-reinforced") && actor) {
-      this.players[actor].navalSpend += Number(event.facts.goldCost ?? 0);
       this.players[actor].attackingTroopsCommitted += Number(event.facts.troops ?? 0);
       if (event.kind === "military.campaign-launched") this.players[actor].campaignsLaunched += 1;
       else this.players[actor].campaignsReinforced += 1;

@@ -363,15 +363,13 @@ export class CommandExecutionSystem implements SimulationSystem {
         const navalJourney = command.mode === "naval"
           ? selectNavalJourney(context, command.actor, command.target as PlayerId)
           : null;
+        // A crossing costs no gold, as no war does (see DIPLOMACY_RULES).
+        // What a sea campaign still needs is the means to sail: a harbor to
+        // launch from and water that actually joins the two shores. Those are
+        // reach, not price, and they are what keeps an island realm's wars
+        // different from a continental one's.
         if (command.mode === "naval") {
-          if (
-            actor.structures.harbor < 1 ||
-            navalJourney === null ||
-            actor.gold < 15_000
-          ) {
-            continue;
-          }
-          actor.gold -= 15_000;
+          if (actor.structures.harbor < 1 || navalJourney === null) continue;
         }
         actor.troops -= troops;
 
@@ -397,7 +395,6 @@ export class CommandExecutionSystem implements SimulationSystem {
               troops,
               totalCommitted: existing.initialCommitted,
               mode: existing.mode,
-              goldCost: command.mode === "naval" ? 15_000 : 0,
             },
             summary: `${realmTitle(state, command.actor)} reinforced its ${settling ? "wilderness" : realmLabel(state, command.target as PlayerId)} campaign with ${compactNumber(troops)} troops.`,
           });
@@ -448,7 +445,6 @@ export class CommandExecutionSystem implements SimulationSystem {
           facts: {
             troops,
             mode: command.mode,
-            goldCost: command.mode === "naval" ? 15_000 : 0,
             originIndex: campaign.originIndex ?? -1,
             targetIndex: campaign.targetIndex ?? -1,
             waterRouteCells: campaign.pathIndices.length,

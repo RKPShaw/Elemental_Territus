@@ -57,7 +57,7 @@ not inflate the world's total developed-city count.
 ### Economy and trade
 
 - treasury, current income and cumulative nominal passive income;
-- infrastructure, warship and naval spending;
+- infrastructure and warship spending;
 - convoy/ship/pulse/flyer owner income and foreign-host income;
 - domestic and foreign station stops;
 - completed train and ship journeys;
