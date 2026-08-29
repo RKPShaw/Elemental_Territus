@@ -196,8 +196,10 @@ drive the same simulation safely.
 
 - Every diplomatic pair begins at peace; territory cannot be attacked until a
   formal declaration of war succeeds.
-- Every player begins with a compact territory, roughly 12–16K home population,
-  a 20K treasury, and a single founded city on its capital tile. Settlement
+- Every player begins as a village: a capital city and its adjacent fields
+  (a tenth of the old opening area), roughly 12K home population and a token
+  2K treasury. The frontier era is the opening age — settlement pressure is
+  tuned so the wilderness takes thousands of ticks to close, and settlement
   fronts spend population while later city development raises capacity toward
   the 1.5M cap.
 - Players score, offer and accept ten-minute alliance truces from power parity,

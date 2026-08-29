@@ -907,8 +907,16 @@ export const POPULATION_RULES = {
 export const SPAWN_RULES = {
   /** World units required between any two starting capitals. */
   minimumSeparation: 5.2,
-  /** Radius in world units of the land a player opens with. */
-  initialRegionRadius: 1.9,
+  /**
+   * Radius in world units of the land a player opens with.
+   *
+   * Cut to a tenth of its old area (radius over root ten) for the long-form
+   * world: a realm now opens as a capital and its adjacent fields, and
+   * everything else it will ever hold is settled, bought or taken on
+   * camera. Separation stays put, so the map opens as scattered villages in
+   * a wide wilderness rather than a quilt of touching provinces.
+   */
+  initialRegionRadius: 0.6,
   /** Weight of the shared strategic value field when scoring a site. */
   valueWeight: 1,
   /** Weight of how well nearby terrain suits the player's element. */
@@ -954,10 +962,18 @@ export const CLAIM_RULES = {
   initialRegionRadius: 2.8,
   /**
    * Settlement pace. At 8 a frontier tile fell nearly every tick and the
-   * whole world was claimed by tick 50; the intended arc is a world still
-   * being settled while the first wars open, fully claimed around tick 150.
+   * whole world was claimed by tick 50; at 0.62 it was claimed around tick
+   * 180. The long-form world wants the frontier era to be the first age a
+   * viewer watches, not a title card — nations visibly growing outward from
+   * village-sized starts across a wide wilderness — so the pace comes down
+   * again to stretch that era across the opening thousands of ticks.
+   *
+   * The number is set from measurement, not derivation: the frontier
+   * advances everywhere at once, so world fill time runs roughly inverse to
+   * this rate — 0.62 filled the world by tick ~180, 0.16 by ~550 — and 0.03
+   * puts the close of the frontier a few thousand ticks out.
    */
-  pressurePerTick: 0.62,
+  pressurePerTick: 0.03,
   populationCostPerCell: 100,
   minimumHomePopulation: 8_000,
   minimumCampaignCommitment: 2_000,

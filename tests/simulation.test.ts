@@ -19,6 +19,7 @@ import {
   populationGrowthEfficiency,
 } from "../app/game/rules";
 import { canPlaceStructureSite, cellCoordinates, distanceBetween, neighborIndices } from "../app/game/grid";
+import { markCellsChanged } from "../app/game/structure-index";
 import { CommandExecutionSystem } from "../app/game/systems/commands";
 import { StorySystem } from "../app/game/systems/story";
 import { BATCH_SYSTEMS } from "../app/game/systems";
@@ -31,7 +32,7 @@ import {
 } from "../app/game/theater-intelligence";
 import { buildStrategicMetaMap } from "../app/game/regions";
 import { isValidWaterPath } from "../app/game/water-navigation";
-import type { SimulationContext, SimulationSystem } from "../app/game/types";
+import type { SimulationContext, SimulationSystem, WorldState } from "../app/game/types";
 
 test("realms begin with a 2K purse and a capital city on their founding site", () => {
   const state = new ElementalWarEngine(0x240823).snapshot();
@@ -157,6 +158,37 @@ test("structure ladders, spacing, and stacked-city capacity share one rule bound
   }
 });
 
+/**
+ * Deals every wilderness cell to its nearest capital, closing the frontier at
+ * a stroke. The long-frontier tuning stretched organic settlement across
+ * thousands of ticks, and open frontier suppresses war desire — so tests
+ * about the war and trade ages fast-forward past the settlement age with
+ * this instead of waiting it out.
+ */
+function dealWildernessToNearestCapital(state: WorldState): void {
+  const capitals = Object.values(state.factions).map((faction) => faction.capitalIndex);
+  const width = state.config.width;
+  for (let index = 0; index < state.cells.length; index += 1) {
+    const cell = state.cells[index]!;
+    if (cell.terrain === "water" || cell.owner !== null) continue;
+    const x = index % width;
+    const y = (index - x) / width;
+    let nearest = capitals[0]!;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const capital of capitals) {
+      const cx = capital % width;
+      const cy = (capital - cx) / width;
+      const distance = Math.hypot(x - cx, y - cy);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = capital;
+      }
+    }
+    cell.owner = state.cells[nearest]!.capitalOf;
+  }
+  markCellsChanged(state);
+}
+
 test("capturing a capital hands the captor the defender's whole realm", () => {
   let observed = 0;
   const engine = new ElementalWarEngine(0x240823, undefined, {
@@ -172,17 +204,16 @@ test("capturing a capital hands the captor the defender's whole realm", () => {
       assert.ok(Number(event.facts.annexedTiles) >= 0);
     },
   });
-  // Staked up front: under the slow opening economy no realm funds enough
-  // conquest to storm a capital inside this horizon, and the assertion under
-  // test is the annexation contract, not the pacing.
-  //
-  // The stake and the horizon both grew with the pacing retune. Gold pays
-  // for the war but people fight it, and population now grows at a sixth of
-  // the old rate, so a host that spends itself on a capital takes about six
-  // times as long to be worth spending again. A fully staked world on this
-  // seed storms its first capital around tick 1640.
+  // The assertion under test is the annexation contract, not the pacing —
+  // and the long-form world's pacing pushes the organic first capital fall
+  // out past any horizon a test can afford (open frontier suppresses war
+  // desire, and the frontier era now runs thousands of ticks). So the world
+  // is fast-forwarded to the war age directly: every realm's chest is
+  // staked, and the wilderness is dealt to the nearest capital so no
+  // frontier is left to prefer over conquest.
   engine.observe((state) => {
     for (const faction of Object.values(state.factions)) faction.gold = 1_000_000;
+    dealWildernessToNearestCapital(state);
   });
   engine.advance(1_800);
   assert.ok(observed > 0, "the calibration world should see a capital fall");
@@ -247,13 +278,13 @@ test("population growth has a clear 65 percent sweet spot", () => {
   assert.ok(populationGrowthEfficiency(0.99) < peak * 0.02);
 });
 
-test("the default world becomes mostly settled within the three-minute pace budget", () => {
+test("settlement runs an age, lowlands first", () => {
   const engine = new ElementalWarEngine(0x240823);
-  // Realms that open with a standing capital city settle much faster, so the
-  // lowlands-first preference is only visible in the opening ticks before the
-  // whole map is claimed: farmland is already saturated while half the
-  // mountains still stand empty.
-  let state = engine.step(15);
+  // The long-form world stretched the frontier era across thousands of
+  // ticks: realms open at a tenth of their old size and press outward at a
+  // twentieth of the old pace. The lowlands-first preference has a whole
+  // age to show itself now.
+  const state = engine.step(400);
   const claimedShare = (terrain: string): number => {
     const cells = state.cells.filter((cell) => cell.terrain === terrain);
     return cells.filter((cell) => cell.owner !== null).length / Math.max(1, cells.length);
@@ -262,11 +293,13 @@ test("the default world becomes mostly settled within the three-minute pace budg
     claimedShare("farmland") > claimedShare("mountains") * 1.5,
     "young realms should prioritize productive lowlands over mountains",
   );
-  state = engine.step(165);
-  const unclaimedLand = state.cells.filter(
-    (cell) => cell.terrain !== "water" && cell.owner === null,
-  ).length;
-  assert.ok(unclaimedLand / state.landTiles <= 0.02);
+  // The world is visibly growing but far from done: this is the era the
+  // game is meant to spend its opening on.
+  const claimed = state.cells.filter(
+    (cell) => cell.terrain !== "water" && cell.owner !== null,
+  ).length / state.landTiles;
+  assert.ok(claimed > 0.1, "the frontier should be visibly advancing by tick 400");
+  assert.ok(claimed < 0.9, "the frontier era should still be open at tick 400");
 });
 
 test("the factual report is complete enough to drive consolidated stories", () => {
@@ -588,14 +621,15 @@ test("each trade building respects its berths and its launch cooldown", () => {
 test("train stops pay the fixed values, scaled by stacks and trade-form rewards", () => {
   // Adaptive theaters alter the deterministic diplomatic frontier enough that
   // this seed's first international railway matures later than its first line.
-  // Staked up front, as the other trade calibrations are: this test is about
-  // what a stop pays, not about how long a court saves for the factory that
-  // sends the convoy. A staked world on this seed serves its first domestic
-  // stop around tick 80 and its first foreign one around tick 730, so the
-  // horizon still covers both with room to spare.
+  // Staked up front, as the other trade calibrations are, and the wilderness
+  // dealt to the nearest capitals: this test is about what a stop pays, not
+  // about how long a court saves or how long the frontier era runs — and a
+  // foreign stop needs realms that actually border each other, which the
+  // village-start world does not produce inside any test horizon.
   const engine = new ElementalWarEngine(0x240823);
   engine.observe((world) => {
     for (const faction of Object.values(world.factions)) faction.gold = 1_000_000;
+    dealWildernessToNearestCapital(world);
   });
   const state = engine.step(900);
   const stops = state.reports.filter((event) => event.kind === "trade.train-stop-served");

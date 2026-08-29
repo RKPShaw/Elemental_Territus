@@ -15,7 +15,14 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the slow-world pacing retune, and the gameplay change was
+ * Re-recorded for the long-frontier tuning pass: realms open at a tenth of
+ * their old area (SPAWN_RULES.initialRegionRadius) and the settlement pace
+ * came down twentyfold again (CLAIM_RULES.pressurePerTick 0.62 -> 0.03), so
+ * the frontier era runs thousands of ticks instead of ~180 and every digest
+ * moves by construction. Tuning only -- no new mechanics entered the build
+ * (the long-game mechanics under design live in LONG_GAME_DESIGN.md).
+ *
+ * Before that, re-recorded for the slow-world pacing retune, and the gameplay change was
  * the whole point. Population grows at a sixth of the old rate, which slows
  * the frontier as much as the head count because settling ground is paid for
  * in people. Every income rate is a twentieth of what it was: land and city
@@ -229,25 +236,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "89db66719f66e39ac1ecbad2fc04a944", cells: "5c256131f10ccfa6" },
-      { tick: 200, world: "7883f496400058b3c16d5cb380a8e32f", cells: "3d0cf504f6c58474" },
-      { tick: 600, world: "f13d0240c2c1b8e062b7e7c976e2acaf", cells: "be7c707d97db71d7", deep: true },
+      { tick: 60, world: "bccf01bd3c99b57a3ad91dfb444b19cb", cells: "c52c8433fd15f4bc" },
+      { tick: 200, world: "b86778dc05e6bace23de3582257fcebf", cells: "3f86e728f67ac7ee" },
+      { tick: 600, world: "4ef520685c25ebaa174535776e9377c2", cells: "4c6bbc15977d0b2c", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "c53b4561c5dcca9e750c84a1f3ff4bcd", cells: "d77fa915b0677514" },
-      { tick: 200, world: "1aab93e6b4bd1451275ee50851a1a5a8", cells: "f69fa69d161638c8" },
-      { tick: 600, world: "829b79374d9db4ac53eed6d65f41ddb1", cells: "bef5aa95b2cdb19f", deep: true },
+      { tick: 60, world: "99e44d483ab7100f1b1765839ed003e1", cells: "9eb445d260f302e9" },
+      { tick: 200, world: "0ca5e1a1c3126c472c3b8c2d5bd4055e", cells: "f4268a230e8a36e1" },
+      { tick: 600, world: "d9ea9d8397af78d229b49d59432dadfa", cells: "183d6f2b3b936a50", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "91094f6832e318feac13fed1a32dc246", cells: "fa1fc353e16583ad" },
-      { tick: 200, world: "65125d983367b2284f1a8826fd18d6ff", cells: "233e65f367600aa6" },
-      { tick: 600, world: "24a10a6344d72b049c493294bba52c4a", cells: "635b1378b18b92be", deep: true },
+      { tick: 60, world: "78f959956c08e90b61ec329207f15559", cells: "38fa00f40e660b72" },
+      { tick: 200, world: "2f3c934263273ce67b9b57b22ea59457", cells: "14835747e025a8ce" },
+      { tick: 600, world: "9f172b4aaed6fec4e31a80dd84def556", cells: "225f3c0b4c07cbdf", deep: true },
     ],
   },
 ];
