@@ -16,7 +16,7 @@ import { cellDigest, worldDigest } from "./world-digest";
  * make a refactor pass.
  *
  * Re-recorded for the population-management pass, and the gameplay change was
- * the whole point. Three things moved together. A host on campaign no longer
+ * the whole point. Four things moved together. A host on campaign no longer
  * occupies capacity at home, so a realm's living strength may stand above its
  * cap while its army is away (POPULATION_RULES). The growth curve was reshaped
  * into a band: it pays across 40-70% of capacity, peaks at 65% as it always
@@ -27,6 +27,14 @@ import { cellDigest, worldDigest } from "./world-digest";
  * its surplus to the front instead of sitting on it. Frontiers therefore
  * advance markedly faster from the first decision onward, and every digest
  * moves by construction.
+ *
+ * And war stopped costing gold. The mobilization chest a declaration used to
+ * spend — 1.6 gold a soldier, floor 20,000 — is gone outright, which is what
+ * finally ends the dead calm the slow economy left behind: on the calibration
+ * seed the first war lands at tick 224 where a 2,400-tick run used to record
+ * none at all, and the roster is down from 48 realms to 30 by tick 2,400
+ * where nothing used to die. The opening is still staggered, by the open
+ * frontier rather than by the ledger.
  *
  * Before that, re-recorded for the long-frontier tuning pass: realms open at a tenth of
  * their old area (SPAWN_RULES.initialRegionRadius) and the settlement pace
@@ -251,23 +259,23 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
     checkpoints: [
       { tick: 60, world: "0321d2b8254482f1e8973fe1712c1403", cells: "7661244e657755eb" },
       { tick: 200, world: "37384fcc230f0c59596b401d5ac27726", cells: "e786cf0f17b7a9bb" },
-      { tick: 600, world: "0d39b8cbee1347892b161dd65f10accb", cells: "403e8df684036a31", deep: true },
+      { tick: 600, world: "d13f09bff2a3197e486d56afd12d62c9", cells: "75c4bdff28b245ed", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
       { tick: 60, world: "047653eb5ee2d0eea38d85da826b7721", cells: "0004cbf1437b58f7" },
-      { tick: 200, world: "52656488699b3117a3421af43c7266f4", cells: "50898cb453869ad5" },
-      { tick: 600, world: "90f77868c1fc7b0fcc7f76a906baa91f", cells: "ec60cef49a494481", deep: true },
+      { tick: 200, world: "ddd5bf3d4468ed7763e343e00265844b", cells: "8314d4103cb10ac4" },
+      { tick: 600, world: "2cf0b6f5ea4d721d8563f414356c071d", cells: "f1ddf430edf8fa19", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
       { tick: 60, world: "c04cbae3b83b61206b016189a9811237", cells: "4c7f3c024686aa5b" },
-      { tick: 200, world: "06c243446eb61640c9598ffb61527b9f", cells: "8105f651e1b4b572" },
-      { tick: 600, world: "2454c6f5cb306ba5b0362e275cb4632f", cells: "7f7dc1c9216a5fc7", deep: true },
+      { tick: 200, world: "fd8d5cae3a0b9c636ba2e82fae86c3a1", cells: "9e1fb175d456b7dc" },
+      { tick: 600, world: "0300790211da4b7a9e5dfd39793f12fe", cells: "2086fa442a277e32", deep: true },
     ],
   },
 ];

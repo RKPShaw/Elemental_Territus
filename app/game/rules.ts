@@ -159,12 +159,12 @@ export const STRUCTURE_MIN_SPACING = 0.37;
  * some two thousand ticks in — which also reverses the order the milestone
  * used to arrive in. The first factory used to land as the frontier closed;
  * now the frontier closes first and the realm is still saving. The rung is
- * priced against the 20K mobilization floor on purpose: one savings pot,
- * three critical ways to spend it. A court that banks for its first factory cannot also
- * fund a war chest, and the rival that bought a city instead holds +10K
- * troop cap when the border turns hostile. The founding capital does not
- * count as a purchase (see nextStructureCost), so the first built city and
- * the first factory cost the same and the choice is a real either/or.
+ * the whole of what a treasury is for now that war is free to declare
+ * (DIPLOMACY_RULES): one savings pot, and a court that banks for its first
+ * factory is not buying the city that would have carried +10K of troop cap
+ * when the border turns hostile. The founding capital does not count as a
+ * purchase (see nextStructureCost), so the first built city and the first
+ * factory cost the same and the choice is a real either/or.
  */
 export const STRUCTURE_COST_LADDER = [18_000, 40_000, 90_000] as const;
 
@@ -191,6 +191,23 @@ export function cityStationMultiplier(level: number): number {
  * The simulation's balance surface lives here instead of being scattered across
  * systems. That keeps the deterministic rules easy to tune, test or replace
  * without coupling them to rendering or AI policy.
+ *
+ * War is free to declare. It used to spend a mobilization chest — 1.6 gold a
+ * soldier, with a 20,000 floor — and that chest, not any appetite for peace,
+ * is what kept the world silent: the slow-economy retune cut income
+ * twentyfold and the floor did not follow it, so a war chest became some ten
+ * thousand ticks of saving and a hundred-game sweep recorded zero wars ever.
+ * The treasury is a builder's purse now and nothing else; a court that wants
+ * a war has only to want it.
+ *
+ * The ground paces the opening in the ledger's place. Settlement is cheaper
+ * than invasion, so a realm with wilderness left prefers taking it
+ * (openFrontierWarReluctance), and frontiers close at geography-dependent
+ * times; weariness, the per-war reluctance inside warDesire and the court's
+ * action budget carry the rest. Should an opening ever fire on one tick
+ * again, minimumPeaceTicks (world.ts) is the lever that answered that
+ * before — it was lowered to 64 on the strength of the chest that is no
+ * longer there.
  */
 export const DIPLOMACY_RULES = {
   minimumWarTicks: 176,
@@ -216,20 +233,6 @@ export const DIPLOMACY_RULES = {
    */
   courtActionsPerTerm: 2,
   /**
-   * Gold a declaration of war spends per soldier on raising and provisioning
-   * the host, with a floor for the smallest realms. War is funded, not free:
-   * the treasury pays the full chest at the declaration, and war desire
-   * scales with the realm's ability to pay (see warDesire). The cost rides
-   * the army rather than a flat number so it stays meaningful at every era —
-   * and because treasuries grow at genuinely different rates (terrain
-   * yields, trade income, construction programs all compete for the same
-   * gold) realms reach funding at different times, which is what staggers
-   * the opening wars without any forced scheduling. Spending the chest also
-   * delays the same realm's next declaration until it has saved up again.
-   */
-  mobilizationGoldPerTroop: 1.6,
-  mobilizationFloor: 20_000,
-  /**
    * How strongly open wilderness frontier suppresses war desire. Settlement
    * is always cheaper than invasion (see WILDERNESS_TERRAIN_COST), so a
    * realm with free land left to take prefers taking it; the pull fades as
@@ -243,14 +246,6 @@ export const DIPLOMACY_RULES = {
    */
   pileOnWarDesire: 0.34,
 } as const;
-
-/** The war chest a declaration must fund: raising this realm's host. */
-export function mobilizationCostFor(troops: number): number {
-  return Math.max(
-    DIPLOMACY_RULES.mobilizationFloor,
-    troops * DIPLOMACY_RULES.mobilizationGoldPerTroop,
-  );
-}
 
 export const CAMPAIGN_RULES = {
   maximumStrengthRatio: 2,

@@ -11,7 +11,6 @@ import {
   ELEMENT_RULES,
   POPULATION_RULES,
   clamp,
-  mobilizationCostFor,
 } from "../rules";
 import { strategyFactor } from "../strategy";
 import type { PlayerId, RelationState, SimulationContext, SimulationSystem } from "../types";
@@ -162,19 +161,19 @@ function warDesire(
   const ascensionPull = ascensionAppetite(state, actor, target)
     * ELEMENT_RULES.ascensionWarDesire
     * strategyFactor(self.strategy, "ascension");
-  // War is funded: the declaration will spend the mobilization chest, and a
-  // court whose treasury cannot yet cover it wants the war less. Treasuries
-  // grow at genuinely different rates — terrain, trade, construction — so
-  // this is the economic incentive that spreads attack timing across realms.
-  const warChest = clamp(self.gold / mobilizationCostFor(self.troops), 0, 1);
   // A conquest-minded realm wants the same war more; near the declaration
   // threshold the sum is positive, so the factor moves decisions exactly there.
+  //
+  // Nothing here asks what the treasury holds. A declaration used to be
+  // scaled by how far the court had saved toward its mobilization chest,
+  // which is what spread the opening attacks across realms; wars are free
+  // now, so every court is appraised as the funded one always was, and the
+  // spreading falls to the frontier, weariness and the terms themselves.
   return (readiness * 0.88 + troopEdge * 0.38 + elementalEdge * 1.6
     + (border > 0 ? 0.14 : -0.05) + containLeader + finishVulnerable
     + exposedTraitor + longPeace + ascensionPull + pileOn - self.warWeariness * 0.72
     - existingWars * 0.26 - settlementPull + random.next() * 0.16)
-    * strategyFactor(self.strategy, "conquest")
-    * (0.35 + 0.65 * warChest);
+    * strategyFactor(self.strategy, "conquest");
 }
 
 function considerTradePolicy(
@@ -232,15 +231,14 @@ export class DiplomacyAiSystem implements SimulationSystem {
         const shareB = factionB.territory / state.landTiles;
         const bIsTraitor = state.tick < factionB.traitorUntil;
         const aIsTraitor = state.tick < factionA.traitorUntil;
-        // Betrayal is funded like any other war: no chest, no knife.
+        // Betrayal costs no more than any other war does, which is nothing:
+        // what stays the knife is reach and the odds, not the treasury.
         const aHasOpening = hasAction(a)
-          && factionA.gold >= mobilizationCostFor(factionA.troops)
           && hasRoute(context, a, b) && (
             (bIsTraitor && ratioA > 1.05) ||
             (ratioA > 1.65 && shareB < shareA * 0.72 && random.chance(0.42))
           );
         const bHasOpening = hasAction(b)
-          && factionB.gold >= mobilizationCostFor(factionB.troops)
           && hasRoute(context, b, a) && (
             (aIsTraitor && ratioB > 1.05) ||
             (ratioB > 1.65 && shareA < shareB * 0.72 && random.chance(0.42))
@@ -294,8 +292,8 @@ export class DiplomacyAiSystem implements SimulationSystem {
         // side's war count does: a realm already fighting for its life is
         // exactly the one its other neighbours descend on, and a sprawling
         // conqueror may open as many fronts as its desire — weariness, the
-        // per-war reluctance and the mobilization chest inside warDesire —
-        // still clears.
+        // per-war reluctance and the open frontier inside warDesire — still
+        // clears.
         const desireA = hasAction(a)
           ? warDesire(context, pass, a, b, relation) * state.config.aggression
           : Number.NEGATIVE_INFINITY;

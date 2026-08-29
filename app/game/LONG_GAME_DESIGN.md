@@ -15,7 +15,9 @@ Three tuning eras are already in the shipped rules and set the stage:
   a 100-game batch showed the world fully settled by ~tick 180, then ~2,300
   ticks of dead calm while courts saved for their first 18K building, and
   **zero wars ever** — income fell 20× but the 20K mobilization floor did
-  not, so a war chest is ~10,000+ ticks of saving.
+  not, so a war chest was ~10,000+ ticks of saving. That floor has since
+  been removed outright: war is free to declare, and the treasury is a
+  builder's purse alone.
 - **The long frontier** (starts ÷10 in area, settlement pressure 0.62 →
   0.03): the frontier era now runs thousands of ticks instead of ~180, so
   the opening age is watchable growth instead of an instant fill.
@@ -44,11 +46,14 @@ wilderness and ruins → settlement bounty again.**
 
 Settling one wilderness cell pays gold once, scaled by the ground's own
 yield (`goldYield`), booked as land income. A growing nation is rich; a
-static one lives on the tax trickle. War chests get funded by the frontier
-boom, so wars become affordable exactly as frontiers close — no change to
-mobilization costs needed. Conquest of *enemy* land deliberately pays
-nothing: war spends treasure, resettlement earns it, so war stays a
+static one lives on the tax trickle. Conquest of *enemy* land deliberately
+pays nothing, so resettlement earns and war does not — war stays a
 deliberate act rather than a profit engine.
+
+The bounty was designed partly to fund war chests as frontiers closed. That
+half is moot: the mobilization chest is gone and wars are free. What remains
+is the reason to write it anyway — a frontier boom is what pays for the
+cities and works an empire needs to hold what it takes.
 
 Prototype constant: `CLAIM_RULES.wildernessGoldPerCell: 1_200` (per
 normalized area unit × terrain goldYield ≈ 150–450 gold per cell; roughly
