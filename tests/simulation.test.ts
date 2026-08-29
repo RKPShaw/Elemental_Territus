@@ -625,13 +625,15 @@ test("train stops pay the fixed values, scaled by stacks and trade-form rewards"
   // dealt to the nearest capitals: this test is about what a stop pays, not
   // about how long a court saves or how long the frontier era runs — and a
   // foreign stop needs realms that actually border each other, which the
-  // village-start world does not produce inside any test horizon.
+  // village-start world does not produce inside any test horizon. The horizon
+  // follows the wars: conquest-fusion appetite retargeted this seed's early
+  // wars and its first foreign stop now lands just under tick 1900.
   const engine = new ElementalWarEngine(0x240823);
   engine.observe((world) => {
     for (const faction of Object.values(world.factions)) faction.gold = 1_000_000;
     dealWildernessToNearestCapital(world);
   });
-  const state = engine.step(900);
+  const state = engine.step(2_000);
   const stops = state.reports.filter((event) => event.kind === "trade.train-stop-served");
   const domestic = stops.find((event) => event.facts.foreign === false);
   const foreign = stops.find((event) => event.facts.foreign === true);

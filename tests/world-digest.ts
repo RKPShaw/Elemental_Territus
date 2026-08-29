@@ -26,6 +26,7 @@ const CELL_FIELDS = [
   "structureLevel",
   "capitalOf",
   "coastal",
+  "stream",
   "pressure",
   "pressureBy",
   "pressureTracked",
@@ -121,6 +122,7 @@ function normalizeCellValue(field: (typeof CELL_FIELDS)[number], raw: unknown): 
     case "structureHeritage":
       return raw < 0 ? null : (HERITAGE_CODES[raw] ?? raw);
     case "coastal":
+    case "stream":
     case "pressureTracked":
       return raw === 1;
     default:

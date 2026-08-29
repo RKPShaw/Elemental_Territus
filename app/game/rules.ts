@@ -422,10 +422,6 @@ export const ELEMENT_RULES = {
    * raise it if sweeps show mid-game combat going elementally flat.
    */
   neutralPairEdge: 0,
-  /** Absorbed base depth required in each constituent to form a tier 2. */
-  tier2BaseDepth: 2,
-  /** Total realms absorbed before any tier 3 becomes formable. */
-  tier3MinimumRealms: 6,
   /**
    * War desire added for a target whose absorption fully advances the next
    * tier, before the realm's own ascension weight scales it. Comparable to
@@ -504,6 +500,37 @@ export const ELEMENT_RULES = {
    * attacker trades by: works it could run natively are worth marching for.
    */
   heritagePrizeWeight: 1.3,
+} as const;
+
+/**
+ * The crucible of conquest: how two elements held inside one realm fuse.
+ *
+ * Conquest is the trigger — the annexation that puts both constituents of a
+ * higher element inside one realm opens a transmutation window rather than
+ * flipping the expression on the spot. The window is the brake and the
+ * drama: a realm in flux fights, settles and grows dulled by the transition
+ * sickness, its court hesitates to open new wars, and its bespoke mechanic
+ * holds its breath until the fusion completes. Windows never retarget, each
+ * rung of the tier ladder pays a window of its own, and tier 3 pays the
+ * longer one because compound-on-compound conquest earns a longer forging.
+ */
+export const TRANSMUTATION_RULES = {
+  /** Ticks a tier 2 fusion spends in the crucible. */
+  tier2WindowTicks: 720,
+  /** Ticks a tier 3 fusion spends in the crucible. */
+  tier3WindowTicks: 1_260,
+  /** Multiplier on campaign progress while the realm is in flux. */
+  attackFactor: 0.85,
+  /** Multiplier on settlement pressure while in flux. */
+  settleFactor: 0.85,
+  /** Multiplier on population growth while in flux. */
+  growthFactor: 0.9,
+  /** Multiplier on the invasion cost of in-flux ground; 1 keeps it neutral. */
+  defenseFactor: 1,
+  /** Multiplier on the court's war desire while mid-merge. */
+  warDesireFactor: 0.5,
+  /** Whether bespoke power meters freeze while the realm is in flux. */
+  pausePowers: true,
 } as const;
 
 /**

@@ -15,7 +15,23 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the long-frontier tuning pass: realms open at a tenth of
+ * Re-recorded for the crucible of conquest — ascension reworked from tally
+ * thresholds to conquest-held fusion, and the gameplay change is the point.
+ * Three moves, two of them by construction: the transmutation window is new
+ * faction state (FactionState.transmutation), so every world digest moves;
+ * the stream flag joined the cell digest (it was the one cell field the
+ * digest never learned, an omission this phase repairs), so every cell
+ * digest moves. The third is the real mechanic: a realm now becomes
+ * eligible for a higher element the moment annexation puts both
+ * constituents inside it — one cross-family conquest, not a depth-two
+ * tally — and eligibility opens a visible transmutation window (dulled
+ * attack, settlement, growth and war desire; bespoke meters held) instead
+ * of flipping expression on the spot. Ascension appetite reads the same
+ * held-constituent arithmetic, so war targeting genuinely re-aims from the
+ * first diplomacy pass and the worlds diverge long before the first window
+ * opens.
+ *
+ * Before that, re-recorded for the long-frontier tuning pass: realms open at a tenth of
  * their old area (SPAWN_RULES.initialRegionRadius) and the settlement pace
  * came down twentyfold again (CLAIM_RULES.pressurePerTick 0.62 -> 0.03), so
  * the frontier era runs thousands of ticks instead of ~180 and every digest
@@ -236,25 +252,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "bccf01bd3c99b57a3ad91dfb444b19cb", cells: "c52c8433fd15f4bc" },
-      { tick: 200, world: "b86778dc05e6bace23de3582257fcebf", cells: "3f86e728f67ac7ee" },
-      { tick: 600, world: "4ef520685c25ebaa174535776e9377c2", cells: "4c6bbc15977d0b2c", deep: true },
+      { tick: 60, world: "5d9bb87f26e1074b7902fc96b64be814", cells: "1e71590ddb73544f" },
+      { tick: 200, world: "9a5226c68c299010f22fc027e6a8c9e0", cells: "9f85f55f65ac4177" },
+      { tick: 600, world: "ed7a1dc22ff440a1fa07cb40076bb4df", cells: "2f74974d65382dc9", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "99e44d483ab7100f1b1765839ed003e1", cells: "9eb445d260f302e9" },
-      { tick: 200, world: "0ca5e1a1c3126c472c3b8c2d5bd4055e", cells: "f4268a230e8a36e1" },
-      { tick: 600, world: "d9ea9d8397af78d229b49d59432dadfa", cells: "183d6f2b3b936a50", deep: true },
+      { tick: 60, world: "5f03f52415a4151750a2454e34446542", cells: "3090bf8cad8f8076" },
+      { tick: 200, world: "7e46da79410fb01b2a90e6e59bd4506c", cells: "3bbb05529c75808f" },
+      { tick: 600, world: "d24d0e5059b21fe15a3211b5d0ca7efa", cells: "b3196ad8b3d04f2a", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "78f959956c08e90b61ec329207f15559", cells: "38fa00f40e660b72" },
-      { tick: 200, world: "2f3c934263273ce67b9b57b22ea59457", cells: "14835747e025a8ce" },
-      { tick: 600, world: "9f172b4aaed6fec4e31a80dd84def556", cells: "225f3c0b4c07cbdf", deep: true },
+      { tick: 60, world: "a00f202da2887d2e1644319f6d992c99", cells: "85545d735bcd4879" },
+      { tick: 200, world: "48b48ed0bdc5c027d0896d6deb757bf5", cells: "9d96f136758ecbec" },
+      { tick: 600, world: "f68163a2b2d606ffdcc9344914869705", cells: "475d01c7d5b75616", deep: true },
     ],
   },
 ];

@@ -83,12 +83,16 @@ and `PlayerId` means the power.
 The wider space is earned, not seated. Grove retired as a starting family and
 returns as the first acquirable compound: every element beyond the founding
 four — six tier-2 compounds and fifteen tier-3 advanced elements — is declared
-in `app/game/elements.ts` and expressed through ascension. Conquest transfers
-a fallen realm's element tallies to its conqueror; when those tallies cover a
-compound's founding bases deeply enough (or an advanced element's compounds,
-with a long enough conquest record), the realm ascends: `dynasty.element-ascended`
-enters the report, its priorities lean toward what it became, and its combat
-matchups read its expressed element. Expression only ever upgrades.
+in `app/game/elements.ts` and expressed through ascension. Conquest is the
+crucible: annexation transfers a fallen realm's held elements and tallies to
+its conqueror, and the moment one realm holds both constituents of a higher
+element — both founding bases for a tier 2, both compound elements for a
+tier 3 — a transmutation window opens (`dynasty.transmutation-begun`). The
+realm spends the window visibly in flux — dulled attack, settlement, growth
+and war desire, its bespoke meter held — and emerges expressing the fusion:
+`dynasty.element-ascended` enters the report, its priorities lean toward what
+it became, and its combat matchups read its expressed element. Expression
+only ever upgrades, and each rung of the ladder pays a window of its own.
 `app/game/ascension.ts` owns the arithmetic; combat resolves matchups through
 the composed 25×25 table with graded relief for the founding bases a
 disadvantaged realm's history covers.
@@ -279,10 +283,17 @@ drive the same simulation safely.
   expressed element against its rival's, graded down by at most a third when
   the disadvantaged side's absorbed history covers the advantaged element's
   founding bases — history softens a matchup, it never erases one.
-- Ascension is the technology tree: tier 2 needs depth two in both founding
-  constituents, tier 3 needs both compound constituents formable and six realms
-  absorbed altogether. Expression upgrades once and never demotes, and an
-  ascended realm keeps its name and colors — titles, not rebrands.
+- Ascension is the technology tree, and conquest is its trigger: a tier 2
+  becomes eligible when annexation puts both of its founding bases inside one
+  realm, a tier 3 when both of its compound constituents are held as elements
+  in their own right, and eligibility always looks exactly one rung up.
+  Eligibility opens a transmutation window (`TRANSMUTATION_RULES`) rather
+  than flipping expression: the realm fights, settles and grows dulled while
+  it fuses, its court hesitates to open new wars, its bespoke meter holds,
+  and the crown lands when the window closes. Windows never retarget, a realm
+  annexed mid-window dies with it, and chained conquests each pay a fresh
+  window. Expression never demotes, and an ascended realm keeps its name and
+  colors — titles, not rebrands.
 - Information identities act only on beliefs, never on the world. A glass or
   airborne-trading realm observes twice per interval instead of once; a mist
   realm's plurality regions blend distant rivals' measurements 70% back

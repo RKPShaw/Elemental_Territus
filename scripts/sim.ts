@@ -329,11 +329,13 @@ function inspectElements(state: WorldState): void {
       `depth E${String(depths.ember).padEnd(2)} T${String(depths.tide).padEnd(2)} ` +
       `S${String(depths.stone).padEnd(2)} A${String(depths.gale).padEnd(2)} ` +
       `absorbed ${String(totalRealmsAbsorbed(faction.elementCounts)).padStart(2)}  ` +
-      (next
-        ? next.progress > 0
-          ? `next ${ELEMENTS[next.element].name} ${(next.progress * 100).toFixed(0)}%`
-          : "next —"
-        : "apex") +
+      (faction.transmutation.target
+        ? `fusing → ${ELEMENTS[faction.transmutation.target].name} (${Math.max(0, faction.transmutation.completesAt - state.tick)} ticks)`
+        : next
+          ? next.progress > 0
+            ? `next ${ELEMENTS[next.element].name} ${(next.progress * 100).toFixed(0)}%`
+            : "next —"
+          : "apex") +
       (title ? dim(`  ${title}`, color) : "") +
       (powerMeter(state, id) ? dim(`  ${powerMeter(state, id)}`, color) : ""),
     );

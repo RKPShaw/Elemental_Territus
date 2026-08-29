@@ -1,6 +1,6 @@
 import { PLAYER_ORDER } from "../../app/game/players";
-import { expressionFor } from "../../app/game/ascension";
-import { baseMaskOf } from "../../app/game/elements";
+import { fusionTargetFor } from "../../app/game/ascension";
+import { ELEMENTS, baseMaskOf } from "../../app/game/elements";
 import { ElementalWarEngine } from "../../app/game/engine";
 import {
   hasSwiftSight,
@@ -242,29 +242,41 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     `${strategyShifts} focus changes reported`,
   );
 
-  // Two proofs, one per failure mode. Bookkeeping: recomputing every living
-  // realm's expression and base mask from its tallies must change nothing,
-  // because the system claims to keep them current every tick. Activity: an
-  // ascension reported inside the horizon; a run where no realm assembled a
-  // deep enough history is inconclusive rather than sick.
+  // Two proofs, one per failure mode. Bookkeeping: no living idle realm may
+  // sit on an eligible fusion (the system claims to open windows the tick
+  // conquest makes them eligible), every open window must be well-formed and
+  // aimed exactly one rung up, and base masks must recompute exactly.
+  // Activity: a transmutation begun or completed inside the horizon; a run
+  // where no conquest assembled the constituents is inconclusive, not sick.
   const ascensions = count("dynasty.element-ascended");
-  let expressionLag = 0;
+  const transmutations = count("dynasty.transmutation-begun");
+  let pendingIdle = 0;
+  let malformedWindows = 0;
   let maskDrift = 0;
   for (const id of PLAYER_ORDER) {
     const faction = state.factions[id];
     if (!faction.alive) continue;
-    if (expressionFor(faction) !== faction.expressedElement) expressionLag += 1;
+    const window = faction.transmutation;
+    if (window.target === null) {
+      if (fusionTargetFor(faction) !== null) pendingIdle += 1;
+    } else if (
+      window.startedAt < 0
+      || window.completesAt <= window.startedAt
+      || ELEMENTS[window.target].tier !== ELEMENTS[faction.expressedElement].tier + 1
+    ) {
+      malformedWindows += 1;
+    }
     if (baseMaskOf(faction.absorbedElements) !== faction.baseMask) maskDrift += 1;
   }
-  const ascensionBooksExact = expressionLag === 0 && maskDrift === 0;
+  const fusionBooksExact = pendingIdle === 0 && malformedWindows === 0 && maskDrift === 0;
   add(
     "element-ascension",
-    "absorbed histories express higher elements",
-    ascensionBooksExact && ascensions > 0,
-    ascensionBooksExact
-      ? `${ascensions} ascensions reported, expression and base masks exact across the living roster`
-      : `${expressionLag} realms lag their formable expression, ${maskDrift} base masks drifted`,
-    ascensionBooksExact,
+    "conquest-held constituents fuse through transmutation windows",
+    fusionBooksExact && (transmutations > 0 || ascensions > 0),
+    fusionBooksExact
+      ? `${transmutations} windows opened, ${ascensions} fusions completed, books exact across the living roster`
+      : `${pendingIdle} idle realms sit on an eligible fusion, ${malformedWindows} malformed windows, ${maskDrift} base masks drifted`,
+    fusionBooksExact,
   );
 
   // The naming system: founding names must be unique, and by the horizon at

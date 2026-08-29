@@ -2,11 +2,11 @@ import { PLAYER_ORDER } from "../players";
 import { allRelations, countRelationStatuses, otherParty } from "../diplomacy";
 import { relationKey } from "../diplomacy";
 import type { RelationCounts } from "../diplomacy";
-import { ascensionAppetite } from "../ascension";
+import { ascensionAppetite, transmuting } from "../ascension";
 import { realmMatchup } from "../elements";
 import { frontierTargets } from "../frontier";
 import { borderLength } from "../grid";
-import { DIPLOMACY_RULES, ELEMENT_RULES, clamp, mobilizationCostFor } from "../rules";
+import { DIPLOMACY_RULES, ELEMENT_RULES, TRANSMUTATION_RULES, clamp, mobilizationCostFor } from "../rules";
 import { strategyFactor } from "../strategy";
 import type { PlayerId, RelationState, SimulationContext, SimulationSystem } from "../types";
 
@@ -151,6 +151,9 @@ function warDesire(
   // grow at genuinely different rates — terrain, trade, construction — so
   // this is the economic incentive that spreads attack timing across realms.
   const warChest = clamp(self.gold / mobilizationCostFor(self.troops), 0, 1);
+  // A court mid-fusion turns inward: the transition sickness halves its
+  // appetite for opening a new war until the transmutation completes.
+  const fluxCaution = transmuting(self) ? TRANSMUTATION_RULES.warDesireFactor : 1;
   // A conquest-minded realm wants the same war more; near the declaration
   // threshold the sum is positive, so the factor moves decisions exactly there.
   return (readiness * 0.88 + troopEdge * 0.38 + elementalEdge * 1.6
@@ -158,7 +161,8 @@ function warDesire(
     + exposedTraitor + longPeace + ascensionPull + pileOn - self.warWeariness * 0.72
     - existingWars * 0.26 - settlementPull + random.next() * 0.16)
     * strategyFactor(self.strategy, "conquest")
-    * (0.35 + 0.65 * warChest);
+    * (0.35 + 0.65 * warChest)
+    * fluxCaution;
 }
 
 function considerTradePolicy(

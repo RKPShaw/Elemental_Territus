@@ -143,6 +143,7 @@ export class ElementalWarEngine {
               changes: faction.identity.changes.map((change) => ({ ...change })),
             },
             power: { ...faction.power },
+            transmutation: { ...faction.transmutation },
             economy: cloneEconomyLedger(faction.economy),
           },
         ]),

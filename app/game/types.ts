@@ -208,6 +208,29 @@ export interface ElementPowerState {
 }
 
 /**
+ * A fusion in progress. Conquest is the trigger: the moment annexation puts
+ * both constituents of a higher element inside one realm, a transmutation
+ * window opens — the realm is visibly in flux, its armies and growth dulled
+ * by the transition sickness — and when the window closes the realm emerges
+ * expressing the fused element. Windows never retarget (held elements only
+ * grow, so the chosen target stays valid) and each rung of the tier ladder
+ * pays a window of its own. Idle state is target null with the tick marks
+ * at -1; `completed` counts lifetime fusions for panels and metrics.
+ */
+export interface TransmutationState {
+  /** The element this realm is fusing toward; null while idle. */
+  target: ElementId | null;
+  /** The expression held when the window opened; null while idle. */
+  from: ElementId | null;
+  /** Tick the window opened; -1 while idle. */
+  startedAt: number;
+  /** Tick the fusion completes; -1 while idle. */
+  completesAt: number;
+  /** Lifetime completed fusions. */
+  completed: number;
+}
+
+/**
  * Why a realm's name changed. "founding" is the name it woke with; "conquest"
  * is the title ladder climbing on absorbed realms and held land; "ascension"
  * weaves a newly expressed element into the style; "union" folds a fallen
@@ -314,6 +337,8 @@ export interface FactionState {
   strategy: StrategicPriorities;
   /** The meter behind the expressed element's mechanic; see powers.ts. */
   power: ElementPowerState;
+  /** The fusion window this realm is inside, if any; see ascension.ts. */
+  transmutation: TransmutationState;
   /** Distinct elemental powers held; drives terrain affinity and matchups. */
   absorbedElements: ElementId[];
   /**

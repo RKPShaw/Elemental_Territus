@@ -10,6 +10,7 @@ import { createTheaterMap } from "./theater-map";
 import { TERRAIN_RULES, calculateTroopCap, normalizedCellArea } from "./rules";
 import { claimInitialTerritory, draftSpawnSites } from "./spawn";
 import { createPowerState } from "./powers";
+import { createTransmutationState } from "./ascension";
 import { initialStrategy } from "./strategy";
 import type {
   Cell,
@@ -555,6 +556,7 @@ function makeFaction(id: PlayerId, seed: number, foundingName: string): FactionS
     capitalIndex: -1,
     strategy: initialStrategy(seed, id, element),
     power: createPowerState(),
+    transmutation: createTransmutationState(),
     absorbedElements: [element],
     elementCounts: { [element]: 1 } as Record<ElementId, number>,
     lastConqueror: null,
