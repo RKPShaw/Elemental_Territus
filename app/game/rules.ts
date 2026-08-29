@@ -170,7 +170,51 @@ export const DIPLOMACY_RULES = {
   traitorDurationTicks: 30,
   traitorAttackMultiplier: 1.35,
   maximumTrucesPerRealm: 2,
+  /**
+   * Major diplomatic acts a court may take in one diplomacy term: war
+   * declarations, truce offers and acceptances. There is deliberately no cap
+   * on how many wars a realm may *hold* — a coalition may bury one target,
+   * and a sprawling empire may burn on every border — the limit is only on
+   * how much a court can *do* in a single sitting, so no realm performs an
+   * unbounded burst of actions in one term.
+   */
+  courtActionsPerTerm: 2,
+  /**
+   * Gold a declaration of war spends per soldier on raising and provisioning
+   * the host, with a floor for the smallest realms. War is funded, not free:
+   * the treasury pays the full chest at the declaration, and war desire
+   * scales with the realm's ability to pay (see warDesire). The cost rides
+   * the army rather than a flat number so it stays meaningful at every era —
+   * and because treasuries grow at genuinely different rates (terrain
+   * yields, trade income, construction programs all compete for the same
+   * gold) realms reach funding at different times, which is what staggers
+   * the opening wars without any forced scheduling. Spending the chest also
+   * delays the same realm's next declaration until it has saved up again.
+   */
+  mobilizationGoldPerTroop: 1.6,
+  mobilizationFloor: 20_000,
+  /**
+   * How strongly open wilderness frontier suppresses war desire. Settlement
+   * is always cheaper than invasion (see WILDERNESS_TERRAIN_COST), so a
+   * realm with free land left to take prefers taking it; the pull fades as
+   * its frontier closes, and frontiers close at geography-dependent times.
+   */
+  openFrontierWarReluctance: 0.7,
+  /**
+   * Extra war desire against a target already fighting someone else while its
+   * host runs thin. Opportunism is the intended character: a weakened realm
+   * should fear every border it has, not just the one already burning.
+   */
+  pileOnWarDesire: 0.34,
 } as const;
+
+/** The war chest a declaration must fund: raising this realm's host. */
+export function mobilizationCostFor(troops: number): number {
+  return Math.max(
+    DIPLOMACY_RULES.mobilizationFloor,
+    troops * DIPLOMACY_RULES.mobilizationGoldPerTroop,
+  );
+}
 
 export const CAMPAIGN_RULES = {
   maximumStrengthRatio: 2,
@@ -262,6 +306,19 @@ export const STRATEGIC_REGION_RULES = {
   boundaryInertia: 0.2,
   objectiveLookaheadCells: 14,
   maximumObjectives: 8,
+} as const;
+
+/**
+ * Streams are the minor rivers: lines of running water too small to be a
+ * terrain of their own. A stream cell stays ordinary land — armies cross it,
+ * settlers claim it — but taking ground on a stream costs more, so political
+ * borders prefer to come to rest along the watercourses the way real ones do.
+ */
+export const STREAM_RULES = {
+  /** Conquest-cost multiplier for enemy ground on a stream bank. */
+  enemyCrossingCost: 1.5,
+  /** Settlement-cost multiplier for wilderness on a stream bank. */
+  wildernessCrossingCost: 1.2,
 } as const;
 
 /**

@@ -1,3 +1,4 @@
+import { realmTitle } from "../naming";
 import { PLAYERS, PLAYER_ORDER } from "../players";
 
 import { realmSubject } from "../reporting";
@@ -30,9 +31,9 @@ export class VictorySystem implements SimulationSystem {
         kind: "world.victory",
         importance: "historic",
         storyKey: `world:${state.seed}`,
-        initiator: realmSubject(state.champion),
+        initiator: realmSubject(state, state.champion),
         targets: [],
-        participants: PLAYER_ORDER.map(realmSubject),
+        participants: PLAYER_ORDER.map((id) => realmSubject(state, id)),
         links: {},
         facts: {
           territory: state.factions[state.champion].territory,
@@ -40,10 +41,10 @@ export class VictorySystem implements SimulationSystem {
           absorbedElements: [...state.factions[state.champion].absorbedElements],
           survivingRealms: alive.length,
         },
-        summary: `${PLAYERS[state.champion].realmName} united the sustainable world and won the age.`,
+        summary: `${realmTitle(state, state.champion)} united the sustainable world and won the age.`,
       });
       context.emit(
-        `${PLAYERS[state.champion].realmName} controls the sustainable world and closes the age with one final banner.`,
+        `${realmTitle(state, state.champion)} controls the sustainable world and closes the age with one final banner.`,
         "world",
         state.champion,
       );

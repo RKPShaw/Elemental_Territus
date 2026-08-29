@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ELEMENTS } from "../game/elements";
-import { PLAYERS, PLAYER_ORDER } from "../game/players";
+import { realmLabel } from "../game/naming";
+import { PLAYER_ORDER } from "../game/players";
 import {
   cellCoordinates,
   frontTargets,
@@ -129,6 +130,35 @@ function drawTerrainTexture(
     context.lineTo(x + radius * 0.3, y + radius * 0.2);
     context.moveTo(x - radius * 0.3, y + radius * 0.12);
     context.lineTo(x + radius * 0.12, y + radius * 0.32);
+    context.stroke();
+  }
+  context.restore();
+}
+
+/**
+ * The minor rivers, drawn as thin lines rather than water: a darker bed with
+ * a lighter thread over it, following each carved course. They sit under the
+ * political layer, so a border resting on a stream reads as a border on a
+ * river the way real ones do.
+ */
+function drawStreams(
+  context: CanvasRenderingContext2D,
+  state: WorldState,
+  shape: MapGeometry,
+) {
+  if (!state.streams || state.streams.length === 0) return;
+  context.save();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  for (const course of state.streams) {
+    if (course.length < 2) continue;
+    context.beginPath();
+    traceSmoothedPath(context, state, shape, course);
+    context.strokeStyle = "rgba(29, 63, 76, 0.30)";
+    context.lineWidth = 2.3;
+    context.stroke();
+    context.strokeStyle = "rgba(116, 168, 183, 0.85)";
+    context.lineWidth = 1.1;
     context.stroke();
   }
   context.restore();
@@ -689,6 +719,7 @@ function composeDecorLayers(
   for (let index = 0; index < state.cells.length; index += 1) {
     drawTerrainTexture(underContext, state, shape, index);
   }
+  drawStreams(underContext, state, shape);
   drawTradeRoutes(underContext, state, shape);
   overContext.setTransform(scale, 0, 0, scale, 0, 0);
   overContext.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
@@ -1221,7 +1252,7 @@ export function WorldMap({
         onPointerMove={handlePointerMove}
         onPointerLeave={() => setHoveredCell(null)}
         aria-label={mapMode === "theaters"
-          ? `${PLAYERS[selected]!.name} interpretation of the world's strategic theaters. Green is high value and red is low value.`
+          ? `${realmLabel(state, selected)} interpretation of the world's strategic theaters. Green is high value and red is low value.`
           : `Live political and terrain map of ${state.worldName}. Select a colored player to inspect it.`}
       />
       {mapMode === "theaters" && hoveredValue !== null && hoveredBreakdown && tooltipPosition && (
@@ -1241,7 +1272,7 @@ export function WorldMap({
       <div className={`map-status ${wars > 0 ? "at-war" : "at-peace"}`} aria-hidden="true">
         <span className="live-pip" />
         {mapMode === "theaters"
-          ? `${PLAYERS[selected]!.name} · ${THEATER_LAYER_LABELS[theaterLayer]} · tick ${state.tick}`
+          ? `${realmLabel(state, selected)} · ${THEATER_LAYER_LABELS[theaterLayer]} · tick ${state.tick}`
           : <>{wars === 0 ? "All players at peace" : `${wars} active ${wars === 1 ? "war" : "wars"}`}
               {truces > 0 ? ` · ${truces} ${truces === 1 ? "alliance" : "alliances"}` : ""} · live tick {state.tick}</>}
       </div>

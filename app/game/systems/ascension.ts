@@ -1,3 +1,4 @@
+import { realmTitle } from "../naming";
 import { PLAYERS, PLAYER_ORDER } from "../players";
 import { ELEMENTS, baseMaskOf } from "../elements";
 import { baseDepthsOf, expressionFor, totalRealmsAbsorbed } from "../ascension";
@@ -37,7 +38,7 @@ export class ElementAscensionSystem implements SimulationSystem {
           kind: "dynasty.element-ascended",
           importance: definition.tier === 3 ? "historic" : "major",
           storyKey: `ascension:${id}`,
-          initiator: realmSubject(id),
+          initiator: realmSubject(state, id),
           targets: [],
           participants: [],
           links: {},
@@ -49,11 +50,11 @@ export class ElementAscensionSystem implements SimulationSystem {
             baseDepths: baseDepthsOf(faction.elementCounts),
           },
           summary: definition.tier === 3
-            ? `${PLAYERS[id].realmName} achieves ${definition.name}: mastered ${constituents.join(" and ")} united in one civilization.`
-            : `${PLAYERS[id].realmName} ascends: absorbed legacies of ${constituents.join(" and ")} fuse into ${definition.name}.`,
+            ? `${realmTitle(state, id)} achieves ${definition.name}: mastered ${constituents.join(" and ")} united in one civilization.`
+            : `${realmTitle(state, id)} ascends: absorbed legacies of ${constituents.join(" and ")} fuse into ${definition.name}.`,
         });
         context.emit(
-          `${PLAYERS[id].realmName} ascends to ${definition.name} — ${definition.title.toLowerCase()}.`,
+          `${realmTitle(state, id)} ascends to ${definition.name} — ${definition.title.toLowerCase()}.`,
           "rise",
           id,
         );

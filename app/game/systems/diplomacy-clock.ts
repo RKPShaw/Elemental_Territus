@@ -1,4 +1,5 @@
 
+import { realmTitle } from "../naming";
 import { allRelations } from "../diplomacy";
 import { PLAYERS } from "../players";
 import { realmSubject } from "../reporting";
@@ -22,12 +23,12 @@ export class DiplomacyClockSystem implements SimulationSystem {
           kind: "diplomacy.alliance-offer-expired",
           importance: "routine",
           storyKey: relation.storyKey ?? `alliance:${relation.key}:${relation.truceOfferAt}`,
-          initiator: realmSubject(offeredBy),
-          targets: [realmSubject(receiver)],
-          participants: relation.parties.map(realmSubject),
+          initiator: realmSubject(state, offeredBy),
+          targets: [realmSubject(state, receiver)],
+          participants: relation.parties.map((party) => realmSubject(state, party)),
           links: { relation: relation.key },
           facts: { offeredAt: relation.truceOfferAt },
-          summary: `${PLAYERS[receiver].realmName} allowed ${PLAYERS[offeredBy].realmName}'s alliance offer to expire.`,
+          summary: `${realmTitle(state, receiver)} allowed ${realmTitle(state, offeredBy)}'s alliance offer to expire.`,
         });
         relation.truceOfferBy = null;
         relation.truceOfferAt = 0;
@@ -45,15 +46,15 @@ export class DiplomacyClockSystem implements SimulationSystem {
         importance: "major",
         storyKey: allianceStoryKey,
         initiator: null,
-        targets: relation.parties.map(realmSubject),
-        participants: relation.parties.map(realmSubject),
+        targets: relation.parties.map((party) => realmSubject(state, party)),
+        participants: relation.parties.map((party) => realmSubject(state, party)),
         links: { relation: relation.key },
         facts: { duration: allianceDuration, tradeRemainedOpen: relation.tradeActive },
-        summary: `${PLAYERS[relation.parties[0]].realmName} and ${PLAYERS[relation.parties[1]].realmName} completed their alliance without betrayal.`,
+        summary: `${realmTitle(state, relation.parties[0])} and ${realmTitle(state, relation.parties[1])} completed their alliance without betrayal.`,
       });
       relation.storyKey = null;
       context.emit(
-        `${PLAYERS[relation.parties[0]].realmName} and ${PLAYERS[relation.parties[1]].realmName} complete their ten-minute truce and return to ordinary peace.`,
+        `${realmTitle(state, relation.parties[0])} and ${realmTitle(state, relation.parties[1])} complete their ten-minute truce and return to ordinary peace.`,
         "treaty",
       );
     }

@@ -224,6 +224,10 @@ function applyMetrics(story: StoryArc, event: WorldReportEvent): void {
       story.metrics.tier = numericFact(event, "tier");
       story.metrics.realmsAbsorbed = numericFact(event, "realmsAbsorbed");
       break;
+    case "dynasty.realm-renamed":
+      increment(story, "renames");
+      story.metrics.rank = numericFact(event, "rank");
+      break;
     case "leadership.strategy-adopted":
       increment(story, "turns");
       break;
@@ -325,6 +329,15 @@ function summarizeDynasty(story: StoryArc, event: WorldReportEvent): void {
     const ascensions = story.metrics.ascensions ?? 0;
     story.summary = ascensions > 1
       ? `${event.summary} Its history has now carried it up the tiers ${ascensions} times.`
+      : event.summary;
+    return;
+  }
+  if (event.kind === "dynasty.realm-renamed") {
+    const to = stringFact(event, "to");
+    story.headline = to ? `A realm rises as ${to}` : `${realm} takes a new name`;
+    const renames = story.metrics.renames ?? 0;
+    story.summary = renames > 1
+      ? `${event.summary} The realm's name has grown ${renames} times as its story was written.`
       : event.summary;
     return;
   }

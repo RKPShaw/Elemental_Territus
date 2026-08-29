@@ -1,12 +1,12 @@
 import { relationKey } from "./diplomacy";
 import { baseMaskOf } from "./elements";
 import { neighborIndices } from "./grid";
+import { draftFoundingNames, foundingIdentity } from "./naming";
 import { PLAYERS, PLAYER_ORDER, playerElement } from "./players";
 import { SeededRandom, cellNoise, smoothCellNoise } from "./random";
 import { createEconomyLedger } from "./economics";
 import { createStrategicRegions } from "./regions";
 import { createTheaterMap } from "./theater-map";
-import { realmSubject } from "./reporting";
 import { TERRAIN_RULES, calculateTroopCap, normalizedCellArea } from "./rules";
 import { claimInitialTerritory, draftSpawnSites } from "./spawn";
 import { createPowerState } from "./powers";
@@ -45,7 +45,15 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   diplomacyInterval: 16,
   constructionInterval: 2,
   strategyInterval: 40,
-  minimumPeaceTicks: 180,
+  /**
+   * Lowered from 180 when war became funded and frontier-reluctant: a long
+   * flat truce made every realm's pent-up desire fire on the first legal
+   * diplomacy pass, so the whole world attacked on one tick. The opening
+   * calm now comes from the incentives themselves — armies still settling
+   * the frontier, mobilization chests still filling — which release realm by
+   * realm instead of all at once.
+   */
+  minimumPeaceTicks: 64,
   victoryShare: 0.8,
   maximumTroops: 1_500_000,
 };
@@ -266,9 +274,95 @@ function carveRivers(
   return rivers;
 }
 
+/**
+ * Carves the minor rivers: streams that descend the same elevation field as
+ * the great rivers but stay land. A stream is a drawn line and a border
+ * (crossing it costs more; see STREAM_RULES), never a waterway — armies march
+ * over it and settlers claim its banks, so the map gains natural frontiers
+ * without gaining more water.
+ *
+ * Streams start lower and pack closer than rivers, and a course ends the
+ * moment it reaches the sea, a river, or another stream — a drainage network
+ * of lines feeding the real waterways.
+ */
+function carveStreams(
+  seed: number,
+  elevation: Float32Array,
+  rivers: Set<number>,
+  config: SimulationConfig,
+): number[][] {
+  const { width, height } = config;
+  const random = new SeededRandom((seed ^ 0x7ea6ce13) >>> 0 || 0x7ea6ce13);
+  const streamCells = new Set<number>();
+  const courses: number[][] = [];
+  const targetCount = Math.max(8, Math.round(Math.min(width, height) / 6));
+  const sources: number[] = [];
+  const minSourceGap = Math.min(width, height) / 9;
+
+  for (let attempt = 0; attempt < 1_400 && sources.length < targetCount; attempt += 1) {
+    const x = random.int(0, width - 1);
+    const y = random.int(0, height - 1);
+    const index = y * width + x;
+    if (elevation[index]! < SEA_LEVEL + 0.07 || rivers.has(index)) continue;
+    const spaced = sources.every((other) => {
+      const ox = other % width;
+      const oy = (other - ox) / width;
+      return Math.hypot(x - ox, y - oy) >= minSourceGap;
+    });
+    if (spaced) sources.push(index);
+  }
+
+  for (const source of sources) {
+    const course: number[] = [];
+    const visited = new Set<number>([source]);
+    let current = source;
+    let reachedWater = false;
+    const maxLength = Math.round((width + height) / 2);
+    while (course.length < maxLength) {
+      course.push(current);
+      if (
+        elevation[current]! < SEA_LEVEL ||
+        rivers.has(current) ||
+        (streamCells.has(current) && current !== source)
+      ) {
+        reachedWater = true;
+        break;
+      }
+      const cx = current % width;
+      const cy = (current - cx) / width;
+      let next = -1;
+      let lowest = Number.POSITIVE_INFINITY;
+      for (const [dx, dy] of RIVER_STEPS) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const neighbor = ny * width + nx;
+        if (visited.has(neighbor)) continue;
+        const wobble = (cellNoise(seed ^ 0x452821e6, neighbor, course.length) - 0.5) * 0.006;
+        const height_ = elevation[neighbor]! + wobble;
+        if (height_ < lowest) {
+          lowest = height_;
+          next = neighbor;
+        }
+      }
+      if (next < 0) break;
+      visited.add(next);
+      current = next;
+    }
+    // A creek that never joins the drainage would read as a scratch; a course
+    // shorter than a few cells would read as a speck.
+    if (!reachedWater || course.length < 6) continue;
+    for (const index of course) streamCells.add(index);
+    courses.push(course);
+  }
+  return courses;
+}
+
 interface GeneratedTerrain {
   terrain: TerrainId[];
   rivers: Set<number>;
+  /** Minor-river courses, for Cell.stream flags and thin-line rendering. */
+  streams: number[][];
 }
 
 /**
@@ -287,6 +381,11 @@ function generateTerrain(seed: number, config: SimulationConfig): GeneratedTerra
   }
 
   const rivers = carveRivers(seed, elevation, config);
+  // Streams stay out of the floodplain banding deliberately: turning their
+  // banks to farmland reshaped the terrain-cost field enough to push the
+  // strategic partition past its area budget. Streams are borders, not
+  // breadbaskets — the great rivers keep the rich valleys.
+  const streams = carveStreams(seed, elevation, rivers, config);
 
   // Band terrain by where a cell sits in this world's own height distribution
   // rather than by absolute height: continents of different bulk then still
@@ -328,7 +427,7 @@ function generateTerrain(seed: number, config: SimulationConfig): GeneratedTerra
     }
   }
   sinkIslets(terrain, width, height);
-  return { terrain, rivers };
+  return { terrain, rivers, streams };
 }
 
 /**
@@ -382,7 +481,7 @@ function emptyStructures(): StructureCounts {
   return { city: 0, fort: 0, factory: 0, harbor: 0, plant: 0, skyport: 0 };
 }
 
-function makeFaction(id: PlayerId, seed: number): FactionState {
+function makeFaction(id: PlayerId, seed: number, foundingName: string): FactionState {
   const element = playerElement(id);
   return {
     id,
@@ -413,6 +512,7 @@ function makeFaction(id: PlayerId, seed: number): FactionState {
     absorbedElements: [element],
     elementCounts: { [element]: 1 } as Record<ElementId, number>,
     lastConqueror: null,
+    identity: foundingIdentity(foundingName, element),
     intent: {
       target: null,
       posture: "peaceful",
@@ -425,18 +525,28 @@ function makeFaction(id: PlayerId, seed: number): FactionState {
 
 export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
   const random = new SeededRandom(seed);
-  const { terrain } = generateTerrain(seed, config);
+  const { terrain, streams } = generateTerrain(seed, config);
+  // Stream cells that survived terrain banding as land wear the flag; courses
+  // are kept whole for rendering even where a mouth touches water.
+  const streamCells = new Set<number>();
+  for (const course of streams) {
+    for (const index of course) {
+      if (terrain[index] !== "water") streamCells.add(index);
+    }
+  }
   const cells: Cell[] = [];
   for (let y = 0; y < config.height; y += 1) {
     for (let x = 0; x < config.width; x += 1) {
+      const index = y * config.width + x;
       cells.push({
         // Ownership is decided by the spawn draft once the whole map exists.
         owner: null,
-        terrain: terrain[y * config.width + x]!,
+        terrain: terrain[index]!,
         structure: null,
         structureLevel: 0,
         capitalOf: null,
         coastal: false,
+        stream: streamCells.has(index),
         pressure: 0,
         pressureBy: null,
         pressureTracked: false,
@@ -454,8 +564,11 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
     );
   }
 
+  // Founding names are plain and generic — villages, not elements. The
+  // naming system upgrades them as conquest, ascension and union earn it.
+  const foundingNames = draftFoundingNames(seed);
   const factions = Object.fromEntries(
-    PLAYER_ORDER.map((id) => [id, makeFaction(id, seed)]),
+    PLAYER_ORDER.map((id) => [id, makeFaction(id, seed, foundingNames[id]!)]),
   ) as Record<PlayerId, FactionState>;
 
   // Every player drafts a start from the finished map, then opens holding the
@@ -535,6 +648,7 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
     age: 1,
     landTiles,
     cells,
+    streams,
     factions,
     relations,
     campaigns: [],
@@ -571,7 +685,14 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
         storyKey: `world:${seed}`,
         initiator: null,
         targets: [],
-        participants: PLAYER_ORDER.map(realmSubject),
+        // The world is still being assembled here, so the founding subjects
+        // are built from the identities directly rather than through state.
+        participants: PLAYER_ORDER.map((id) => ({
+          type: "realm" as const,
+          id,
+          label: factions[id].identity.title,
+          realmId: id,
+        })),
         links: {},
         facts: {
           seed,

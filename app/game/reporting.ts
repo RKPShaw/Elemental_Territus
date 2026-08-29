@@ -1,5 +1,5 @@
 
-import { PLAYERS } from "./players";
+import { realmLabel, realmTitle } from "./naming";
 import { STRUCTURE_RULES } from "./rules";
 import type {
   Campaign,
@@ -11,6 +11,7 @@ import type {
   StoryArc,
   StructureType,
   WorldCommand,
+  WorldState,
 } from "./types";
 
 /** Compile-time audit contract: every executable player/AI action has factual event coverage. */
@@ -26,33 +27,37 @@ export const ACTION_REPORT_KINDS = {
   "build-warship": ["military.warship-built"],
 } as const satisfies Record<WorldCommand["type"], readonly ReportEventKind[]>;
 
-export function realmSubject(id: PlayerId): ReportSubject {
+// Every subject label reads the realm's living name from world state, so a
+// report written after a realm is crowned or renamed carries the name it bore
+// at that moment — the story system then tells the arc in period style.
+export function realmSubject(state: WorldState, id: PlayerId): ReportSubject {
   return {
     type: "realm",
     id,
-    label: PLAYERS[id].realmName,
+    label: realmTitle(state, id),
     realmId: id,
   };
 }
 
-export function targetSubject(target: CampaignTarget): ReportSubject {
+export function targetSubject(state: WorldState, target: CampaignTarget): ReportSubject {
   return target === "wilderness"
     ? { type: "wilderness", id: "wilderness", label: "the wilderness" }
-    : realmSubject(target);
+    : realmSubject(state, target);
 }
 
-export function campaignSubject(campaign: Campaign): ReportSubject {
+export function campaignSubject(state: WorldState, campaign: Campaign): ReportSubject {
   return {
     type: "campaign",
     id: campaign.id,
     label: campaign.target === "wilderness"
-      ? `${PLAYERS[campaign.attacker].name} settlement campaign`
-      : `${PLAYERS[campaign.attacker].name}–${PLAYERS[campaign.target].name} campaign`,
+      ? `${realmLabel(state, campaign.attacker)} settlement campaign`
+      : `${realmLabel(state, campaign.attacker)}–${realmLabel(state, campaign.target)} campaign`,
     realmId: campaign.attacker,
   };
 }
 
 export function theaterSubject(
+  state: WorldState,
   id: string,
   attacker: PlayerId,
   ordinal?: number,
@@ -60,12 +65,13 @@ export function theaterSubject(
   return {
     type: "theater",
     id,
-    label: `${PLAYERS[attacker].name} theater${ordinal === undefined ? "" : ` ${ordinal + 1}`}`,
+    label: `${realmLabel(state, attacker)} theater${ordinal === undefined ? "" : ` ${ordinal + 1}`}`,
     realmId: attacker,
   };
 }
 
 export function structureSubject(
+  state: WorldState,
   type: StructureType,
   tileIndex: number,
   owner: PlayerId,
@@ -73,7 +79,7 @@ export function structureSubject(
   return {
     type: "structure",
     id: `${type}:${tileIndex}`,
-    label: `${PLAYERS[owner].name} ${STRUCTURE_RULES[type].name.toLowerCase()}`,
+    label: `${realmLabel(state, owner)} ${STRUCTURE_RULES[type].name.toLowerCase()}`,
     realmId: owner,
   };
 }

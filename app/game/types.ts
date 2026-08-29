@@ -167,6 +167,12 @@ export interface Cell {
   structureLevel: number;
   capitalOf: PlayerId | null;
   coastal: boolean;
+  /**
+   * A minor river runs through this land cell. Streams are lines, not
+   * waterways: the cell stays ordinary land, but taking it costs more (see
+   * STREAM_RULES), so borders tend to come to rest along the watercourses.
+   */
+  stream: boolean;
   pressure: number;
   pressureBy: PlayerId | null;
   pressureTracked: boolean;
@@ -199,6 +205,53 @@ export interface ElementPowerState {
   charge: number;
   releasedAt: number;
   tally: number;
+}
+
+/**
+ * Why a realm's name changed. "founding" is the name it woke with; "conquest"
+ * is the title ladder climbing on absorbed realms and held land; "ascension"
+ * weaves a newly expressed element into the style; "union" folds a fallen
+ * great power's name into its conqueror's. "marriage" and "decree" are
+ * reserved for future dynastic systems — a married pair combining names, a
+ * court renaming itself — so those stories can reuse this same machinery.
+ */
+export type NameChangeReason =
+  | "founding"
+  | "conquest"
+  | "ascension"
+  | "union"
+  | "marriage"
+  | "decree";
+
+export interface NameChange {
+  tick: number;
+  from: string;
+  to: string;
+  reason: NameChangeReason;
+}
+
+/**
+ * A realm's living name. Realms wake with a plain, generic founding name --
+ * nothing elemental about a village -- and earn better ones: conquest climbs
+ * the title ladder toward empire, ascension styles the title with the element
+ * the realm now expresses, and absorbing a great power can fold its name into
+ * the conqueror's own. The full history is kept so stories can tell it.
+ */
+export interface RealmIdentity {
+  /** The core proper name, unique across the roster, e.g. "Corvale". */
+  name: string;
+  /** The styled full title stories and panels show, e.g. "Steam Kingdom of Corvale". */
+  title: string;
+  /** Rung on the title ladder, 0 (founding settlement) through 3 (empire). */
+  rank: number;
+  /** The name the realm woke with; never changes. */
+  foundingName: string;
+  /** The expressed element currently woven into the title. */
+  styledElement: ElementId;
+  /** Tick this realm's fall was folded into its conqueror's name; null while it stands. */
+  absorbedAt: number | null;
+  /** Every name this realm has carried, in order. */
+  changes: NameChange[];
 }
 
 export interface AiIntent {
@@ -272,6 +325,8 @@ export interface FactionState {
    */
   elementCounts: Record<ElementId, number>;
   lastConqueror: PlayerId | null;
+  /** The realm's living name and its history; see naming.ts. */
+  identity: RealmIdentity;
   intent: AiIntent;
 }
 
@@ -727,6 +782,12 @@ export interface WorldState {
   age: number;
   landTiles: number;
   cells: Cell[];
+  /**
+   * The minor rivers, one course per stream as ascending walks of cell
+   * indices, kept for rendering: the map draws each course as a thin line.
+   * The gameplay effect lives on the cells themselves (Cell.stream).
+   */
+  streams: number[][];
   factions: Record<PlayerId, FactionState>;
   relations: Record<string, RelationState>;
   campaigns: Campaign[];

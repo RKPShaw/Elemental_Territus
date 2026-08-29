@@ -267,6 +267,18 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     ascensionBooksExact,
   );
 
+  // The naming system: founding names must be unique, and by the horizon at
+  // least one realm should have earned a better title — conquest, ascension
+  // styling and union all funnel through the same rename report.
+  const renames = count("dynasty.realm-renamed");
+  const namingIds = new Set(PLAYER_ORDER.map((id) => state.factions[id].identity.name));
+  add(
+    "realm-naming",
+    "unique founding names that climb the title ladder",
+    namingIds.size === PLAYER_ORDER.length && renames > 0,
+    `${namingIds.size}/${PLAYER_ORDER.length} unique names, ${renames} renames recorded`,
+  );
+
   // The bespoke tier 3 mechanics. One invariant line can genuinely fail:
   // every living realm's power meter must sit inside its band. The
   // per-mechanic lines are evidence lines — each mechanic's drama is

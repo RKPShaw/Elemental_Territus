@@ -1,3 +1,4 @@
+import { realmLabel, realmTitle } from "../naming";
 import { markCellsChanged } from "../structure-index";
 import { tradesBy } from "../elements";
 import { recordSpend } from "../economics";
@@ -18,6 +19,7 @@ import {
   STRUCTURE_RULES,
   WARSHIP_COST,
   compactNumber,
+  mobilizationCostFor,
   nextStructureCost,
 } from "../rules";
 import type { Campaign, PlayerId, SimulationContext, SimulationSystem, WorldReportDraft } from "../types";
@@ -80,6 +82,14 @@ export class CommandExecutionSystem implements SimulationSystem {
         const previousRelationSince = relation.since;
         if (relation.status === "war") continue;
         if (!betrayingTruce && state.tick < relation.cooldownUntil) continue;
+        // War is funded: the declaration spends the mobilization chest on
+        // raising and provisioning the host. A court whose treasury cannot
+        // cover it does not go to war this term, which is what lets economies
+        // that grow at different rates open their wars at different times —
+        // and an emptied chest delays the same realm's next declaration.
+        const mobilization = mobilizationCostFor(actor.troops);
+        if (actor.gold < mobilization) continue;
+        actor.gold -= mobilization;
         const targetIsExposedTraitor = state.tick < state.factions[command.target].traitorUntil;
         const allianceStoryKey = relation.storyKey;
         if (betrayingTruce && !targetIsExposedTraitor) {
@@ -102,9 +112,9 @@ export class CommandExecutionSystem implements SimulationSystem {
             kind: "diplomacy.alliance-betrayed",
             importance: "historic",
             storyKey: allianceStoryKey ?? `alliance:${relation.key}:${relation.since}`,
-            initiator: realmSubject(command.actor),
-            targets: [realmSubject(command.target)],
-            participants: relation.parties.map(realmSubject),
+            initiator: realmSubject(state, command.actor),
+            targets: [realmSubject(state, command.target)],
+            participants: relation.parties.map((party) => realmSubject(state, party)),
             links: { relation: relation.key },
             facts: {
               targetAlreadyTraitor: targetIsExposedTraitor,
@@ -112,7 +122,7 @@ export class CommandExecutionSystem implements SimulationSystem {
               traitorDuration: targetIsExposedTraitor ? 0 : DIPLOMACY_RULES.traitorDurationTicks,
               allianceDuration: state.tick - previousRelationSince,
             },
-            summary: `${PLAYERS[command.actor].realmName} broke its alliance with ${PLAYERS[command.target].realmName}.`,
+            summary: `${realmTitle(state, command.actor)} broke its alliance with ${realmTitle(state, command.target)}.`,
           });
         }
         relation.storyKey = `war:${relation.key}:${state.tick}`;
@@ -121,23 +131,24 @@ export class CommandExecutionSystem implements SimulationSystem {
           kind: "diplomacy.war-declared",
           importance: betrayingTruce ? "historic" : "major",
           storyKey: relation.storyKey,
-          initiator: realmSubject(command.actor),
-          targets: [realmSubject(command.target)],
-          participants: relation.parties.map(realmSubject),
+          initiator: realmSubject(state, command.actor),
+          targets: [realmSubject(state, command.target)],
+          participants: relation.parties.map((party) => realmSubject(state, party)),
           links: { relation: relation.key },
           facts: {
             betrayal: betrayingTruce,
             targetAlreadyTraitor: targetIsExposedTraitor,
             tradeStopped: true,
+            mobilizationGold: mobilization,
           },
-          summary: `${PLAYERS[command.actor].realmName} declared war on ${PLAYERS[command.target].realmName}${betrayingTruce ? " by breaking their alliance" : ""}.`,
+          summary: `${realmTitle(state, command.actor)} declared war on ${realmTitle(state, command.target)}${betrayingTruce ? " by breaking their alliance" : ""}.`,
         });
         context.emit(
           betrayingTruce
             ? targetIsExposedTraitor
-              ? `${PLAYERS[command.actor].realmName} turns on the exposed traitor ${PLAYERS[command.target].realmName} without staining its own honor.`
-              : `${PLAYERS[command.actor].realmName} betrays its truce with ${PLAYERS[command.target].realmName}. For 30 seconds, every rival can strike the traitor more easily.`
-            : `${PLAYERS[command.actor].realmName} formally declares war on ${PLAYERS[command.target].realmName}. Trade stops at once.`,
+              ? `${realmTitle(state, command.actor)} turns on the exposed traitor ${realmTitle(state, command.target)} without staining its own honor.`
+              : `${realmTitle(state, command.actor)} betrays its truce with ${realmTitle(state, command.target)}. For 30 seconds, every rival can strike the traitor more easily.`
+            : `${realmTitle(state, command.actor)} formally declares war on ${realmTitle(state, command.target)}. Trade stops at once.`,
           "battle",
           command.actor,
         );
@@ -159,15 +170,15 @@ export class CommandExecutionSystem implements SimulationSystem {
           kind: "diplomacy.alliance-offered",
           importance: "notable",
           storyKey: relation.storyKey,
-          initiator: realmSubject(command.actor),
-          targets: [realmSubject(command.target)],
-          participants: relation.parties.map(realmSubject),
+          initiator: realmSubject(state, command.actor),
+          targets: [realmSubject(state, command.target)],
+          participants: relation.parties.map((party) => realmSubject(state, party)),
           links: { relation: relation.key },
           facts: { offerExpiresIn: DIPLOMACY_RULES.truceOfferDurationTicks },
-          summary: `${PLAYERS[command.actor].realmName} offered ${PLAYERS[command.target].realmName} an alliance.`,
+          summary: `${realmTitle(state, command.actor)} offered ${realmTitle(state, command.target)} an alliance.`,
         });
         context.emit(
-          `${PLAYERS[command.actor].realmName} offers ${PLAYERS[command.target].realmName} a ten-minute alliance truce.`,
+          `${realmTitle(state, command.actor)} offers ${realmTitle(state, command.target)} a ten-minute alliance truce.`,
           "treaty",
           command.actor,
         );
@@ -190,18 +201,18 @@ export class CommandExecutionSystem implements SimulationSystem {
           kind: "diplomacy.alliance-formed",
           importance: "major",
           storyKey: relation.storyKey,
-          initiator: realmSubject(command.actor),
-          targets: [realmSubject(command.target)],
-          participants: relation.parties.map(realmSubject),
+          initiator: realmSubject(state, command.actor),
+          targets: [realmSubject(state, command.target)],
+          participants: relation.parties.map((party) => realmSubject(state, party)),
           links: { relation: relation.key },
           facts: {
             duration: DIPLOMACY_RULES.truceDurationTicks,
             tradeOpened: true,
           },
-          summary: `${PLAYERS[command.actor].realmName} accepted ${PLAYERS[command.target].realmName}'s alliance offer.`,
+          summary: `${realmTitle(state, command.actor)} accepted ${realmTitle(state, command.target)}'s alliance offer.`,
         });
         context.emit(
-          `${PLAYERS[command.actor].realmName} accepts ${PLAYERS[command.target].realmName}'s alliance. Their truce and favored trade begin now.`,
+          `${realmTitle(state, command.actor)} accepts ${realmTitle(state, command.target)}'s alliance. Their truce and favored trade begin now.`,
           "treaty",
           command.actor,
         );
@@ -224,18 +235,18 @@ export class CommandExecutionSystem implements SimulationSystem {
           kind: "diplomacy.trade-policy-changed",
           importance: "notable",
           storyKey: tradeStoryKey,
-          initiator: realmSubject(command.actor),
-          targets: [realmSubject(command.target)],
-          participants: relation.parties.map(realmSubject),
+          initiator: realmSubject(state, command.actor),
+          targets: [realmSubject(state, command.target)],
+          participants: relation.parties.map((party) => realmSubject(state, party)),
           links: { relation: relation.key },
           facts: {
             enabled: command.enabled,
             relationStatus: relation.status,
           },
-          summary: `${PLAYERS[command.actor].realmName} ${command.enabled ? "reopened" : "closed"} trade with ${PLAYERS[command.target].realmName}.`,
+          summary: `${realmTitle(state, command.actor)} ${command.enabled ? "reopened" : "closed"} trade with ${realmTitle(state, command.target)}.`,
         });
         context.emit(
-          `${PLAYERS[command.actor].realmName} ${command.enabled ? "reopens" : "closes"} trade with ${PLAYERS[command.target].realmName}.`,
+          `${realmTitle(state, command.actor)} ${command.enabled ? "reopens" : "closes"} trade with ${realmTitle(state, command.target)}.`,
           "economy",
           command.actor,
         );
@@ -273,16 +284,16 @@ export class CommandExecutionSystem implements SimulationSystem {
                 kind: "military.theater-victory",
                 importance: theater.captures >= 25 ? "major" : "notable",
                 storyKey: campaign.storyKey,
-                initiator: realmSubject(campaign.attacker),
-                targets: [theaterSubject(theater.id, theater.attacker), targetSubject(campaign.target)],
-                participants: [campaignSubject(campaign)],
+                initiator: realmSubject(state, campaign.attacker),
+                targets: [theaterSubject(state, theater.id, theater.attacker), targetSubject(state, campaign.target)],
+                participants: [campaignSubject(state, campaign)],
                 links: { campaign: campaign.id, theater: theater.id, relation: relation.key },
                 facts: {
                   captures: theater.captures,
                   duration: state.tick - theater.formedAt,
                   outcome: "peace",
                 },
-                summary: `${theaterSubject(theater.id, theater.attacker).label} closed with ${theater.captures} captured sectors when peace was signed.`,
+                summary: `${theaterSubject(state, theater.id, theater.attacker).label} closed with ${theater.captures} captured sectors when peace was signed.`,
               });
             }
             report({
@@ -290,9 +301,9 @@ export class CommandExecutionSystem implements SimulationSystem {
               kind: "military.campaign-concluded",
               importance: campaign.captures > 0 ? "major" : "notable",
               storyKey: campaign.storyKey,
-              initiator: realmSubject(campaign.attacker),
-              targets: [targetSubject(campaign.target)],
-              participants: [campaignSubject(campaign)],
+              initiator: realmSubject(state, campaign.attacker),
+              targets: [targetSubject(state, campaign.target)],
+              participants: [campaignSubject(state, campaign)],
               links: { campaign: campaign.id, relation: relation.key },
               facts: {
                 outcome: "peace",
@@ -301,7 +312,7 @@ export class CommandExecutionSystem implements SimulationSystem {
                 attackersRemaining: campaign.remaining,
                 defendersRemaining: campaign.defenderRemaining,
               },
-              summary: `${PLAYERS[campaign.attacker].realmName}'s campaign ended when peace was signed after ${campaign.captures} captured sectors.`,
+              summary: `${realmTitle(state, campaign.attacker)}'s campaign ended when peace was signed after ${campaign.captures} captured sectors.`,
             });
             state.factions[campaign.attacker].troops += campaign.remaining * 0.75;
             state.factions[campaign.target].troops += campaign.defenderRemaining * 0.9;
@@ -315,19 +326,19 @@ export class CommandExecutionSystem implements SimulationSystem {
           kind: "diplomacy.peace-made",
           importance: "major",
           storyKey: warStoryKey,
-          initiator: realmSubject(command.actor),
-          targets: [realmSubject(command.target)],
-          participants: relation.parties.map(realmSubject),
+          initiator: realmSubject(state, command.actor),
+          targets: [realmSubject(state, command.target)],
+          participants: relation.parties.map((party) => realmSubject(state, party)),
           links: { relation: relation.key },
           facts: {
             warDuration: state.tick - warStartedAt,
             tradeReopened: true,
           },
-          summary: `${PLAYERS[command.actor].realmName} and ${PLAYERS[command.target].realmName} ended their war in peace.`,
+          summary: `${realmTitle(state, command.actor)} and ${realmTitle(state, command.target)} ended their war in peace.`,
         });
         relation.storyKey = null;
         context.emit(
-          `${PLAYERS[command.actor].realmName} and ${PLAYERS[command.target].realmName} sign a peace. Their trade lines may run again.`,
+          `${realmTitle(state, command.actor)} and ${realmTitle(state, command.target)} sign a peace. Their trade lines may run again.`,
           "treaty",
           command.actor,
         );
@@ -341,10 +352,12 @@ export class CommandExecutionSystem implements SimulationSystem {
         if (command.target !== "wilderness") {
           const defender = state.factions[command.target];
           const relation = getRelation(state, command.actor, command.target);
+          // Either party to a war may campaign: the aggressor presses its
+          // invasion, and the defender counterattacks to take its ground back
+          // rather than being condemned to blunting forever.
           if (
             !defender.alive ||
             relation.status !== "war" ||
-            relation.lastAggressor !== command.actor ||
             command.mode === "settlement"
           ) continue;
           relation.storyKey ??= `war:${relation.key}:${relation.since}`;
@@ -383,9 +396,9 @@ export class CommandExecutionSystem implements SimulationSystem {
             kind: "military.campaign-reinforced",
             importance: "notable",
             storyKey: existing.storyKey,
-            initiator: realmSubject(command.actor),
-            targets: [targetSubject(command.target)],
-            participants: [campaignSubject(existing)],
+            initiator: realmSubject(state, command.actor),
+            targets: [targetSubject(state, command.target)],
+            participants: [campaignSubject(state, existing)],
             links: { campaign: existing.id },
             facts: {
               troops,
@@ -393,12 +406,12 @@ export class CommandExecutionSystem implements SimulationSystem {
               mode: existing.mode,
               goldCost: command.mode === "naval" ? 15_000 : 0,
             },
-            summary: `${PLAYERS[command.actor].realmName} reinforced its ${settling ? "wilderness" : PLAYERS[command.target as PlayerId].name} campaign with ${compactNumber(troops)} troops.`,
+            summary: `${realmTitle(state, command.actor)} reinforced its ${settling ? "wilderness" : realmLabel(state, command.target as PlayerId)} campaign with ${compactNumber(troops)} troops.`,
           });
           context.emit(
             settling
-              ? `${PLAYERS[command.actor].realmName} sends ${compactNumber(troops)} more settlers into its wilderness campaign.`
-              : `${PLAYERS[command.actor].realmName} sends ${compactNumber(troops)} more troops into the front against ${PLAYERS[command.target as PlayerId].name}.`,
+              ? `${realmTitle(state, command.actor)} sends ${compactNumber(troops)} more settlers into its wilderness campaign.`
+              : `${realmTitle(state, command.actor)} sends ${compactNumber(troops)} more troops into the front against ${realmLabel(state, command.target as PlayerId)}.`,
             settling ? "rise" : "battle",
             command.actor,
           );
@@ -435,9 +448,9 @@ export class CommandExecutionSystem implements SimulationSystem {
           kind: "military.campaign-launched",
           importance: settling ? "notable" : "major",
           storyKey: campaign.storyKey,
-          initiator: realmSubject(command.actor),
-          targets: [targetSubject(command.target)],
-          participants: [campaignSubject(campaign)],
+          initiator: realmSubject(state, command.actor),
+          targets: [targetSubject(state, command.target)],
+          participants: [campaignSubject(state, campaign)],
           links: { campaign: campaign.id },
           facts: {
             troops,
@@ -448,14 +461,14 @@ export class CommandExecutionSystem implements SimulationSystem {
             waterRouteCells: campaign.pathIndices.length,
             waterRouteDistance: navalJourney?.distance ?? 0,
           },
-          summary: `${PLAYERS[command.actor].realmName} initiated a ${command.mode} campaign against ${command.target === "wilderness" ? "the wilderness" : PLAYERS[command.target].realmName} with ${compactNumber(troops)} troops.`,
+          summary: `${realmTitle(state, command.actor)} initiated a ${command.mode} campaign against ${command.target === "wilderness" ? "the wilderness" : realmTitle(state, command.target)} with ${compactNumber(troops)} troops.`,
         });
         context.emit(
           settling
-            ? `${PLAYERS[command.actor].realmName} commits ${compactNumber(troops)} people to settle every automatically discovered wilderness theater.`
+            ? `${realmTitle(state, command.actor)} commits ${compactNumber(troops)} people to settle every automatically discovered wilderness theater.`
             : command.mode === "naval"
-            ? `${PLAYERS[command.actor].realmName} loads ${compactNumber(troops)} troops into transport boats bound for ${PLAYERS[command.target as PlayerId].realmName}.`
-            : `${PLAYERS[command.actor].realmName} commits ${compactNumber(troops)} troops to push the frontier into ${PLAYERS[command.target as PlayerId].realmName}.`,
+            ? `${realmTitle(state, command.actor)} loads ${compactNumber(troops)} troops into transport boats bound for ${realmTitle(state, command.target as PlayerId)}.`
+            : `${realmTitle(state, command.actor)} commits ${compactNumber(troops)} troops to push the frontier into ${realmTitle(state, command.target as PlayerId)}.`,
           settling ? "rise" : "battle",
           command.actor,
         );
@@ -464,7 +477,9 @@ export class CommandExecutionSystem implements SimulationSystem {
 
       if (command.type === "commit-defense") {
         const relation = getRelation(state, command.actor, command.target);
-        if (relation.status !== "war" || relation.lastAggressor === command.actor) continue;
+        // Any invaded party may blunt the campaign pressing it — including an
+        // aggressor whose target has counterattacked.
+        if (relation.status !== "war") continue;
         const campaign = state.campaigns.find(
           (candidate) =>
             candidate.attacker === command.target &&
@@ -482,19 +497,19 @@ export class CommandExecutionSystem implements SimulationSystem {
           kind: "military.defense-committed",
           importance: "major",
           storyKey: campaign.storyKey,
-          initiator: realmSubject(command.actor),
-          targets: [realmSubject(command.target)],
-          participants: [campaignSubject(campaign)],
+          initiator: realmSubject(state, command.actor),
+          targets: [realmSubject(state, command.target)],
+          participants: [campaignSubject(state, campaign)],
           links: { campaign: campaign.id },
           facts: {
             troops,
             totalDefenderCommitted: campaign.initialDefenderCommitted,
             attackersRemaining: campaign.remaining,
           },
-          summary: `${PLAYERS[command.actor].realmName} committed ${compactNumber(troops)} defenders against ${PLAYERS[command.target].realmName}'s campaign.`,
+          summary: `${realmTitle(state, command.actor)} committed ${compactNumber(troops)} defenders against ${realmTitle(state, command.target)}'s campaign.`,
         });
         context.emit(
-          `${PLAYERS[command.actor].realmName} reserves ${compactNumber(troops)} troops to stunt ${PLAYERS[command.target].name}'s advancing front.`,
+          `${realmTitle(state, command.actor)} reserves ${compactNumber(troops)} troops to stunt ${realmLabel(state, command.target)}'s advancing front.`,
           "battle",
           command.actor,
         );
@@ -547,9 +562,9 @@ export class CommandExecutionSystem implements SimulationSystem {
           kind: "infrastructure.structure-built",
           importance: command.structure === "city" || command.structure === "fort" ? "major" : "notable",
           storyKey: `development:${command.actor}:${Math.floor(state.tick / 240)}`,
-          initiator: realmSubject(command.actor),
-          targets: [structureSubject(command.structure, command.tileIndex, command.actor)],
-          participants: [realmSubject(command.actor)],
+          initiator: realmSubject(state, command.actor),
+          targets: [structureSubject(state, command.structure, command.tileIndex, command.actor)],
+          participants: [realmSubject(state, command.actor)],
           links: { structure: `${command.structure}:${command.tileIndex}` },
           facts: {
             structure: command.structure,
@@ -561,13 +576,13 @@ export class CommandExecutionSystem implements SimulationSystem {
             structureLevel: cell.structureLevel,
           },
           summary: stackingCity
-            ? `${PLAYERS[command.actor].realmName} developed city level ${cell.structureLevel} at sector ${command.tileIndex}.`
-            : `${PLAYERS[command.actor].realmName} completed a ${rule.name.toLowerCase()} at sector ${command.tileIndex}.`,
+            ? `${realmTitle(state, command.actor)} developed city level ${cell.structureLevel} at sector ${command.tileIndex}.`
+            : `${realmTitle(state, command.actor)} completed a ${rule.name.toLowerCase()} at sector ${command.tileIndex}.`,
         });
         context.emit(
           stackingCity
-            ? `${PLAYERS[command.actor].realmName} stacks another city district into a defensible urban center.`
-            : `${PLAYERS[command.actor].realmName} completes a new ${rule.name.toLowerCase()}.`,
+            ? `${realmTitle(state, command.actor)} stacks another city district into a defensible urban center.`
+            : `${realmTitle(state, command.actor)} completes a new ${rule.name.toLowerCase()}.`,
           "economy",
           command.actor,
         );
@@ -583,15 +598,15 @@ export class CommandExecutionSystem implements SimulationSystem {
           kind: "military.warship-built",
           importance: "notable",
           storyKey: `development:${command.actor}:${Math.floor(state.tick / 240)}`,
-          initiator: realmSubject(command.actor),
+          initiator: realmSubject(state, command.actor),
           targets: [],
-          participants: [realmSubject(command.actor)],
+          participants: [realmSubject(state, command.actor)],
           links: {},
           facts: { cost: WARSHIP_COST, totalWarships: actor.warships },
-          summary: `${PLAYERS[command.actor].realmName} launched warship ${actor.warships}.`,
+          summary: `${realmTitle(state, command.actor)} launched warship ${actor.warships}.`,
         });
         context.emit(
-          `${PLAYERS[command.actor].realmName} launches a patrol warship from its harbor.`,
+          `${realmTitle(state, command.actor)} launches a patrol warship from its harbor.`,
           "economy",
           command.actor,
         );
