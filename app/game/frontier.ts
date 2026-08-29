@@ -55,8 +55,16 @@ function build(state: WorldState): FrontierIndex {
       const nx = side === 1 ? x + 1 : side === 3 ? x - 1 : x;
       const ny = side === 0 ? y - 1 : side === 2 ? y + 1 : y;
       if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-      const neighbourOwner = cells[ny * width + nx]!.owner;
+      const neighbour = cells[ny * width + nx]!;
+      const neighbourOwner = neighbour.owner;
       if (neighbourOwner === null || neighbourOwner === owner) continue;
+      // A stream is a border that takes a ship to force. An army may not
+      // march into another realm's ground when the step enters or leaves the
+      // watercourse -- the front comes to rest on the river, and crossing it
+      // means a naval campaign, exactly as the open sea does. Settlers still
+      // ford streams: wilderness (owner === null) stays reachable, or whole
+      // valleys would go unclaimed forever.
+      if (owner !== null && (cell.stream || neighbour.stream)) continue;
       let seen = false;
       for (let a = 0; a < found; a += 1) {
         if (adjacent[a] === neighbourOwner) { seen = true; break; }

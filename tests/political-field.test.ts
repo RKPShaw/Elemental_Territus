@@ -22,6 +22,13 @@ const FIXTURE_SEED = 0x240823;
 
 function snapshotPair(ticksApart: number): { before: WorldState; after: WorldState } {
   const engine = new ElementalWarEngine(FIXTURE_SEED);
+  // The opening economy is deliberately slow now — realms save toward their
+  // first works and war chests for hundreds of ticks. This fixture pins the
+  // interpolated field's contracts, not the pacing, so realms are staked up
+  // front to get campaigns moving inside the snapshot window.
+  engine.observe((state) => {
+    for (const faction of Object.values(state.factions)) faction.gold = 200_000;
+  });
   engine.advance(240);
   const before = engine.snapshot();
   engine.advance(ticksApart);

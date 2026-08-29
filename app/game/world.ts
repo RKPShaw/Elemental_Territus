@@ -187,6 +187,28 @@ const RIVER_STEPS = [
 ] as const;
 
 /**
+ * Water keeps its heading. Pure steepest-descent walks spiral around flat
+ * basins -- the visited set forbids going back, so the course coils tighter
+ * and tighter until it reads as a swirl rather than a river. Charging a
+ * course extra for how sharply a step bends away from its current heading
+ * makes straight-through free, a soft bend cheap and a hairpin dear, which is
+ * how real water behaves: momentum carries it down the valley.
+ */
+function turnPenalty(
+  previousDx: number,
+  previousDy: number,
+  dx: number,
+  dy: number,
+  weight: number,
+): number {
+  if (previousDx === 0 && previousDy === 0) return 0;
+  const alignment =
+    (previousDx * dx + previousDy * dy) /
+    (Math.hypot(previousDx, previousDy) * Math.hypot(dx, dy));
+  return ((1 - alignment) / 2) * weight;
+}
+
+/**
  * Carves rivers into the elevation field, returning the set of cells that
  * become running water.
  *
@@ -227,6 +249,8 @@ function carveRivers(
     const course: number[] = [];
     const visited = new Set<number>([source]);
     let current = source;
+    let headingX = 0;
+    let headingY = 0;
     const maxLength = width + height;
     while (course.length < maxLength) {
       course.push(current);
@@ -242,15 +266,18 @@ function carveRivers(
         const neighbor = ny * width + nx;
         if (visited.has(neighbor)) continue;
         // A whisper of noise in the comparison keeps the course from running
-        // dead straight down a smooth slope.
+        // dead straight down a smooth slope; the turn penalty keeps that
+        // wobble a meander rather than a coil.
         const wobble = (cellNoise(seed ^ 0x2b7e1516, neighbor, course.length) - 0.5) * 0.004;
-        const height_ = elevation[neighbor]! + wobble;
+        const height_ = elevation[neighbor]! + wobble + turnPenalty(headingX, headingY, dx, dy, 0.01);
         if (height_ < lowest) {
           lowest = height_;
           next = neighbor;
         }
       }
       if (next < 0) break;
+      headingX = (next % width) - cx;
+      headingY = Math.floor(next / width) - cy;
       // A diagonal step also carves the lower of the two cells it corners
       // past, so the channel is watertight: no pinhole crossings for armies,
       // and no banks left touching only corner-to-corner.
@@ -316,6 +343,8 @@ function carveStreams(
     const course: number[] = [];
     const visited = new Set<number>([source]);
     let current = source;
+    let headingX = 0;
+    let headingY = 0;
     let reachedWater = false;
     const maxLength = Math.round((width + height) / 2);
     while (course.length < maxLength) {
@@ -339,13 +368,15 @@ function carveStreams(
         const neighbor = ny * width + nx;
         if (visited.has(neighbor)) continue;
         const wobble = (cellNoise(seed ^ 0x452821e6, neighbor, course.length) - 0.5) * 0.006;
-        const height_ = elevation[neighbor]! + wobble;
+        const height_ = elevation[neighbor]! + wobble + turnPenalty(headingX, headingY, dx, dy, 0.035);
         if (height_ < lowest) {
           lowest = height_;
           next = neighbor;
         }
       }
       if (next < 0) break;
+      headingX = (next % width) - cx;
+      headingY = Math.floor(next / width) - cy;
       visited.add(next);
       current = next;
     }
@@ -427,7 +458,18 @@ function generateTerrain(seed: number, config: SimulationConfig): GeneratedTerra
     }
   }
   sinkIslets(terrain, width, height);
-  return { terrain, rivers, streams };
+  // A stream's last cell is the sea or river it feeds -- water terrain -- and
+  // drawing the course through it poked a thread of stream out into open
+  // water. Courses are trimmed to the land they actually run over, so the
+  // drawn line and the stream flag both stop at the bank and the mouth is
+  // implied by the water it reaches.
+  const trimmedStreams = streams
+    .map((course) => {
+      const firstWater = course.findIndex((index) => terrain[index] === "water");
+      return firstWater < 0 ? course : course.slice(0, firstWater);
+    })
+    .filter((course) => course.length >= 2);
+  return { terrain, rivers, streams: trimmedStreams };
 }
 
 /**
@@ -495,7 +537,10 @@ function makeFaction(id: PlayerId, seed: number, foundingName: string): FactionS
     troops: 0,
     troopCap: 1,
     troopGrowth: 0,
-    gold: 20_000,
+    // A token founding purse. The old 20K bought the first factory almost
+    // immediately; the opening economy now runs on tax, so the first
+    // structure is saved for across roughly four hundred ticks instead.
+    gold: 2_000,
     goldRate: 0,
     economy: createEconomyLedger(),
     sustainableLand: 0,
@@ -526,13 +571,10 @@ function makeFaction(id: PlayerId, seed: number, foundingName: string): FactionS
 export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
   const random = new SeededRandom(seed);
   const { terrain, streams } = generateTerrain(seed, config);
-  // Stream cells that survived terrain banding as land wear the flag; courses
-  // are kept whole for rendering even where a mouth touches water.
+  // Courses arrive trimmed to land, so every cell on one wears the flag.
   const streamCells = new Set<number>();
   for (const course of streams) {
-    for (const index of course) {
-      if (terrain[index] !== "water") streamCells.add(index);
-    }
+    for (const index of course) streamCells.add(index);
   }
   const cells: Cell[] = [];
   for (let y = 0; y < config.height; y += 1) {
@@ -559,8 +601,11 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
   for (let index = 0; index < cells.length; index += 1) {
     const cell = cells[index]!;
     if (cell.terrain === "water") continue;
+    // A stream bank counts as coast: streams are navigable waterways now, so
+    // a realm on a river can raise a harbor and float transports from it the
+    // same way a realm on the sea does.
     cell.coastal = neighborIndices(index, config.width, config.height).some(
-      (neighbor) => cells[neighbor]!.terrain === "water",
+      (neighbor) => cells[neighbor]!.terrain === "water" || cells[neighbor]!.stream,
     );
   }
 
@@ -669,7 +714,7 @@ export function createWorld(seed: number, config = DEFAULT_CONFIG): WorldState {
         id: 1,
         tick: 0,
         tone: "world",
-        text: `${worldName} wakes mostly unclaimed. ${PLAYER_ORDER.length} players across four founding families raise banners with 20K treasuries and no developed infrastructure.`,
+        text: `${worldName} wakes mostly unclaimed. ${PLAYER_ORDER.length} players across four founding families raise banners with 2K treasuries and no developed infrastructure.`,
         actor: null,
       },
     ],

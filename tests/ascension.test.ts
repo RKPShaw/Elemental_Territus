@@ -190,8 +190,15 @@ test("conquest histories produce ascensions and report them as dynasty facts", (
   // The horizon followed funded mobilization out: wars now open when each
   // realm's chest and frontier allow rather than all on the first legal
   // tick, so the conquest histories that assemble a tier 2 arrive a couple
-  // of hundred ticks later on this seed (first ascension ~1420).
-  const state = new ElementalWarEngine(0x240823).step(1_500);
+  // of hundred ticks later on this seed (first ascension ~1420). The slow
+  // opening economy pushed them out again, past any horizon this test can
+  // afford to run — so realms are staked war chests up front, and the test
+  // stays about ascension mechanics rather than about how long saving takes.
+  const engine = new ElementalWarEngine(0x240823);
+  engine.observe((world) => {
+    for (const faction of Object.values(world.factions)) faction.gold = 1_000_000;
+  });
+  const state = engine.step(1_500);
   const ascensions = state.reports.filter(
     (event) => event.kind === "dynasty.element-ascended",
   );
