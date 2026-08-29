@@ -688,10 +688,25 @@ export const STRATEGY_RULES = {
  * the carriers take the same twentyfold from three levers at once — longer
  * waits between dispatches, slower vehicles, smaller rewards — so trade
  * reads as sparse and unhurried rather than merely cheap. See TRADE_RULES.
+ *
+ * Two and a half of that twentyfold has since come back, to the passive rates
+ * alone. The ladder was priced so that "the first savings milestone lands as
+ * the frontier closes", and it did — against a frontier that ran to about
+ * tick 2,400. Population management then roughly halved the frontier era
+ * without the ladder following it, and the two clocks came apart: a ten-game
+ * sweep to tick 6,000 had the world fully settled by tick ~1,200 and the
+ * median realm's first building at tick 2,354, by which point a third of the
+ * roster was already dead and the survivors were deciding the map by war.
+ * Construction was not a decision anyone got to make.
+ *
+ * So ground and capitals pay two and a half times what they did, which puts
+ * the first rung back where it was meant to land. The carriers are
+ * deliberately left alone: trade should stay sparse and unhurried, and its
+ * three levers are the wrong place to chase a build clock.
  */
 export const ECONOMY_RULES = {
-  landIncomeScale: 0.024,
-  cityIncome: 5,
+  landIncomeScale: 0.06,
+  cityIncome: 12.5,
   maximumTreasury: 100_000_000,
 } as const;
 

@@ -45,6 +45,22 @@ import { cellDigest, worldDigest } from "./world-digest";
  * always-zero goldCost fact came off campaign launches with the fee it
  * described.
  *
+ * Then construction, which had gone quiet for the same reason war had. Ground
+ * and capitals pay two and a half times what they did, because the ladder was
+ * priced to have a realm's first building land as its frontier closed and
+ * population management halved the frontier era without the ladder following:
+ * the median first building sat at tick 2,354 against a world settled by
+ * ~1,200, and it lands at tick 1,138 now. Three gold thresholds stranded by
+ * the older twentyfold cut came back with it (the fort's price, the
+ * rich-treasury surge, the planner's defensive dump), the city program is
+ * measured against cities a realm actually raised rather than against the
+ * founding capital it was given, and forts are wanted on the approaches a
+ * rival would march for instead of only where one already is.
+ *
+ * These moved the world digests and, again, not one cell digest: at tick 600
+ * no realm has yet bought anything, so the maps are identical and only the
+ * treasuries differ.
+ *
  * Before that, re-recorded for the long-frontier tuning pass: realms open at a tenth of
  * their old area (SPAWN_RULES.initialRegionRadius) and the settlement pace
  * came down twentyfold again (CLAIM_RULES.pressurePerTick 0.62 -> 0.03), so
@@ -266,25 +282,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "90258d590bdce2c128932a0c83f0a2a0", cells: "7661244e657755eb" },
-      { tick: 200, world: "0626af0649d9ee952aeb40d51b519f6a", cells: "e786cf0f17b7a9bb" },
-      { tick: 600, world: "c4e7c210fd786915a7cba9abb8dc5f38", cells: "75c4bdff28b245ed", deep: true },
+      { tick: 60, world: "6feb8533980b535d6ef73772134e495b", cells: "7661244e657755eb" },
+      { tick: 200, world: "d01511b52cc0d7eb6c5fe8b5f6a4feda", cells: "e786cf0f17b7a9bb" },
+      { tick: 600, world: "188d2475b6095e4496175f2ddf537af3", cells: "75c4bdff28b245ed", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "955537f42cde329eebc7f78c7859574e", cells: "0004cbf1437b58f7" },
-      { tick: 200, world: "0243010eef4fb89d2b85b137adb630e5", cells: "8314d4103cb10ac4" },
-      { tick: 600, world: "2382cd2fafcd010288b50e5abf921d13", cells: "f1ddf430edf8fa19", deep: true },
+      { tick: 60, world: "fdbf4c81986e6e40584dab051fe71f1f", cells: "0004cbf1437b58f7" },
+      { tick: 200, world: "ac70dae33538bfeb730fb533cfd6c03e", cells: "8314d4103cb10ac4" },
+      { tick: 600, world: "d67397e8649b7337dfa5278f7d89d9d0", cells: "f1ddf430edf8fa19", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "80bfdd3fc139d8763c1c3ded736d312d", cells: "4c7f3c024686aa5b" },
-      { tick: 200, world: "fe8021bd67ddbc4a919d0c9245ab3a2a", cells: "9e1fb175d456b7dc" },
-      { tick: 600, world: "4842df8188c16daa433875ce30412042", cells: "2086fa442a277e32", deep: true },
+      { tick: 60, world: "09a9cc0bc4bcfe045f7431dc44018aec", cells: "4c7f3c024686aa5b" },
+      { tick: 200, world: "0f4f52fd78af46e5de83fb9e60ab4355", cells: "9e1fb175d456b7dc" },
+      { tick: 600, world: "5d8bc49cb4653c2b6b057e226dfc8d8e", cells: "2086fa442a277e32", deep: true },
     ],
   },
 ];

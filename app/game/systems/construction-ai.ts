@@ -419,35 +419,47 @@ function desiredInfrastructure(
   const tradeBuildings = counts.factory + counts.harbor;
   const approaches = fortifiableApproaches(context, owner);
   const pressed = pressedBoundaryCells(context, owner);
-  // A few developed places, well held. The appetite follows what the realm
-  // has worth defending rather than the length of its border, so a sprawling
-  // realm with one city wants one wall and a compact realm with six wants
-  // several -- and a realm with nowhere an army could come wants none.
+  // A few developed places, well held -- not a wall per building. The appetite
+  // follows what the realm has worth defending rather than the length of its
+  // border, so a sprawling realm with one city wants one wall and a compact
+  // realm with six wants several, and a realm with nowhere an army could come
+  // wants none.
+  //
+  // A treasury with nothing better to do fortifies harder. That used to be a
+  // bypass -- a rich realm returned "fort" whatever it already held, so the
+  // ceiling below was not a ceiling and the wealthiest empires walled without
+  // end, one fort per building. It lifts the appetite instead. The threshold
+  // is gold, so the twentyfold income cut stranded it the way it stranded the
+  // fort's own price and STRATEGY_RULES.richTreasuryFloor: at 1,250,000 no
+  // realm in a ten-game sweep came within a factor of eight of it, and
+  // divided by that same twenty it means what it always meant.
   const developedSites = counts.city + counts.factory + counts.harbor + counts.plant + counts.skyport;
+  const wealthPush = faction.gold >= 62_500 ? 1.35 : 1;
   const desiredForts = approaches.length === 0
     ? 0
-    : clamp(Math.ceil(developedSites * 0.4 * fortQuota), 1, 18);
-  // A treasury with nothing better to do fortifies. The threshold is gold, so
-  // the twentyfold income cut stranded it the same way it stranded the fort's
-  // own price and STRATEGY_RULES.richTreasuryFloor: at 1,250,000 no realm in a
-  // ten-game sweep came within a factor of eight of it. Divided by the same
-  // twenty, it means what it always meant — richer than any build program the
-  // realm can currently spend on.
-  const defensiveResourceDump = approaches.length > 0 && faction.gold >= 62_500;
+    : clamp(Math.ceil(developedSites * 0.25 * fortQuota * wealthPush), 1, 18);
 
   // A burning border pre-empts the whole program: ground already being taken
   // is answered before anything is bought for the future. A quiet one does
   // not -- a preventive wall competes for the same purse as a city or a
   // factory through the shortfall weights below, which is what keeps a realm
   // that is merely near a rival from walling instead of building.
-  if (
-    allowFort &&
-    pressed.length > 0 &&
-    (counts.fort < desiredForts || defensiveResourceDump)
-  ) return "fort";
+  if (allowFort && pressed.length > 0 && counts.fort < desiredForts) return "fort";
   if (counts.city === 0) return "city";
 
-  const cityShortfall = Math.max(0, (desiredCities - counts.city) / desiredCities);
+  // The founding capital is an inheritance, not a purchase. nextStructureCost
+  // already refuses to let it climb the ladder, and the appetite has to agree:
+  // counting it as the realm's first city met half the city program before the
+  // game began, while the trade program opened at a full shortfall and won
+  // every early comparison by construction. A ten-game sweep to tick 6,000
+  // built 0.9 cities in a whole world against thirty factories, and the
+  // either/or the ladder is priced for was not one. Measured against cities
+  // the realm has actually raised, both programs open level and the choice
+  // falls where it should — to the element's own leaning and to how hard the
+  // population is pressing the ceiling.
+  const cityProgram = Math.max(1, desiredCities - 1);
+  const raisedCities = Math.max(0, counts.city - 1);
+  const cityShortfall = Math.max(0, (cityProgram - raisedCities) / cityProgram);
   const tradeShortfall = Math.max(0, (desiredTrade - tradeBuildings) / desiredTrade);
   const plantShortfall = desiredPlants > 0
     ? Math.max(0, (desiredPlants - counts.plant) / desiredPlants)
