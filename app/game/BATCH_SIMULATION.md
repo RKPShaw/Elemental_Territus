@@ -27,11 +27,13 @@ These identify slow openings, runaway leaders, durable parity and stalemates.
 
 ### Population management
 
-- home, committed and total living population;
+- home, committed and total living population — living may exceed the cap,
+  because a committed host neither occupies capacity at home nor grows;
 - population cap, home ratio and committed-to-cap ratio;
 - current growth efficiency and troop growth;
-- cumulative time below 20%, between 20–50%, near the 50–75% growth band and
-  above 82%;
+- cumulative time depleted, below the growth band, inside it and crowded
+  above it — read from `POPULATION_RULES`, so retuning the curve's thresholds
+  moves the counters with it;
 - attacking and defending commitments and casualties.
 
 These show whether a realm is making meaningful growth-versus-expansion trades,
@@ -55,7 +57,7 @@ not inflate the world's total developed-city count.
 ### Economy and trade
 
 - treasury, current income and cumulative nominal passive income;
-- infrastructure, warship and naval spending;
+- infrastructure and warship spending;
 - convoy/ship/pulse/flyer owner income and foreign-host income;
 - domestic and foreign station stops;
 - completed train and ship journeys;

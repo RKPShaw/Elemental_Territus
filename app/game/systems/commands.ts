@@ -19,7 +19,6 @@ import {
   STRUCTURE_RULES,
   WARSHIP_COST,
   compactNumber,
-  mobilizationCostFor,
   nextStructureCost,
 } from "../rules";
 import type { Campaign, PlayerId, SimulationContext, SimulationSystem, WorldReportDraft } from "../types";
@@ -82,14 +81,9 @@ export class CommandExecutionSystem implements SimulationSystem {
         const previousRelationSince = relation.since;
         if (relation.status === "war") continue;
         if (!betrayingTruce && state.tick < relation.cooldownUntil) continue;
-        // War is funded: the declaration spends the mobilization chest on
-        // raising and provisioning the host. A court whose treasury cannot
-        // cover it does not go to war this term, which is what lets economies
-        // that grow at different rates open their wars at different times —
-        // and an emptied chest delays the same realm's next declaration.
-        const mobilization = mobilizationCostFor(actor.troops);
-        if (actor.gold < mobilization) continue;
-        actor.gold -= mobilization;
+        // A declaration costs nothing (see DIPLOMACY_RULES). The treasury
+        // buys buildings and fleets; wanting the war is the whole of the
+        // price, and what a court can reach and hold decides the rest.
         const targetIsExposedTraitor = state.tick < state.factions[command.target].traitorUntil;
         const allianceStoryKey = relation.storyKey;
         if (betrayingTruce && !targetIsExposedTraitor) {
@@ -139,7 +133,6 @@ export class CommandExecutionSystem implements SimulationSystem {
             betrayal: betrayingTruce,
             targetAlreadyTraitor: targetIsExposedTraitor,
             tradeStopped: true,
-            mobilizationGold: mobilization,
           },
           summary: `${realmTitle(state, command.actor)} declared war on ${realmTitle(state, command.target)}${betrayingTruce ? " by breaking their alliance" : ""}.`,
         });
@@ -370,15 +363,13 @@ export class CommandExecutionSystem implements SimulationSystem {
         const navalJourney = command.mode === "naval"
           ? selectNavalJourney(context, command.actor, command.target as PlayerId)
           : null;
+        // A crossing costs no gold, as no war does (see DIPLOMACY_RULES).
+        // What a sea campaign still needs is the means to sail: a harbor to
+        // launch from and water that actually joins the two shores. Those are
+        // reach, not price, and they are what keeps an island realm's wars
+        // different from a continental one's.
         if (command.mode === "naval") {
-          if (
-            actor.structures.harbor < 1 ||
-            navalJourney === null ||
-            actor.gold < 15_000
-          ) {
-            continue;
-          }
-          actor.gold -= 15_000;
+          if (actor.structures.harbor < 1 || navalJourney === null) continue;
         }
         actor.troops -= troops;
 
@@ -404,7 +395,6 @@ export class CommandExecutionSystem implements SimulationSystem {
               troops,
               totalCommitted: existing.initialCommitted,
               mode: existing.mode,
-              goldCost: command.mode === "naval" ? 15_000 : 0,
             },
             summary: `${realmTitle(state, command.actor)} reinforced its ${settling ? "wilderness" : realmLabel(state, command.target as PlayerId)} campaign with ${compactNumber(troops)} troops.`,
           });
@@ -455,7 +445,6 @@ export class CommandExecutionSystem implements SimulationSystem {
           facts: {
             troops,
             mode: command.mode,
-            goldCost: command.mode === "naval" ? 15_000 : 0,
             originIndex: campaign.originIndex ?? -1,
             targetIndex: campaign.targetIndex ?? -1,
             waterRouteCells: campaign.pathIndices.length,

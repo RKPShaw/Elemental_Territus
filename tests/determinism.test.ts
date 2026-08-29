@@ -15,7 +15,18 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the settlement draft and imperial fission, and the gameplay
+ * Re-recorded when the population-management pass (PR #19) merged with the
+ * elemental overhaul (conquest-fusion, the living land, the settlement draft
+ * and imperial fission). Both lines had re-recorded every digest for reasons
+ * their own paragraphs below still explain, and the merged world is a third
+ * thing neither line played: free war meets the crowd-aware draft's spread
+ * capitals, band-managed populations settle terrain the dwell sweep will
+ * remake, and the faster frontier reaches the fusion trigger sooner. Every
+ * digest moves by construction — both sides added faction state — and the
+ * calibration horizons were re-probed on the merged world rather than
+ * inherited from either side.
+ *
+ * Before that, re-recorded for the settlement draft and imperial fission, and the gameplay
  * changes are the point. The spawn draft became the shared Catan draft: every
  * pick still takes the best site with full knowledge, but the score now pays
  * a decaying crowding cost toward everyone already seated and reads terrain
@@ -59,6 +70,52 @@ import { cellDigest, worldDigest } from "./world-digest";
  * held-constituent arithmetic, so war targeting genuinely re-aims from the
  * first diplomacy pass and the worlds diverge long before the first window
  * opens.
+ *
+ * Alongside those, re-recorded for the population-management pass, and the gameplay change was
+ * the whole point. Four things moved together. A host on campaign no longer
+ * occupies capacity at home, so a realm's living strength may stand above its
+ * cap while its army is away (POPULATION_RULES). The growth curve was reshaped
+ * into a band: it pays across 40-70% of capacity, peaks at 65% as it always
+ * did, and collapses far harder than it used to outside it — a realm at 90% of
+ * cap now grows at a fifth of peak where it used to manage a quarter. And the
+ * courts play to that: a settlement commitment is sized to what the frontier
+ * can absorb rather than to a tenth of the realm, and a crowded realm ships
+ * its surplus to the front instead of sitting on it. Frontiers therefore
+ * advance markedly faster from the first decision onward, and every digest
+ * moves by construction.
+ *
+ * And war stopped costing gold. The mobilization chest a declaration used to
+ * spend — 1.6 gold a soldier, floor 20,000 — is gone outright, and so is the
+ * 15,000 a sea crossing used to pay; a naval campaign still needs a harbor to
+ * sail from and water that joins the shores, which is reach rather than
+ * price. Free war is what finally ends the dead calm the slow economy left
+ * behind: on the calibration seed the first war lands at tick 224 where a
+ * 2,400-tick run used to record none at all, and a ten-game sweep to tick
+ * 6,000 closes with 9.6 realms of the 48 still standing where nothing used to
+ * die. The opening is still staggered, by the open frontier rather than by
+ * the ledger.
+ *
+ * The crossing fee left every cell digest untouched and moved only the world
+ * digests: no realm in the golden windows owns a harbor, so nothing sails and
+ * nothing about the world changed. What moved is the report stream — the
+ * always-zero goldCost fact came off campaign launches with the fee it
+ * described.
+ *
+ * Then construction, which had gone quiet for the same reason war had. Ground
+ * and capitals pay two and a half times what they did, because the ladder was
+ * priced to have a realm's first building land as its frontier closed and
+ * population management halved the frontier era without the ladder following:
+ * the median first building sat at tick 2,354 against a world settled by
+ * ~1,200, and it lands at tick 1,138 now. Three gold thresholds stranded by
+ * the older twentyfold cut came back with it (the fort's price, the
+ * rich-treasury surge, the planner's defensive dump), the city program is
+ * measured against cities a realm actually raised rather than against the
+ * founding capital it was given, and forts are wanted on the approaches a
+ * rival would march for instead of only where one already is.
+ *
+ * These moved the world digests and, again, not one cell digest: at tick 600
+ * no realm has yet bought anything, so the maps are identical and only the
+ * treasuries differ.
  *
  * Before that, re-recorded for the long-frontier tuning pass: realms open at a tenth of
  * their old area (SPAWN_RULES.initialRegionRadius) and the settlement pace
@@ -281,25 +338,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "9ee10ae58a15484c0aedfaa60c3f89ad", cells: "8ad11b0d773b4a5e" },
-      { tick: 200, world: "124b9fcb24a5402f2e802488725fff70", cells: "8e363c6aca6b5172" },
-      { tick: 600, world: "43d7b25c4ec93be1b08f23b391535821", cells: "1e4ef148d4874a48", deep: true },
+      { tick: 60, world: "9d6815349a3970c2b644c32cd745c705", cells: "1984ddfd81022e83" },
+      { tick: 200, world: "33baa57b2821c6914936baa2237c1e46", cells: "6877fdad40c8c536" },
+      { tick: 600, world: "b410d5388899534517f87aa207293aa1", cells: "f1cc592b1d0becfb", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "24ab2c1e84dfbbac2241095d003eb90c", cells: "caf17cd668f09908" },
-      { tick: 200, world: "f8642945e41869ced4c7dab421c4e722", cells: "294f046e1924b9bc" },
-      { tick: 600, world: "fb6700e29035a9cd7c1cac5b2b0a726d", cells: "b627cca29f306205", deep: true },
+      { tick: 60, world: "0fdeecc2f8a82e354a28f0cd5d25d3d0", cells: "c25317cec18a000a" },
+      { tick: 200, world: "bd13880e62d37f884bd5d2c9f6d8628a", cells: "56d7c2fd5a1fb4f1" },
+      { tick: 600, world: "6277100184ef876b2b29318616d032e4", cells: "ffcfcd65bdb9ef33", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "63f5333e4cffe5a07795f0415d1bb5d2", cells: "e2c637f718706a25" },
-      { tick: 200, world: "ab29b13e14813c802e6bbdbdfcea03bc", cells: "93cd6378556992aa" },
-      { tick: 600, world: "042de648ea3a75d636cd517eeafa5e99", cells: "e2e9ecf15f8d135a", deep: true },
+      { tick: 60, world: "fa1311154852f8a388a0e9bfee9a9c68", cells: "c1c72c3cce40ee2e" },
+      { tick: 200, world: "5b2d2dbc9fb46ccfa35fa1826b43f767", cells: "ca837ae5c6e8534b" },
+      { tick: 600, world: "b975faf1fdf05708904d9c6d95ce16c3", cells: "d0dec691ad526c3f", deep: true },
     ],
   },
 ];

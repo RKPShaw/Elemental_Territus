@@ -259,23 +259,25 @@ export function Simulator() {
   );
   const selectedOffensives = world.campaigns.filter((campaign) => campaign.attacker === selected);
   const committedTroops = committedTroopsFor(world, selected);
-  const homeFilled = Math.min(100, (chosen.troops / Math.max(1, chosen.troopCap)) * 100);
-  const committedFilled = Math.min(
-    100 - homeFilled,
-    (committedTroops / Math.max(1, chosen.troopCap)) * 100,
-  );
-  const filled = homeFilled + committedFilled;
+  // The bar is the population at home against the ground that feeds it, and
+  // nothing else. A host on campaign is outside the cap entirely, so it is
+  // read beside the bar rather than inside it -- and the realm's living
+  // strength, home plus committed, is free to stand above capacity while that
+  // host is away.
   const homeRatio = chosen.troops / Math.max(1, chosen.troopCap);
+  const homeFilled = Math.min(100, homeRatio * 100);
+  const livingTroops = chosen.troops + committedTroops;
+  const livingShare = (livingTroops / Math.max(1, chosen.troopCap)) * 100;
   const growthEfficiency = populationGrowthEfficiency(homeRatio);
   const populationBand = homeRatio < POPULATION_RULES.lowGrowthThreshold
-    ? "depleted"
-    : homeRatio < 0.52
-      ? "recovering"
-      : homeRatio <= 0.75
-        ? "peak"
-        : homeRatio <= POPULATION_RULES.highGrowthThreshold
-          ? "crowding"
-          : "constrained";
+    ? homeRatio < POPULATION_RULES.minimumExpansionRatio
+      ? "depleted"
+      : "recovering"
+    : homeRatio <= POPULATION_RULES.highGrowthThreshold
+      ? "peak"
+      : homeRatio <= 0.88
+        ? "crowding"
+        : "constrained";
   const stories = latestStories(world.stories).slice(0, 8);
   const recentReports = world.reports.slice(-18).reverse();
 
@@ -524,16 +526,31 @@ export function Simulator() {
                     </span>
                     <b><SmoothNumber value={chosen.troopCap} suffix=" cap" /></b>
                   </div>
-                  <div className="capacity-meter population-meter" aria-label={`${Math.round(filled)} percent of population capacity alive; peak growth is near 65 percent at home`}>
+                  <div
+                    className="capacity-meter population-meter"
+                    aria-label={`${Math.round(homeFilled)} percent of population capacity at home; growth runs fastest between ${Math.round(POPULATION_RULES.lowGrowthThreshold * 100)} and ${Math.round(POPULATION_RULES.highGrowthThreshold * 100)} percent and peaks at ${Math.round(POPULATION_RULES.peakGrowthRatio * 100)} percent`}
+                  >
                     <i style={{ width: `${homeFilled}%`, background: chosenExpressed.color }} />
-                    <i className="committed-share" style={{ width: `${committedFilled}%` }} />
+                    <u
+                      className="growth-band"
+                      style={{
+                        left: `${POPULATION_RULES.lowGrowthThreshold * 100}%`,
+                        width: `${(POPULATION_RULES.highGrowthThreshold - POPULATION_RULES.lowGrowthThreshold) * 100}%`,
+                      }}
+                      title={`Growth band: ${Math.round(POPULATION_RULES.lowGrowthThreshold * 100)}–${Math.round(POPULATION_RULES.highGrowthThreshold * 100)}% of capacity`}
+                    />
                     <b className="growth-peak-marker" title="Peak population growth at 65%">65%</b>
                   </div>
                   <div className={`growth-readout ${populationBand}`}>
                     <span>Growth efficiency</span>
                     <strong><SmoothNumber value={growthEfficiency * 100} format="integer" suffix="%" /> · {populationBand}</strong>
                   </div>
-                  {committedTroops > 0 && <p className="commitment-copy">The army abroad is reserved from the population and does not contribute to growth.</p>}
+                  {committedTroops > 0 && (
+                    <p className="commitment-copy">
+                      <SmoothNumber value={livingTroops} /> alive at <SmoothNumber value={livingShare} format="integer" suffix="%" /> of capacity.
+                      The host abroad neither breeds nor takes up room at home, so marching it out made the room the population is now growing into.
+                    </p>
+                  )}
                 </div>
 
                 {chosen.traitorUntil > world.tick && (
@@ -823,11 +840,11 @@ export function Simulator() {
 
           <section className="ratio-card">
             <p className="eyebrow">Population strategy</p>
-            <h3>Grow at 65%, spend with care</h3>
+            <h3>Live in the band, spend the surplus</h3>
             <div className="population-curve" aria-label="Population growth peaks at 65 percent capacity">
               <i /><b>65%</b><span>peak growth</span>
             </div>
-            <p>Growth slows below 20% and again as the realm becomes crowded. Campaign commitments leave the breeding population, so reckless expansion gains land and capacity now but can surrender the next generation to a more patient rival.</p>
+            <p>Growth runs fastest between {Math.round(POPULATION_RULES.lowGrowthThreshold * 100)}% and {Math.round(POPULATION_RULES.highGrowthThreshold * 100)}% of capacity and peaks at {Math.round(POPULATION_RULES.peakGrowthRatio * 100)}%; outside that band it falls away steeply, and a realm sitting at its ceiling barely grows at all. A host on campaign leaves the cap entirely — it neither breeds nor takes up room — so marching a third of the realm to a front drops it back into the band and lets it grow into the space, and its living strength can stand above capacity until that host comes home.</p>
           </section>
 
           <section className="terrain-card">

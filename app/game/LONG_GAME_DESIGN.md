@@ -9,16 +9,27 @@ tuning work continues.
 
 ## Where the current build stands
 
-Two tuning eras are already in the shipped rules and set the stage:
+Three tuning eras are already in the shipped rules and set the stage:
 
 - **The slow economy** (income ÷20, population growth ÷6, trade reaches ÷6):
   a 100-game batch showed the world fully settled by ~tick 180, then ~2,300
   ticks of dead calm while courts saved for their first 18K building, and
   **zero wars ever** — income fell 20× but the 20K mobilization floor did
-  not, so a war chest is ~10,000+ ticks of saving.
+  not, so a war chest was ~10,000+ ticks of saving. That floor has since
+  been removed outright: war is free to declare, and the treasury is a
+  builder's purse alone.
 - **The long frontier** (starts ÷10 in area, settlement pressure 0.62 →
   0.03): the frontier era now runs thousands of ticks instead of ~180, so
   the opening age is watchable growth instead of an instant fill.
+- **Population as a resource** (committed hosts leave the cap; growth pays
+  across a 40–70% band and collapses outside it; courts size settlement to
+  what the frontier can absorb and ship their surplus out at 70%): realms
+  stopped parking at ~91% of capacity growing at a quarter of peak, and now
+  run the opening in the band instead. On the calibration seed that roughly
+  doubles the pace of the frontier era — 74% of the world settled by tick
+  ~440 where it used to take ~1,200 — while leaving `pressurePerTick`
+  untouched. That dial is where the era's length would be given back if the
+  faster opening is not wanted.
 
 The dead calm is the problem the mechanics below exist to solve: with tax
 income a trickle and war unaffordable, nothing happens between the frontier
@@ -35,11 +46,14 @@ wilderness and ruins → settlement bounty again.**
 
 Settling one wilderness cell pays gold once, scaled by the ground's own
 yield (`goldYield`), booked as land income. A growing nation is rich; a
-static one lives on the tax trickle. War chests get funded by the frontier
-boom, so wars become affordable exactly as frontiers close — no change to
-mobilization costs needed. Conquest of *enemy* land deliberately pays
-nothing: war spends treasure, resettlement earns it, so war stays a
+static one lives on the tax trickle. Conquest of *enemy* land deliberately
+pays nothing, so resettlement earns and war does not — war stays a
 deliberate act rather than a profit engine.
+
+The bounty was designed partly to fund war chests as frontiers closed. That
+half is moot: the mobilization chest is gone and wars are free. What remains
+is the reason to write it anyway — a frontier boom is what pays for the
+cities and works an empire needs to hold what it takes.
 
 Prototype constant: `CLAIM_RULES.wildernessGoldPerCell: 1_200` (per
 normalized area unit × terrain goldYield ≈ 150–450 gold per cell; roughly

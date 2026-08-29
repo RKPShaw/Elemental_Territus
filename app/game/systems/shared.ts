@@ -4,7 +4,6 @@ import {
   clamp,
   normalizedCellArea,
 } from "../rules";
-import { committedTroopsFor } from "../campaigns";
 import { terrainAffinityFactor } from "../terraform";
 import { PLAYER_ORDER } from "../players";
 import type { PlayerId, StructureCounts, WorldState } from "../types";
@@ -69,6 +68,8 @@ export function applyRealmAccounting(
     state.config.maximumTroops,
   );
   faction.alive = territory > 0;
-  const committed = committedTroopsFor(state, id);
-  faction.troops = clamp(faction.troops, 0, Math.max(0, faction.troopCap - committed));
+  // Only the population at home is held to the cap. A host on campaign lives
+  // outside it (see POPULATION_RULES), so losing ground shrinks the realm the
+  // people came from without disbanding the army already in the field.
+  faction.troops = clamp(faction.troops, 0, faction.troopCap);
 }

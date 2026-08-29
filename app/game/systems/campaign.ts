@@ -515,7 +515,11 @@ function processSettlementCampaign(context: SimulationContext, campaign: Campaig
       const cost = conquestCostAt(state, targetIndex, "wilderness");
       const compactness = 1 + ownedNeighborCount(state, targetIndex, campaign.attacker) * 0.045;
       const assignedTroops = theater.allocation * (weights.get(targetIndex) ?? 0);
-      const readiness = clamp(assignedTroops / 850, 0.015, 1.45);
+      const readiness = clamp(
+        assignedTroops / CLAIM_RULES.settlerFrontTroops,
+        CLAIM_RULES.minimumFrontReadiness,
+        CLAIM_RULES.maximumFrontReadiness,
+      );
       // Settlers press hardest on the ground they most want. Preference comes
       // from the theater map rather than from terrain cost alone, so a tile is
       // judged by what its owner believes about the country around it as well
