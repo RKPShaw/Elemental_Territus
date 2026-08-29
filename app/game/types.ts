@@ -250,15 +250,18 @@ export interface TransmutationState {
  * Why a realm's name changed. "founding" is the name it woke with; "conquest"
  * is the title ladder climbing on absorbed realms and held land; "ascension"
  * weaves a newly expressed element into the style; "union" folds a fallen
- * great power's name into its conqueror's. "marriage" and "decree" are
- * reserved for future dynastic systems — a married pair combining names, a
- * court renaming itself — so those stories can reuse this same machinery.
+ * great power's name into its conqueror's; "restoration" restyles a realm
+ * that fission has returned to its founding element — the old name carried
+ * forward under the old banner. "marriage" and "decree" are reserved for
+ * future dynastic systems — a married pair combining names, a court renaming
+ * itself — so those stories can reuse this same machinery.
  */
 export type NameChangeReason =
   | "founding"
   | "conquest"
   | "ascension"
   | "union"
+  | "restoration"
   | "marriage"
   | "decree";
 
@@ -361,6 +364,14 @@ export interface FactionState {
    * has spent itself on the ground it holds — fresh conquest dilutes it.
    */
   saturation: number;
+  /**
+   * Imperial strain, 0..1: the slow clock of overreach for compound-expressed
+   * realms. At 1 the realm fissions into its founding constituents. See
+   * FISSION_RULES and the imperial-instability system.
+   */
+  strain: number;
+  /** Tick before which this realm accrues no strain — newborn grace. */
+  strainGraceUntil: number;
   /** Distinct elemental powers held; drives terrain affinity and matchups. */
   absorbedElements: ElementId[];
   /**

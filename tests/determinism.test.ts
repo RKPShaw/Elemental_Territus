@@ -15,7 +15,22 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the living land — dwell terraforming and terrain affinity —
+ * Re-recorded for the settlement draft and imperial fission, and the gameplay
+ * changes are the point. The spawn draft became the shared Catan draft: every
+ * pick still takes the best site with full knowledge, but the score now pays
+ * a decaying crowding cost toward everyone already seated and reads terrain
+ * through the composed element leans instead of a single favoured terrain —
+ * all forty-eight capitals move, so every world differs from tick zero by
+ * construction. Imperial strain is new faction state (strain and its grace
+ * clock move every world digest), accrued by compound-expressed realms from
+ * overextension, saturation and war weariness; at full strain a realm
+ * fissions into its founding constituents through the same draft, restoring
+ * dead roster slots on the freed ground. No fission fires inside these
+ * horizons — tier 1 never strains, and no realm reaches tier 2 by tick 600 —
+ * so the checkpoint movement here is the draft and the new state, with the
+ * fission machinery proven by its own staged tests.
+ *
+ * Before that, re-recorded for the living land — dwell terraforming and terrain affinity —
  * and the gameplay changes are the point. Terrain stops being immutable:
  * eight terraformed terrains join the space (worldgen never places them; an
  * element's long tenure does, read off the existing capturedAt clock, so the
@@ -266,25 +281,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "c9981258284726eb2376015a84d71e18", cells: "e60f1c9dfb4af684" },
-      { tick: 200, world: "680835a5ced5ddc6f78297ed1e015543", cells: "27eac351e0b25ecb" },
-      { tick: 600, world: "d1d3b51ec532d2e04c339f615aa880ed", cells: "4bb0e64f265bfb8b", deep: true },
+      { tick: 60, world: "9ee10ae58a15484c0aedfaa60c3f89ad", cells: "8ad11b0d773b4a5e" },
+      { tick: 200, world: "124b9fcb24a5402f2e802488725fff70", cells: "8e363c6aca6b5172" },
+      { tick: 600, world: "43d7b25c4ec93be1b08f23b391535821", cells: "1e4ef148d4874a48", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "e6af5d855a3eb33739a3be9e2d3d57e5", cells: "30a212c36bb6febc" },
-      { tick: 200, world: "fe0ca5ae44387ecb61eff7a898aa4442", cells: "c9d13c55243c40a4" },
-      { tick: 600, world: "8e58b09a013cd5eaa89343651f6e97aa", cells: "47445cd9d3c9dc92", deep: true },
+      { tick: 60, world: "24ab2c1e84dfbbac2241095d003eb90c", cells: "caf17cd668f09908" },
+      { tick: 200, world: "f8642945e41869ced4c7dab421c4e722", cells: "294f046e1924b9bc" },
+      { tick: 600, world: "fb6700e29035a9cd7c1cac5b2b0a726d", cells: "b627cca29f306205", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "480039ef67f5ffe20b5558e1753d7e70", cells: "40bba3f89e599f90" },
-      { tick: 200, world: "8a5d0c1224910178b20256f06e63db8f", cells: "0ccea2ddae10ee71" },
-      { tick: 600, world: "bb2a778221eda41a4539dbbca83849b3", cells: "ec8470b282044b4e", deep: true },
+      { tick: 60, world: "63f5333e4cffe5a07795f0415d1bb5d2", cells: "e2c637f718706a25" },
+      { tick: 200, world: "ab29b13e14813c802e6bbdbdfcea03bc", cells: "93cd6378556992aa" },
+      { tick: 600, world: "042de648ea3a75d636cd517eeafa5e99", cells: "e2e9ecf15f8d135a", deep: true },
     ],
   },
 ];

@@ -558,6 +558,8 @@ function makeFaction(id: PlayerId, seed: number, foundingName: string): FactionS
     power: createPowerState(),
     transmutation: createTransmutationState(),
     saturation: 0,
+    strain: 0,
+    strainGraceUntil: 0,
     absorbedElements: [element],
     elementCounts: { [element]: 1 } as Record<ElementId, number>,
     lastConqueror: null,

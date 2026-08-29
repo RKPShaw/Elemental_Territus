@@ -1097,6 +1097,74 @@ export const SPAWN_RULES = {
    * or fragmented world still seats everyone instead of failing to place them.
    */
   separationRelaxation: 0.78,
+  /**
+   * The Catan cost of company: every earlier pick charges later scores a
+   * decaying penalty by distance, so each player weighs the best land against
+   * sharing borders with everyone already seated. The hard separation radius
+   * still guarantees breathing room; this shapes preference inside it.
+   */
+  crowdingWeight: 0.3,
+  /** World units over which a neighbour's crowding cost decays by e. */
+  crowdingFalloff: 4,
+} as const;
+
+/**
+ * Imperial instability and fission — how compound empires come apart.
+ *
+ * Strain is the slow clock of overreach. It accrues for realms expressing a
+ * compound element (tier 1 never strains, which is what makes fission an end
+ * of one story rather than a death spiral) from three pressures: territory
+ * beyond what cities and forts support, saturation — a country fully turned
+ * to the empire's own signature ground has nothing left to give its element —
+ * and war weariness. Fresh conquest relieves all three at once, which is the
+ * loop: expand, transform, saturate, strain, break. At full strain the realm
+ * FISSIONS: its founding constituents come free as restarted realms drafted
+ * onto the best ground of the former empire, the rump survives humbled around
+ * its capital demoted to its founding element, and everything else reverts to
+ * wilderness with every structure standing — the freed infrastructure is the
+ * next age's prize.
+ */
+export const FISSION_RULES = {
+  /** Ticks between strain evaluations. */
+  cadenceTicks: 12,
+  /** Cells one realm administers for free. */
+  supportedBaseArea: 30,
+  /** Additional supported cells per stacked city level. */
+  supportedPerCityLevel: 16,
+  /** Additional supported cells per fort. */
+  supportedPerFort: 6,
+  /** Pressure weight of the unsupported share of territory. */
+  overextensionWeight: 1,
+  /** Pressure weight of signature-terrain saturation past its grace. */
+  saturationWeight: 0.8,
+  /** Saturation below this adds no pressure at all. */
+  saturationGrace: 0.35,
+  /** Pressure weight of standing war weariness. */
+  wearinessWeight: 0.4,
+  /** How fast each expressed tier accrues strain; tier 1 never does. */
+  tierAmplification: { 1: 0, 2: 1, 3: 1.35 } satisfies Record<ElementTier, number>,
+  /** Strain gained per tick at full pressure (scaled by cadence and tier). */
+  strainPerTick: 0.0004,
+  /** Strain recovered per tick when pressure lifts. */
+  recoveryPerTick: 0.0008,
+  /** Realms below this many cells are too small to track. */
+  minimumTerritoryCells: 40,
+  /** World units of territory the rump keeps around its capital. */
+  rumpRadius: 1.2,
+  /** World units of territory each freed successor opens with. */
+  successorRadius: 0.8,
+  /** Hard separation between successor seats during the fission draft. */
+  successorSeparation: 1.6,
+  /** Constituent elements freed by one fission, at most. */
+  maxSuccessors: 3,
+  /** The purse a restarted realm wakes with. */
+  successorGold: 2_000,
+  /** The host a restarted realm wakes with, capped by its actual lands. */
+  successorTroops: 12_000,
+  /** Ticks of grace before a newborn (or newly humbled) realm strains again. */
+  graceTicks: 900,
+  /** War desire multiplier lost to strain: desire × (1 − strain × this). */
+  strainWarReluctance: 0.5,
 } as const;
 
 export const THEATER_MAP_RULES = {

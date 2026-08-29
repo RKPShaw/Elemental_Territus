@@ -306,6 +306,32 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     terraformBooksExact,
   );
 
+  // Imperial instability. Invariants that can genuinely fail: every living
+  // realm's strain sits inside [0, 1], and no tier 1 realm carries strain
+  // (tier 1 never accrues, and both fission outcomes reset it). Activity: a
+  // fission needs a compound empire to overreach first, far beyond this
+  // horizon, so silence is inconclusive rather than sick.
+  const fissions = count("politics.fission");
+  const restorations = count("politics.realm-restored");
+  let strainDrift = 0;
+  let tier1Strained = 0;
+  for (const id of PLAYER_ORDER) {
+    const faction = state.factions[id];
+    if (!faction.alive) continue;
+    if (!(faction.strain >= 0 && faction.strain <= 1)) strainDrift += 1;
+    if (ELEMENTS[faction.expressedElement].tier === 1 && faction.strain > 0) tier1Strained += 1;
+  }
+  const strainBooksExact = strainDrift === 0 && tier1Strained === 0;
+  add(
+    "imperial-instability",
+    "overreached compound empires strain and fission",
+    strainBooksExact && fissions > 0,
+    strainBooksExact
+      ? `${fissions} fissions, ${restorations} realms restored, strain books exact`
+      : `${strainDrift} strains out of band, ${tier1Strained} tier 1 realms straining`,
+    strainBooksExact,
+  );
+
   // The naming system: founding names must be unique, and by the horizon at
   // least one realm should have earned a better title — conquest, ascension
   // styling and union all funnel through the same rename report.
@@ -399,11 +425,18 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     `${commandBacked} command-backed reports, queue ${evidence.commandsDrained ? "always drained" : "left a backlog"}`,
   );
 
+  // Repartitioning must run — that half can genuinely fail. Boundary motion
+  // is evidence-only: the crowd-aware settlement draft seats the opening
+  // partition near its equilibrium, and value barely moves before the first
+  // dwell transforms (thousands of ticks out), so a horizon where nothing
+  // moved is quiescence, not sickness. The geography tests stage a mass
+  // transform and prove the migration mechanism directly.
   add(
     "adaptive-equal-area-strategic-geography",
     "the partition repartitions and moves",
     evidence.geographyUpdatedAt > 0 && evidence.regionsChanged,
     `${state.strategicRegions.length} regions, last repartition at tick ${evidence.geographyUpdatedAt}, boundaries ${evidence.regionsChanged ? "moved" : "never moved"}`,
+    evidence.geographyUpdatedAt > 0,
   );
 
   // Beliefs are only ever written by the observation system, so a roster that

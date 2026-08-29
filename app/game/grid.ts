@@ -103,7 +103,7 @@ export function ownedNeighborCount(
 }
 
 export function cellsWithin(
-  state: WorldState,
+  state: Pick<WorldState, "config">,
   centerIndex: number,
   radius: number,
 ): number[] {

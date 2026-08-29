@@ -166,12 +166,36 @@ share glass's swift sight — the view from above stacks on the skyport
 carrier. `app/game/information.ts` owns all of it; no fog-of-war system
 exists, and no other system knows the identities are there.
 
-Starts are drafted rather than fixed. Terrain is generated first, then each
-player in turn takes the best site still available to it, scoring the shared
-strategic value field against how well the surrounding terrain suits its
-element, with a minimum separation between rivals. The pick order snakes across
-the elements, because picking sequentially is otherwise unfair to whoever picks
-last. `app/game/spawn.ts` owns this; `SPAWN_RULES` in `rules.ts` tunes it.
+Starts are drafted rather than fixed — the Catan seating. Terrain is
+generated first, then each player in turn takes the best site still available
+to it with full knowledge of the map: the shared strategic value field, how
+well the surrounding terrain suits its element (read through the composed
+terrain leans, so the draft understands terraformed country exactly as combat
+does), MINUS a decaying crowding cost toward everyone already seated — each
+later pick weighs the best land against sharing borders with all who came
+before — under a hard minimum separation that relaxes only when the map runs
+out of room. The pick order snakes across the elements, because picking
+sequentially is otherwise unfair to whoever picks last. `app/game/draft.ts`
+owns the engine, `app/game/spawn.ts` the worldgen wrapper, `SPAWN_RULES` the
+knobs — and a fission re-seats the freed constituents of a broken empire
+through the very same draft.
+
+Empires end the way they grew: elementally. A realm expressing a compound
+element accrues **strain** from three pressures — territory beyond what its
+cities and forts administer, saturation (a country fully turned to its own
+signature ground has nothing left to give its element), and war weariness —
+amplified by tier, relieved by fresh conquest. At full strain the realm
+**fissions** along its elemental seams (`politics.fission`, historic): its
+founding constituents come free as restarted realms — dead roster slots of
+those families revived under their old names, drafted onto the best freed
+ground — the rump survives humbled around its capital, demoted to its
+founding element (the one sanctioned demotion in the game, recorded as a
+"restoration" rename), and everything else reverts to wilderness with every
+structure standing. Collapse never razes: the freed, built-up, terraformed
+country is the next age's prize, and the freed elements must conquer their
+way back up the ladder. Tier 1 never strains, so fission ends a story
+without starting a death spiral. `app/game/systems/instability.ts` owns it;
+`FISSION_RULES` tunes it.
 
 ### Domain boundaries
 
@@ -199,8 +223,8 @@ last. `app/game/spawn.ts` owns this; `SPAWN_RULES` in `rules.ts` tunes it.
 
 1. clock and pressure decay;
 2. dwell terraforming (throttled to its sweep cadence), neutral-land
-   settlement, realm accounting, elemental ascension, power meters and
-   troop-cap recalculation;
+   settlement, realm accounting, elemental ascension, imperial instability,
+   power meters and troop-cap recalculation;
 3. economic growth and trade-vehicle resolution;
 4. truce timers plus diplomatic and military AI intent;
 5. construction intent;
@@ -321,6 +345,19 @@ drive the same simulation safely.
   enemy conquest cost, land income, troop sustain — and stays inside the
   affinity band; water always reads 1. Saturation counts only terraformed
   signature ground, never natural country a realm merely holds.
+- Strain lives in [0, 1], accrues only for realms expressing tier 2 or 3 past
+  their grace and minimum size, and pulls against recovery so sustained
+  partial pressure finds an equilibrium below the breaking point. A fission
+  is RNG-free end to end: constituents order by composition, dead slots
+  revive lowest-index-first within their family, seats come from the
+  deterministic draft, and two sibling engines fission identically. The rump
+  always survives around its capital; a freed element with no dead slot of
+  its family disperses unclaimed; a restored realm starts at peace with the
+  whole world, its old campaigns dropped, its identity carried forward under
+  a "restoration" rename.
+- The instability system runs between ascension and naming, every
+  `FISSION_RULES.cadenceTicks`; a fission's renames land before naming
+  styles titles the same tick.
 - Information identities act only on beliefs, never on the world. A glass or
   airborne-trading realm observes twice per interval instead of once; a mist
   realm's plurality regions blend distant rivals' measurements 70% back

@@ -10,6 +10,7 @@ import {
 } from "../app/game/terraform";
 import { ELEMENT_SPACE } from "../app/game/elements";
 import { ElementalWarEngine } from "../app/game/engine";
+import { collectRealmAccounting } from "../app/game/systems/shared";
 import { LAND_TERRAINS, TERRAFORM_RULES, TERRAIN_RULES } from "../app/game/rules";
 import { worldDigest } from "./world-digest";
 import type { LandTerrainId } from "../app/game/types";
@@ -123,9 +124,17 @@ test("dwell transforms fire in a running world and the books follow", () => {
     );
     assert.ok(faction.saturation > 0, "saturation follows the signature ground");
     assert.ok(faction.saturation <= 1);
+    // Scorch sustains fewer people than the plains it replaced even with
+    // ember's own lean on it, and the live accounting reads the transformed
+    // ground exactly — settlement elsewhere may grow the total, so the
+    // proof is arithmetic plus books, not the aggregate.
     assert.ok(
-      faction.sustainableLand < before.sustainable,
-      "scorched earth sustains fewer people and the same tick's accounting reads it",
+      TERRAIN_RULES.scorched.sustain * terrainAffinityFactor("ember", "scorched")
+        < TERRAIN_RULES.plains.sustain * terrainAffinityFactor("ember", "plains"),
+    );
+    assert.ok(
+      Math.abs(collectRealmAccounting(state)["ember-1"]!.sustainableLand - faction.sustainableLand) < 1e-9,
+      "the same tick's accounting reads the transformed ground",
     );
     const reports = state.reports.filter((event) => event.kind === "society.land-transformed");
     assert.ok(reports.length > 0, "the sweep reports aggregate transforms");

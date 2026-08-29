@@ -9,6 +9,7 @@ import { DiplomacyAiSystem } from "./diplomacy-ai";
 import { DiplomacyClockSystem } from "./diplomacy-clock";
 import { EconomySystem } from "./economy";
 import { ElementPowersSystem } from "./element-powers";
+import { InstabilitySystem } from "./instability";
 import { StrategicPlanningSystem } from "./strategy-plan";
 import { StrategyAiSystem } from "./strategy-ai";
 import { RealmNamingSystem } from "./naming";
@@ -28,6 +29,9 @@ export const DEFAULT_SYSTEMS: readonly SimulationSystem[] = [
   new TerraformSystem(),
   new RealmAccountingSystem(),
   new ElementAscensionSystem(),
+  // Instability reads the accounting and expression the two systems above
+  // just settled; a fission's renames land before naming styles titles.
+  new InstabilitySystem(),
   new RealmNamingSystem(),
   new ElementPowersSystem(),
   new EconomySystem(),

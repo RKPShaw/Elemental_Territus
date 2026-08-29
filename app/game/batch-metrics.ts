@@ -86,6 +86,10 @@ export interface PlayerCumulativeMetrics {
   transmutationsStarted: number;
   /** Cells this realm's dwell has transformed, lifetime. */
   cellsTerraformed: number;
+  /** Times this realm fissioned along its elemental seams. */
+  fissionsSuffered: number;
+  /** Times this slot was restored as a freed constituent of a broken empire. */
+  restorations: number;
   /** Bespoke-mechanic drama, one counter per tier 3 power. */
   geyserEruptions: number;
   tempestCrests: number;
@@ -119,6 +123,8 @@ export interface PlayerBalanceSnapshot {
   expressedTier: ElementTier;
   /** Share of this realm's land turned to its own signature terrain. */
   saturation: number;
+  /** Imperial strain toward fission, 0..1. */
+  strain: number;
   strategicFocus: StrategicDomain;
   structuresOwned: StructureCounts;
   citySitesOwned: number;
@@ -151,6 +157,8 @@ export interface WorldBalanceSnapshot {
   transmutingRealms: number;
   /** Share of land the dwell system has transformed from its worldgen terrain. */
   terraformedLandShare: number;
+  /** Fissions the world has seen, lifetime. */
+  fissionsTotal: number;
   populationConcentrationHhi: number;
   totalHomePopulation: number;
   totalCommittedPopulation: number;
@@ -259,6 +267,8 @@ function emptyPlayerMetrics(): PlayerCumulativeMetrics {
     ascensions: 0,
     transmutationsStarted: 0,
     cellsTerraformed: 0,
+    fissionsSuffered: 0,
+    restorations: 0,
     geyserEruptions: 0,
     tempestCrests: 0,
     bloomOverextensions: 0,
@@ -374,6 +384,8 @@ export class BatchMetricsCollector {
     if (event.kind === "society.land-transformed" && actor) {
       this.players[actor].cellsTerraformed += Number(event.facts.cells ?? 0);
     }
+    if (event.kind === "politics.fission" && actor) this.players[actor].fissionsSuffered += 1;
+    if (event.kind === "politics.realm-restored" && actor) this.players[actor].restorations += 1;
     if (event.kind === "dynasty.geyser-erupted" && actor) this.players[actor].geyserEruptions += 1;
     if (event.kind === "dynasty.tempest-crested" && actor) this.players[actor].tempestCrests += 1;
     if (event.kind === "dynasty.bloom-overextended" && actor) this.players[actor].bloomOverextensions += 1;
@@ -534,6 +546,7 @@ export class BatchMetricsCollector {
         expressedElement: faction.expressedElement,
         expressedTier: ELEMENTS[faction.expressedElement].tier,
         saturation: faction.saturation,
+        strain: faction.strain,
         strategicFocus: faction.strategy.focus,
         structuresOwned: { ...faction.structures },
         citySitesOwned: citySites[id],
@@ -589,6 +602,7 @@ export class BatchMetricsCollector {
       tierCounts,
       transmutingRealms,
       terraformedLandShare: terraformed / state.landTiles,
+      fissionsTotal: total((metrics) => metrics.fissionsSuffered),
       populationConcentrationHhi: concentration(livingByNation),
       totalHomePopulation: totalHome,
       totalCommittedPopulation: totalCommitted,
