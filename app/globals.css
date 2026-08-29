@@ -1531,15 +1531,19 @@ canvas:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-.capacity-meter i.committed-share {
-  border-left: 1px solid rgba(255, 255, 255, 0.75);
-  border-radius: 0;
-  background: repeating-linear-gradient(
-    135deg,
-    var(--realm) 0 3px,
-    color-mix(in srgb, var(--realm), #243947 36%) 3px 6px
-  );
-  opacity: 0.78;
+/*
+ * The band the growth curve pays best in, drawn behind the fill rather than
+ * as part of it: the bar measures the population at home, and the band says
+ * where that population wants to sit.
+ */
+.growth-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(77, 128, 104, 0.5);
+  border-right: 1px solid rgba(77, 128, 104, 0.5);
+  background: rgba(77, 128, 104, 0.15);
+  pointer-events: none;
 }
 
 .commitment-copy {

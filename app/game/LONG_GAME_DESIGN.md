@@ -9,7 +9,7 @@ tuning work continues.
 
 ## Where the current build stands
 
-Two tuning eras are already in the shipped rules and set the stage:
+Three tuning eras are already in the shipped rules and set the stage:
 
 - **The slow economy** (income ÷20, population growth ÷6, trade reaches ÷6):
   a 100-game batch showed the world fully settled by ~tick 180, then ~2,300
@@ -19,6 +19,15 @@ Two tuning eras are already in the shipped rules and set the stage:
 - **The long frontier** (starts ÷10 in area, settlement pressure 0.62 →
   0.03): the frontier era now runs thousands of ticks instead of ~180, so
   the opening age is watchable growth instead of an instant fill.
+- **Population as a resource** (committed hosts leave the cap; growth pays
+  across a 40–70% band and collapses outside it; courts size settlement to
+  what the frontier can absorb and ship their surplus out at 70%): realms
+  stopped parking at ~91% of capacity growing at a quarter of peak, and now
+  run the opening in the band instead. On the calibration seed that roughly
+  doubles the pace of the frontier era — 74% of the world settled by tick
+  ~440 where it used to take ~1,200 — while leaving `pressurePerTick`
+  untouched. That dial is where the era's length would be given back if the
+  faster opening is not wanted.
 
 The dead calm is the problem the mechanics below exist to solve: with tax
 income a trickle and war unaffordable, nothing happens between the frontier

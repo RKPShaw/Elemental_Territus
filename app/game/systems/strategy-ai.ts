@@ -3,13 +3,17 @@ import { PLAYERS, PLAYER_ORDER } from "../players";
 import { ascensionAppetite } from "../ascension";
 import { otherParty, warsFor } from "../diplomacy";
 import { realmMatchup } from "../elements";
-import {
-  coastalCells,
-  neighborIndices,
-  structureCells,
-} from "../grid";
+import { coastalCells, structureCells } from "../grid";
 import { frontierTargets } from "../frontier";
-import { CLAIM_RULES, ELEMENT_RULES, POPULATION_RULES, compactNumber, clamp } from "../rules";
+import {
+  CLAIM_RULES,
+  ELEMENT_RULES,
+  POPULATION_RULES,
+  SETTLER_FRONT_SATURATION,
+  TERRAIN_RULES,
+  compactNumber,
+  clamp,
+} from "../rules";
 import { strategyFactor } from "../strategy";
 import type { PlayerId, SimulationContext, SimulationSystem } from "../types";
 
@@ -25,12 +29,8 @@ export class StrategyAiSystem implements SimulationSystem {
       if (!faction.alive) continue;
       const homeRatio = faction.troops / Math.max(1, faction.troopCap);
       const wars = warsFor(state, id);
-      const hasOpenFrontier = state.cells.some((cell, index) =>
-        cell.owner === null &&
-        cell.terrain !== "water" &&
-        neighborIndices(index, state.config.width, state.config.height)
-          .some((neighbor) => state.cells[neighbor]!.owner === id),
-      );
+      const openFrontier = frontierTargets(state, id, "wilderness");
+      const hasOpenFrontier = openFrontier.length > 0;
       const settlementCampaign = state.campaigns.find(
         (campaign) => campaign.attacker === id && campaign.target === "wilderness",
       );
@@ -39,37 +39,56 @@ export class StrategyAiSystem implements SimulationSystem {
         return total + Math.max(0, campaign.remaining);
       }, 0);
       const defendingEmergency = incomingPressure > Math.max(5_000, faction.troopCap * 0.22);
+      // Population is a resource to spend, not a bar to fill. A host on
+      // campaign leaves the cap entirely (see POPULATION_RULES), so a realm
+      // sitting near full is not strong -- it is a realm growing at a fifth
+      // of the pace it could, holding people it has found no use for.
+      // Marching a tenth of capacity out drops the home ratio by a tenth and
+      // buys back the growth that crowding was costing.
+      const bandFloor = faction.troopCap * POPULATION_RULES.targetHomeRatio;
+      const crowded = homeRatio >= POPULATION_RULES.commitmentTriggerRatio;
       let settlementCommitment = 0;
       if (hasOpenFrontier && !defendingEmergency) {
-        const desiredFieldStrength = Math.max(
+        // Size the front to the frontier, not to a fixed slice of the realm.
+        // A settler front saturates cell by cell, so this is the whole of the
+        // useful commitment: beyond it the extra host stands about while the
+        // same tiles fall at the same pace, and a realm whose committed
+        // troops cost it no capacity would otherwise bank an army forever.
+        const desiredFieldStrength = clamp(
+          openFrontier.length * SETTLER_FRONT_SATURATION,
           CLAIM_RULES.minimumCampaignCommitment,
-          faction.troopCap * 0.1,
+          faction.troopCap,
         );
-        const needsSettlement = !settlementCampaign ||
-          settlementCampaign.remaining < desiredFieldStrength * 0.7;
+        const fieldStrength = settlementCampaign?.remaining ?? 0;
         const foundingPush = state.tick === 1 && !settlementCampaign;
+        // Having settlers out at all is worth more than the ratio they leave
+        // behind, so a realm with no working front funds one down to the
+        // bottom of the growth band. Past that the front is paid for out of
+        // the surplus above the band alone, which is what keeps a realm from
+        // settling itself into the depleted tail.
+        const workingFront = Math.min(desiredFieldStrength, faction.troopCap * 0.15);
+        const thinFront = fieldStrength < workingFront;
+        const homeReserve = foundingPush
+          ? faction.troopCap * 0.12
+          : thinFront
+            ? Math.max(
+                CLAIM_RULES.minimumHomePopulation,
+                faction.troopCap * POPULATION_RULES.lowGrowthThreshold,
+              )
+            : bandFloor;
+        const available = Math.max(0, faction.troops - homeReserve);
+        const fieldShortfall = Math.max(0, desiredFieldStrength - fieldStrength);
+        // Reinforce a thinned front, and ship the surplus out whenever
+        // crowding at home is costing growth and the frontier has room for
+        // the people. The shortfall is the ceiling in both cases, so a
+        // saturated frontier ends the flow instead of soaking it up.
+        const needsSettlement = foundingPush || thinFront || crowded ||
+          fieldStrength < desiredFieldStrength * 0.7;
         if (
           needsSettlement &&
           (foundingPush || homeRatio >= POPULATION_RULES.minimumExpansionRatio)
         ) {
-          // Young realms may press outward modestly, while mature realms bank
-          // enough population to remain close to the 65% growth sweet spot.
-          const reserveRatio = foundingPush
-            ? 0.12
-            : homeRatio >= 0.55
-            ? POPULATION_RULES.matureExpansionReserveRatio
-            : POPULATION_RULES.minimumExpansionRatio;
-          const homeReserve = Math.max(CLAIM_RULES.minimumHomePopulation, faction.troopCap * reserveRatio);
-          const available = Math.max(0, faction.troops - homeReserve);
-          const fieldShortfall = settlementCampaign
-            ? Math.max(0, desiredFieldStrength - settlementCampaign.remaining)
-            : desiredFieldStrength;
-          settlementCommitment = Math.floor(
-            Math.min(
-              available,
-              Math.max(CLAIM_RULES.minimumCampaignCommitment, fieldShortfall),
-            ),
-          );
+          settlementCommitment = Math.floor(Math.min(available, fieldShortfall));
           if (settlementCommitment >= CLAIM_RULES.minimumCampaignCommitment) {
             state.commands.push({
               type: "launch-campaign",
@@ -82,22 +101,23 @@ export class StrategyAiSystem implements SimulationSystem {
         }
       }
       if (wars.length === 0) {
-        const filled = faction.troops / faction.troopCap;
         const theaterCount = settlementCampaign
           ? state.theaters.filter((theater) => theater.campaignId === settlementCampaign.id && theater.staleRefreshes === 0).length
           : 0;
         faction.intent = {
           target: null,
-          posture: hasOpenFrontier ? "expanding" : filled > 0.7 ? "mobilizing" : "trading",
+          posture: hasOpenFrontier ? "expanding" : crowded ? "mobilizing" : "trading",
           confidence: 0.66,
           plannedCommitment: settlementCommitment,
           reason:
             hasOpenFrontier
               ? homeRatio < POPULATION_RULES.minimumExpansionRatio
                 ? "Pause settlement until the population recovers above 20% of capacity; overcommitting now would cripple growth."
-                : `Pace wilderness commitments while the troop assigner balances ${Math.max(1, theaterCount)} automatic geographic ${theaterCount === 1 ? "theater" : "theaters"}, including difficult mountains.`
-              : filled > 0.7
-              ? "Peace holds, but the troop cap is nearly full. Study neighbors before the host goes idle."
+                : settlementCommitment > 0
+                  ? `Send ${compactNumber(settlementCommitment)} settlers to the frontier, leaving the population near ${Math.round(POPULATION_RULES.targetHomeRatio * 100)}% of capacity where it grows fastest.`
+                  : `Hold the population in its growth band while the troop assigner balances ${Math.max(1, theaterCount)} automatic geographic ${theaterCount === 1 ? "theater" : "theaters"}, including difficult mountains.`
+              : crowded
+              ? `The frontier is closed and the realm is ${Math.round(homeRatio * 100)}% full, so growth is stalling. Study neighbors before the surplus goes to waste.`
               : "No wars are declared. Grow troops, earn gold and strengthen peaceful trade routes.",
         };
         continue;
@@ -163,7 +183,27 @@ export class StrategyAiSystem implements SimulationSystem {
         // Marchable frontier, not raw adjacency: a border that is all river
         // counts for nothing here, which correctly deflates a front that
         // could only be pressed by sea.
-        const border = frontierTargets(state, id, rivalId).length;
+        const frontier = frontierTargets(state, id, rivalId);
+        const border = frontier.length;
+        // What the frontier is made of, not only how wide it is. The first
+        // ground a war can actually reach is the ground it will hold longest,
+        // so a border of farms and works is worth pressing where the same
+        // width of bare mountain is not: this is what makes the choice a
+        // choice of prize rather than merely a choice of enemy.
+        const prize = frontier.reduce((total, index) => {
+          const cell = state.cells[index]!;
+          const works = cell.capitalOf !== null
+            ? 10
+            : cell.structure === "city"
+              ? 6 + Math.max(0, cell.structureLevel - 1) * 3
+              : cell.structure !== null && cell.structure !== "fort"
+                ? 4
+                : 0;
+          return total + TERRAIN_RULES[cell.terrain].sustain + works;
+        }, 0);
+        const prizeEdge = border > 0
+          ? clamp(prize / (border * TERRAIN_RULES.plains.sustain) - 1, -0.4, 1.6)
+          : 0;
         const troopEdge = faction.troops / Math.max(1, rival.troops);
         const invasionBy = incoming.reduce(
           (total, campaign) => campaign.attacker === rivalId ? total + campaign.remaining : total,
@@ -176,6 +216,7 @@ export class StrategyAiSystem implements SimulationSystem {
           clamp(troopEdge, 0.25, 2.5) * 0.55 +
           (realmMatchup(state, id, rivalId) - 1) * 2.1 +
           Math.log2(border + 1) * 0.08 +
+          prizeEdge * 0.45 +
           (rival.territory / state.landTiles > 0.34 ? 0.35 : 0) +
           (counterattack ? 0.55 : 0) +
           (relation.lastAggressor !== id && !counterattack ? -0.3 : 0) +

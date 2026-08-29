@@ -1,4 +1,5 @@
 import { PLAYER_ORDER } from "../players";
+import { livingTroopsFor } from "../campaigns";
 import { getRelation, warsFor } from "../diplomacy";
 import { buildDistanceField, distanceAt } from "../distance-field";
 import type { DistanceField } from "../distance-field";
@@ -373,7 +374,16 @@ function desiredInfrastructure(
   // hemmed-in realm buys space to raise an army while a sprawling one buys
   // the income, and a court that chose economy really is thinner on troops
   // when a neighbor who chose the city comes across the border.
-  const capPressure = clamp(faction.troops / Math.max(1, faction.troopCap), 0, 1);
+  //
+  // Living strength, not the home ratio: a court that keeps its people in the
+  // growth band by marching a third of them to a front is genuinely pressing
+  // its ground, and reading only the half at home would have it stop buying
+  // capacity exactly when its armies are largest.
+  const capPressure = clamp(
+    livingTroopsFor(state, faction.id) / Math.max(1, faction.troopCap),
+    0,
+    1,
+  );
   const cityPriority = cityShortfall * affinity.city * (0.55 + capPressure * 0.7);
   const tradePriority = tradeShortfall * affinity.trade;
   // The exclusive carriers still wait for a first factory: a conduit or a

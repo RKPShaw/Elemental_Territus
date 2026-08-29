@@ -6,7 +6,13 @@ import { ascensionAppetite } from "../ascension";
 import { realmMatchup } from "../elements";
 import { frontierTargets } from "../frontier";
 import { borderLength } from "../grid";
-import { DIPLOMACY_RULES, ELEMENT_RULES, clamp, mobilizationCostFor } from "../rules";
+import {
+  DIPLOMACY_RULES,
+  ELEMENT_RULES,
+  POPULATION_RULES,
+  clamp,
+  mobilizationCostFor,
+} from "../rules";
 import { strategyFactor } from "../strategy";
 import type { PlayerId, RelationState, SimulationContext, SimulationSystem } from "../types";
 
@@ -114,7 +120,17 @@ function warDesire(
   const { state, random } = context;
   const self = state.factions[actor];
   const rival = state.factions[target];
-  const readiness = self.troops / Math.max(1, self.troopCap);
+  // Readiness is judged against the growth band, not against the cap. A realm
+  // that keeps its population near the optimum and its surplus in the field is
+  // at its strongest, and reading that as two-thirds ready would have every
+  // court hold out for a full bar that good demographic management never
+  // shows -- while the realm sitting at its ceiling, growing at a twentieth of
+  // peak, read as the ready one.
+  const readiness = clamp(
+    self.troops / Math.max(1, self.troopCap * POPULATION_RULES.targetHomeRatio),
+    0,
+    1.2,
+  );
   const troopEdge = clamp(self.troops / Math.max(1, rival.troops), 0.4, 2.2) - 1;
   const elementalEdge = realmMatchup(state, actor, target) - 1;
   const border = borderLength(state, actor, target);

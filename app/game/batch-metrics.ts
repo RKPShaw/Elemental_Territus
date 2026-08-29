@@ -5,6 +5,7 @@ import { getRelation } from "./diplomacy";
 import { isFrontierCell } from "./grid";
 import {
   ECONOMY_RULES,
+  POPULATION_RULES,
   populationGrowthEfficiency,
 } from "./rules";
 import { ELEMENTS } from "./elements";
@@ -68,10 +69,15 @@ export interface PlayerCumulativeMetrics {
   ticksAllied: number;
   ticksTraitorExposed: number;
   ticksTreasuryCapped: number;
-  ticksPopulationBelow20: number;
-  ticksPopulation20To50: number;
-  ticksPopulationNearPeak: number;
-  ticksPopulationOver82: number;
+  /**
+   * Where a realm's home ratio spent its life, against the bands the growth
+   * curve actually has (POPULATION_RULES) rather than against fixed numbers:
+   * a retune of the thresholds moves these counters with it.
+   */
+  ticksPopulationDepleted: number;
+  ticksPopulationBelowBand: number;
+  ticksPopulationInBand: number;
+  ticksPopulationCrowded: number;
   homeRatioTotal: number;
   committedRatioTotal: number;
   growthEfficiencyTotal: number;
@@ -234,10 +240,10 @@ function emptyPlayerMetrics(): PlayerCumulativeMetrics {
     ticksAllied: 0,
     ticksTraitorExposed: 0,
     ticksTreasuryCapped: 0,
-    ticksPopulationBelow20: 0,
-    ticksPopulation20To50: 0,
-    ticksPopulationNearPeak: 0,
-    ticksPopulationOver82: 0,
+    ticksPopulationDepleted: 0,
+    ticksPopulationBelowBand: 0,
+    ticksPopulationInBand: 0,
+    ticksPopulationCrowded: 0,
     homeRatioTotal: 0,
     committedRatioTotal: 0,
     growthEfficiencyTotal: 0,
@@ -430,10 +436,10 @@ export class BatchMetricsCollector {
       metrics.homeRatioTotal += homeRatio;
       metrics.committedRatioTotal += committedRatio;
       metrics.growthEfficiencyTotal += populationGrowthEfficiency(homeRatio);
-      if (homeRatio < 0.2) metrics.ticksPopulationBelow20 += 1;
-      else if (homeRatio < 0.5) metrics.ticksPopulation20To50 += 1;
-      else if (homeRatio <= 0.75) metrics.ticksPopulationNearPeak += 1;
-      else if (homeRatio > 0.82) metrics.ticksPopulationOver82 += 1;
+      if (homeRatio < POPULATION_RULES.minimumExpansionRatio) metrics.ticksPopulationDepleted += 1;
+      else if (homeRatio < POPULATION_RULES.lowGrowthThreshold) metrics.ticksPopulationBelowBand += 1;
+      else if (homeRatio <= POPULATION_RULES.highGrowthThreshold) metrics.ticksPopulationInBand += 1;
+      else metrics.ticksPopulationCrowded += 1;
       const warCount = Object.values(state.relations).filter(
         (relation) => relation.status === "war" && relation.parties.includes(id),
       ).length;

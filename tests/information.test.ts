@@ -261,10 +261,24 @@ test("mirage distorts believed prize and openness, collapses under corroboration
   bent.factions[owner].expressedElement = "mirage";
 
   // A viewer the illusion holds: too little corroboration in its sight group.
+  // The alliance below has to be the thing that collapses it, so the fixture
+  // also demands a viewer that allying with the owner actually informs. A
+  // viewer holding a remembered belief but no contact of its own reads a
+  // distorted prize and is still short of the threshold after gaining one
+  // corroborating ally, and picking it would leave the second half of this
+  // test asserting nothing about the mirage.
+  const alliedWithOwner = (viewer: PlayerId): WorldState => {
+    const world = fixtureEngine.snapshot();
+    world.relations[relationKey(viewer, owner)]!.status = "truce";
+    return world;
+  };
   const fooled = livingRealms(plain).find(
     (viewer) => viewer !== owner
+      && corroboration(plain, viewer, regionId) > 0
       && corroboration(plain, viewer, regionId) < INFORMATION_RULES.mirageCollapseContacts
-      && believedValue(plain, viewer, regionId, "prize").value > 0,
+      && believedValue(plain, viewer, regionId, "prize").value > 0
+      && corroboration(alliedWithOwner(viewer), viewer, regionId)
+        >= INFORMATION_RULES.mirageCollapseContacts,
   );
   assert.ok(fooled, "the fixture world should hold a viewer the mirage can fool");
 
