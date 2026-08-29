@@ -432,7 +432,45 @@ function buildRailNetwork(state: WorldState): TradeRoute[] {
     // Tradeability is a property of the pair, but the sweep hands `accept` both
     // ends, so one sweep answers for every owner at once. That matters: with
     // fifty players, one sweep per owner meant fifty full-grid searches per link.
-    if (connected.size === 0) {
+    //
+    // Growing an existing network is tried first, and opening a new one only
+    // where nothing can be grown. Seeding used to be reserved for a world with
+    // no track at all, which quietly made the whole map one network's problem:
+    // once any realm laid its first link, every other factory in the world had
+    // to reach *that* network through a continuous corridor of coverage, track
+    // and stations, and there was no second chance to start its own. Wide
+    // catchments hid it -- the discs overlapped, so the corridors existed. At a
+    // reach six times smaller each factory is its own island, and the world
+    // ended up with a single tiny railway and eighty idle factories. A network
+    // per pocket of the map is what the sparse-graph design always meant.
+    if (connected.size > 0) {
+      const seeds = nodes.filter((node) => connected.has(node.index));
+      const link = findCheapestRailLink(
+        state,
+        seeds,
+        (targetIndex, seedIndex) => {
+          const target = nodeByIndex.get(targetIndex);
+          const seed = nodeByIndex.get(seedIndex);
+          if (!target || !seed || connected.has(targetIndex)) return false;
+          if (!canTrade(state, target.owner, seed.owner)) return false;
+          return !routeIds.has(routeKey(targetIndex, seedIndex));
+        },
+        coverage,
+        trackCells,
+        nodeCells,
+      );
+      if (link) {
+        // The joining station is the route's start, as when each unconnected
+        // node searched for its own destination.
+        best = {
+          start: nodeByIndex.get(link.targetIndex)!,
+          end: nodeByIndex.get(link.seedIndex)!,
+          path: link.path,
+          cost: link.cost,
+        };
+      }
+    }
+    if (!best) {
       // The first link of a network grows out of a factory and may not exceed
       // the train radius.
       const seeds = unconnected.filter((node) => node.kind === "factory");
@@ -457,32 +495,6 @@ function buildRailNetwork(state: WorldState): TradeRoute[] {
           start: nodeByIndex.get(link.seedIndex)!,
           end: nodeByIndex.get(link.targetIndex)!,
           path: [...link.path].reverse(),
-          cost: link.cost,
-        };
-      }
-    } else {
-      const seeds = nodes.filter((node) => connected.has(node.index));
-      const link = findCheapestRailLink(
-        state,
-        seeds,
-        (targetIndex, seedIndex) => {
-          const target = nodeByIndex.get(targetIndex);
-          const seed = nodeByIndex.get(seedIndex);
-          if (!target || !seed || connected.has(targetIndex)) return false;
-          if (!canTrade(state, target.owner, seed.owner)) return false;
-          return !routeIds.has(routeKey(targetIndex, seedIndex));
-        },
-        coverage,
-        trackCells,
-        nodeCells,
-      );
-      if (link) {
-        // The joining station is the route's start, as when each unconnected
-        // node searched for its own destination.
-        best = {
-          start: nodeByIndex.get(link.targetIndex)!,
-          end: nodeByIndex.get(link.seedIndex)!,
-          path: link.path,
           cost: link.cost,
         };
       }
@@ -1224,9 +1236,15 @@ function spawnPulses(context: SimulationContext): void {
 
 /**
  * Flyers cross anything in a straight line between skyports. There is no
- * network to lay and no ground to answer to — only the pair of aprons and
- * whether their owners trade — so air freight is priced like a voyage, by
- * the distance it buys, at the airborne premium.
+ * network to lay and no ground to answer to — only the pair of aprons, how
+ * far apart they stand, and whether their owners trade — so air freight is
+ * priced like a voyage, by the distance it buys, at the airborne premium.
+ *
+ * The pair has to fall inside a band. Below minimumFlightDistance a hop is
+ * not worth wings; beyond flightRadius the apron simply cannot reach, which
+ * is the one limit air never used to have. A skyport with no partner in the
+ * band sends nothing, exactly as a plant with no station in conduit reach
+ * does — reach is now a property every carrier answers to.
  */
 function spawnFlyers(context: SimulationContext): void {
   const { state, random } = context;
@@ -1242,7 +1260,9 @@ function spawnFlyers(context: SimulationContext): void {
       if (destination === source) return false;
       const destinationOwner = state.cells[destination]!.owner;
       if (destinationOwner === null || !canTrade(state, owner, destinationOwner)) return false;
-      return distanceBetween(state, source, destination) >= TRADE_RULES.minimumFlightDistance;
+      const distance = distanceBetween(state, source, destination);
+      return distance >= TRADE_RULES.minimumFlightDistance
+        && distance <= TRADE_RULES.flightRadius;
     });
     if (pool.length === 0) continue;
     const destination = random.pick(pool);

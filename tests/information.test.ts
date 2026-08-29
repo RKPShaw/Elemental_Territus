@@ -37,7 +37,11 @@ import type { PlayerId, WorldState } from "../app/game/types";
  */
 
 const FIXTURE_SEED = 0x240823;
-const FIXTURE_TICK = 300;
+// Advanced to where the long-frontier world has grown realms into contact:
+// with village-sized starts and the slowed settlement pace, no rival has
+// contact-without-presence on a plurality region before roughly tick 600,
+// and the fixture wants a margin over the first appearance.
+const FIXTURE_TICK = 900;
 
 /** One advanced world, snapshotted per test into independent mutable copies. */
 const fixtureEngine = new ElementalWarEngine(FIXTURE_SEED);

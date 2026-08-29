@@ -15,7 +15,29 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the rivers-and-slow-money rework, and the gameplay changes
+ * Re-recorded for the long-frontier tuning pass: realms open at a tenth of
+ * their old area (SPAWN_RULES.initialRegionRadius) and the settlement pace
+ * came down twentyfold again (CLAIM_RULES.pressurePerTick 0.62 -> 0.03), so
+ * the frontier era runs thousands of ticks instead of ~180 and every digest
+ * moves by construction. Tuning only -- no new mechanics entered the build
+ * (the long-game mechanics under design live in LONG_GAME_DESIGN.md).
+ *
+ * Before that, re-recorded for the slow-world pacing retune, and the gameplay change was
+ * the whole point. Population grows at a sixth of the old rate, which slows
+ * the frontier as much as the head count because settling ground is paid for
+ * in people. Every income rate is a twentieth of what it was: land and city
+ * yields divided outright, and each trade carrier divided by three levers at
+ * once -- a tripled dispatch clock, halved vehicle speeds (ships a fifth,
+ * since a harbour is the one site that gains no reach limit), and smaller
+ * rewards. Every trade reach is a sixth of what it was, alongside the
+ * structure spacing that gives a reach its meaning, and the airborne carrier
+ * gained the reach limit it never had. Two systems had to follow the
+ * geometry to keep working at it: rail may now open a network wherever a
+ * factory has a station in radius, instead of only in a world with no track
+ * at all, and every placement preference that answers to a trade network is
+ * measured in that carrier's reach rather than in bare world units.
+ *
+ * Before that, re-recorded for the rivers-and-slow-money rework, and the gameplay changes
  * were the point, all of them. Watercourses now hold a heading (a turn
  * penalty in the carve walk stops steepest-descent from coiling around flat
  * basins), and stream courses are trimmed to land, so the map itself moves —
@@ -214,25 +236,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "a4ea7699c73689cc5f443f08f7e5a22c", cells: "3c6f4e0154e16267" },
-      { tick: 200, world: "62edb718759924b093e5be7516b2d665", cells: "dd1bcdd1c3034f11" },
-      { tick: 600, world: "2a3e8ce58f416a1cf7c0cb6a7008e67a", cells: "d2ddb95a93780801", deep: true },
+      { tick: 60, world: "bccf01bd3c99b57a3ad91dfb444b19cb", cells: "c52c8433fd15f4bc" },
+      { tick: 200, world: "b86778dc05e6bace23de3582257fcebf", cells: "3f86e728f67ac7ee" },
+      { tick: 600, world: "4ef520685c25ebaa174535776e9377c2", cells: "4c6bbc15977d0b2c", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "2e125f531fa43222653d0fc0d2eb3e51", cells: "471cca811b42bb97" },
-      { tick: 200, world: "687830fabcbb61e3f7c2330dc465da04", cells: "1a7a6dba904c0b91" },
-      { tick: 600, world: "ae1523e7d0dcb4a242f81fbefaa12945", cells: "8200937aa1518b97", deep: true },
+      { tick: 60, world: "99e44d483ab7100f1b1765839ed003e1", cells: "9eb445d260f302e9" },
+      { tick: 200, world: "0ca5e1a1c3126c472c3b8c2d5bd4055e", cells: "f4268a230e8a36e1" },
+      { tick: 600, world: "d9ea9d8397af78d229b49d59432dadfa", cells: "183d6f2b3b936a50", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "cacc5b56e09313937c402c35682a1fce", cells: "5eb456e30833eb9d" },
-      { tick: 200, world: "bec2198397afded26db4ba45b0bbe573", cells: "dc9636ec3112ff06" },
-      { tick: 600, world: "0da7debeddcd388f05488a5e963de9b5", cells: "b2b4176081366551", deep: true },
+      { tick: 60, world: "78f959956c08e90b61ec329207f15559", cells: "38fa00f40e660b72" },
+      { tick: 200, world: "2f3c934263273ce67b9b57b22ea59457", cells: "14835747e025a8ce" },
+      { tick: 600, world: "9f172b4aaed6fec4e31a80dd84def556", cells: "225f3c0b4c07cbdf", deep: true },
     ],
   },
 ];

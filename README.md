@@ -196,8 +196,10 @@ drive the same simulation safely.
 
 - Every diplomatic pair begins at peace; territory cannot be attacked until a
   formal declaration of war succeeds.
-- Every player begins with a compact territory, roughly 12–16K home population,
-  a 20K treasury, and a single founded city on its capital tile. Settlement
+- Every player begins as a village: a capital city and its adjacent fields
+  (a tenth of the old opening area), roughly 12K home population and a token
+  2K treasury. The frontier era is the opening age — settlement pressure is
+  tuned so the wilderness takes thousands of ticks to close, and settlement
   fronts spend population while later city development raises capacity toward
   the 1.5M cap.
 - Players score, offer and accept ten-minute alliance truces from power parity,
@@ -235,27 +237,32 @@ drive the same simulation safely.
   shortest physical path over the laid network from its factory to its
   destination, dwells two seconds at each station that path actually passes
   through -- a city off the line is passed by -- and excludes its own launch
-  factory from the payout. Domestic stops pay the convoy realm 50K; foreign
-  stops pay both convoy and host realms 100K, for 4× total value; a land
+  factory from the payout. Domestic stops pay the convoy realm 500; foreign
+  stops pay both convoy and host realms 1,000, for 4× total value; a land
   realm's stations host foreign stops for 15% more. The world supports up to
   75 simultaneous convoys.
 - Power plants rise only for realms whose expressed element trades by
   energy. A plant strings straight conduits to up to three stations within
-  reach and sends paying pulses down them — a flat 45K per delivery, so
+  reach and sends paying pulses down them — a flat 1,300 per delivery, so
   energy trade is frequency, not distance. Captured plants keep pulsing for
   their captor, who earns no energy bonus without the form.
 - Skyports rise only for realms whose expressed element trades by air, and
-  fly freight in a straight line to any other skyport in the world — no
-  network to lay, no ground to answer to — paying 5.5K per planned travel
-  second, with a minimum worthwhile hop.
+  fly freight in a straight line to any other skyport inside their flight
+  radius — no network to lay and no ground to answer to, but a reach all the
+  same — paying 460 per planned travel second. The flight has to fall in a
+  band: shorter than the minimum is not worth wings, longer than the radius
+  is out of range. Air still travels furthest of the networked carriers, at
+  three times the train radius.
 - Every realm opens with its capital as a founded city. Capturing a capital
   annexes the defender's entire remaining territory on the spot: the realm
   falls to the captor along with its elements.
 - Merchant ships select random destination harbors and use contiguous water-only
-  paths. Their fixed velocity makes long voyages last several world minutes;
-  payout is 4K per planned travel second -- 15% more for a realm whose
-  expressed element trades by waterway -- and the world supports up to 1,000
-  ships.
+  paths. Ships are the one carrier with no reach limit -- a sea lane is not
+  something anyone builds, so there is nothing to shrink -- and they are the
+  slowest thing on the map in exchange, which makes a long voyage a genuine
+  commitment of the berth rather than a free reach across the world. Payout
+  is 35 per planned travel second -- 15% more for a realm whose expressed
+  element trades by waterway -- and the world supports up to 1,000 ships.
 - On every carrier that pays a host on arrival — ships, pulses and flyers —
   the foreign destination receives a host share: 18% between strangers, 24%
   or 30% when the parties' expressed elements share one or both trade forms,

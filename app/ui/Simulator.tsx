@@ -851,7 +851,7 @@ export function Simulator() {
               ))}
             </div>
             <p className="terrain-invariant">
-              New sites stay {STRUCTURE_MIN_SPACING.toFixed(1)} world units apart. Convoy stops pay {compactNumber(TRADE_RULES.domesticTrainStopPayout)} at home or {compactNumber(TRADE_RULES.foreignTrainStopPayout)} to each player abroad; ships earn {compactNumber(TRADE_RULES.shipPayoutPerTravelTick)} per travel second, conduit pulses deliver {compactNumber(TRADE_RULES.energyDeliveryPayout)}, and flyers earn {compactNumber(TRADE_RULES.airPayoutPerTravelTick)} per second flown. Each trade form pays its holder {Math.round(ELEMENT_RULES.tradeFormIncomeBonus * 100)}% extra on its own carrier, and shared forms raise a host&apos;s share.
+              New sites stay {STRUCTURE_MIN_SPACING.toFixed(2)} world units apart. Every carrier but the ship serves a neighbourhood: trains reach {TRADE_RULES.trainRadius} world units, conduits {TRADE_RULES.conduitRadius}, and flights run between {TRADE_RULES.minimumFlightDistance} and {TRADE_RULES.flightRadius}. Ships alone sail anywhere, and are the slowest thing on the map for it. Convoy stops pay {compactNumber(TRADE_RULES.domesticTrainStopPayout)} at home or {compactNumber(TRADE_RULES.foreignTrainStopPayout)} to each player abroad; ships earn {compactNumber(TRADE_RULES.shipPayoutPerTravelTick)} per travel second, conduit pulses deliver {compactNumber(TRADE_RULES.energyDeliveryPayout)}, and flyers earn {compactNumber(TRADE_RULES.airPayoutPerTravelTick)} per second flown. Each trade form pays its holder {Math.round(ELEMENT_RULES.tradeFormIncomeBonus * 100)}% extra on its own carrier, and shared forms raise a host&apos;s share.
             </p>
           </section>
         </div>
