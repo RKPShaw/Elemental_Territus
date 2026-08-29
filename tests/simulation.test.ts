@@ -5,9 +5,11 @@ import { runBatchGame } from "../app/game/batch";
 import { PLAYER_ORDER } from "../app/game/players";
 import { ELEMENT_SPACE } from "../app/game/elements";
 import { statProfileOf } from "../app/game/powers";
+import { committedTroopsFor, livingTroopsFor } from "../app/game/campaigns";
 import {
   ELEMENT_RULES,
   ENEMY_TERRAIN_COST,
+  POPULATION_RULES,
   POWER_RULES,
   STRUCTURE_MIN_SPACING,
   STRATEGIC_REGION_RULES,
@@ -21,6 +23,7 @@ import {
 import { canPlaceStructureSite, cellCoordinates, distanceBetween, neighborIndices } from "../app/game/grid";
 import { markCellsChanged } from "../app/game/structure-index";
 import { CommandExecutionSystem } from "../app/game/systems/commands";
+import { EconomySystem } from "../app/game/systems/economy";
 import { StorySystem } from "../app/game/systems/story";
 import { BATCH_SYSTEMS } from "../app/game/systems";
 import { createWorld } from "../app/game/world";
@@ -270,12 +273,86 @@ test("the hardest wilderness remains cheaper than the easiest invasion", () => {
   );
 });
 
-test("population growth has a clear 65 percent sweet spot", () => {
-  const peak = populationGrowthEfficiency(0.65);
+test("population growth pays across a band and collapses outside it", () => {
+  const peak = populationGrowthEfficiency(POPULATION_RULES.peakGrowthRatio);
   assert.equal(peak, 1);
+  assert.equal(POPULATION_RULES.peakGrowthRatio, 0.65);
+
+  // The band is wide enough to live in: a realm anywhere between the
+  // thresholds keeps most of peak, which is what lets it commit hosts and
+  // take them back without falling off the curve.
+  for (let ratio = POPULATION_RULES.lowGrowthThreshold; ratio <= POPULATION_RULES.highGrowthThreshold; ratio += 0.01) {
+    assert.ok(
+      populationGrowthEfficiency(ratio) >= peak * 0.69,
+      `${ratio.toFixed(2)} sits inside the growth band and must still pay`,
+    );
+  }
+
+  // Outside it the curve falls away and keeps falling, so neither an empty
+  // realm nor a full one is anywhere to sit.
+  assert.ok(populationGrowthEfficiency(0.3) < populationGrowthEfficiency(POPULATION_RULES.lowGrowthThreshold));
   assert.ok(populationGrowthEfficiency(0.19) < peak * 0.4);
   assert.ok(populationGrowthEfficiency(0.83) < peak * 0.55);
+  assert.ok(populationGrowthEfficiency(0.92) < peak * 0.2);
   assert.ok(populationGrowthEfficiency(0.99) < peak * 0.02);
+  assert.equal(populationGrowthEfficiency(1), 0);
+  // A gutted realm recovers rather than deadlocking at zero.
+  assert.ok(populationGrowthEfficiency(0) > 0);
+
+  // Monotone either side of the optimum: the curve names one place to be.
+  for (let ratio = 0; ratio < POPULATION_RULES.peakGrowthRatio; ratio += 0.01) {
+    assert.ok(populationGrowthEfficiency(ratio) < populationGrowthEfficiency(ratio + 0.01) + 1e-9);
+  }
+  for (let ratio = POPULATION_RULES.peakGrowthRatio; ratio < 1; ratio += 0.01) {
+    assert.ok(populationGrowthEfficiency(ratio) > populationGrowthEfficiency(ratio + 0.01) - 1e-9);
+  }
+});
+
+test("a committed host leaves the cap: home grows past it and living strength overshoots", () => {
+  const state = createWorld(0x240823);
+  const id = PLAYER_ORDER[0]!;
+  const faction = state.factions[id]!;
+  faction.troopCap = 100_000;
+  faction.troops = 50_000;
+  // Half the realm's capacity is away on campaign.
+  state.campaigns.push({
+    id: "test-campaign",
+    attacker: id,
+    target: "wilderness",
+    mode: "settlement",
+    troops: 50_000,
+    initialCommitted: 50_000,
+    remaining: 50_000,
+    defenderRemaining: 0,
+    launchedAt: state.tick,
+    captures: 0,
+    storyKey: "test",
+  } as unknown as WorldState["campaigns"][number]);
+  assert.equal(committedTroopsFor(state, id), 50_000);
+
+  const context: SimulationContext = {
+    state,
+    random: { next: () => 0.5, int: (min) => min, pick: (items) => items[0]!, chance: () => false },
+    emit: () => undefined,
+    report: () => 1,
+  };
+  const economy = new EconomySystem();
+  const before = faction.troops;
+  for (let tick = 0; tick < 40; tick += 1) {
+    faction.troopCap = 100_000;
+    economy.update(context);
+  }
+
+  // The old rule capped home at cap minus committed, which would have frozen
+  // this realm at 50K. Capacity is what the ground at home supports, and the
+  // host abroad is not at home.
+  assert.ok(faction.troops > before, "a realm with a host abroad must still grow at home");
+  assert.ok(faction.troops > 55_000, "growth must not be pinned at cap minus committed");
+  assert.ok(faction.troops <= faction.troopCap);
+  assert.ok(
+    livingTroopsFor(state, id) > faction.troopCap,
+    "home plus committed may stand above capacity while the host is away",
+  );
 });
 
 test("settlement runs an age, lowlands first", () => {
@@ -626,12 +703,17 @@ test("train stops pay the fixed values, scaled by stacks and trade-form rewards"
   // about how long a court saves or how long the frontier era runs — and a
   // foreign stop needs realms that actually border each other, which the
   // village-start world does not produce inside any test horizon.
+  //
+  // The horizon is 1,800 ticks because that is where this seed's first
+  // international line now runs. Population management moved it: courts that
+  // keep their people in the growth band lay out a different country, and the
+  // first stop served over a border followed it out to roughly tick 1,700.
   const engine = new ElementalWarEngine(0x240823);
   engine.observe((world) => {
     for (const faction of Object.values(world.factions)) faction.gold = 1_000_000;
     dealWildernessToNearestCapital(world);
   });
-  const state = engine.step(900);
+  const state = engine.step(1_800);
   const stops = state.reports.filter((event) => event.kind === "trade.train-stop-served");
   const domestic = stops.find((event) => event.facts.foreign === false);
   const foreign = stops.find((event) => event.facts.foreign === true);

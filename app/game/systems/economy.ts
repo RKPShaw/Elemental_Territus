@@ -1,6 +1,5 @@
 import { PLAYER_ORDER } from "../players";
 import { warsFor } from "../diplomacy";
-import { committedTroopsFor } from "../campaigns";
 
 import {
   ECONOMY_RULES,
@@ -55,7 +54,12 @@ export class EconomySystem implements SimulationSystem {
         ECONOMY_RULES.maximumTreasury,
       );
 
-      const committedTroops = committedTroopsFor(state, id);
+      // Capacity is what the ground at home supports, and a host on campaign
+      // is not at home: it neither reproduces nor takes up room. So the cap
+      // bounds the population alone, and a realm that marches people out has
+      // made room to grow into rather than merely spent itself. While that
+      // host is away the realm's living strength — home plus committed — may
+      // stand above the cap, which is the reward for using its people.
       const homeRatio = faction.troops / Math.max(1, faction.troopCap);
       const growthEfficiency = populationGrowthEfficiency(homeRatio);
       faction.troopGrowth =
@@ -63,11 +67,7 @@ export class EconomySystem implements SimulationSystem {
         * POPULATION_RULES.peakGrowthPerTick
         * growthEfficiency
         * powerGrowthFactor(state, id);
-      faction.troops = clamp(
-        faction.troops + faction.troopGrowth,
-        0,
-        Math.max(0, faction.troopCap - committedTroops),
-      );
+      faction.troops = clamp(faction.troops + faction.troopGrowth, 0, faction.troopCap);
 
       const activeWars = warsFor(state, id).length;
       faction.warWeariness = clamp(

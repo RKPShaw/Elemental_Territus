@@ -49,9 +49,12 @@ export const DEFAULT_CONFIG: SimulationConfig = {
    * Lowered from 180 when war became funded and frontier-reluctant: a long
    * flat truce made every realm's pent-up desire fire on the first legal
    * diplomacy pass, so the whole world attacked on one tick. The opening
-   * calm now comes from the incentives themselves — armies still settling
-   * the frontier, mobilization chests still filling — which release realm by
-   * realm instead of all at once.
+   * calm comes from the incentives themselves, which release realm by realm
+   * instead of all at once — though only one of the two that earned this
+   * number is left. War is free to declare now, so the filling chest no
+   * longer staggers anything and the armies still out settling the frontier
+   * carry it alone. This is the first lever to reach for if an opening ever
+   * fires on one tick again.
    */
   minimumPeaceTicks: 64,
   victoryShare: 0.8,

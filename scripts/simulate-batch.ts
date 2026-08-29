@@ -138,9 +138,10 @@ const checkpointSummary = checkpointTicks.map((tick) => {
     populationCapPerRealm: rounded(mean(players.map((player) => player.populationCap))),
     homeRatioPct: rounded(mean(players.map((player) => player.homeRatio)) * 100),
     growthEfficiencyPct: rounded(mean(players.map((player) => player.growthEfficiency)) * 100),
-    lifetimeBelow20Pct: rounded(ratioOfLifetime((player) => player.cumulative.ticksPopulationBelow20) * 100),
-    lifetimeNearPeakPct: rounded(ratioOfLifetime((player) => player.cumulative.ticksPopulationNearPeak) * 100),
-    lifetimeOver82Pct: rounded(ratioOfLifetime((player) => player.cumulative.ticksPopulationOver82) * 100),
+    lifetimeDepletedPct: rounded(ratioOfLifetime((player) => player.cumulative.ticksPopulationDepleted) * 100),
+    lifetimeBelowBandPct: rounded(ratioOfLifetime((player) => player.cumulative.ticksPopulationBelowBand) * 100),
+    lifetimeInGrowthBandPct: rounded(ratioOfLifetime((player) => player.cumulative.ticksPopulationInBand) * 100),
+    lifetimeCrowdedPct: rounded(ratioOfLifetime((player) => player.cumulative.ticksPopulationCrowded) * 100),
     lifetimeCommittedCapPct: rounded(
       ratioOfLifetime((player) => player.cumulative.committedRatioTotal) * 100,
     ),

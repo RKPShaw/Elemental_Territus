@@ -95,7 +95,17 @@ export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
     id: "fort",
     name: "Fort",
     glyph: "▣",
-    cost: 135_000,
+    /**
+     * A fort is off the shared ladder — it buys no income and no capacity, so
+     * it never made sense for one to raise the price of the next factory —
+     * but it is still priced against that ladder, and it was left behind when
+     * the ladder came down. 135,000 was the old second rung; the ladder is
+     * 18/40/90K now, so a fort costs what a second building costs, which is
+     * what it always meant to cost. At the old number a court reached its
+     * third city before it could afford one wall, and a ten-game sweep to
+     * tick 6,000 recorded 1.3 forts built in a whole world.
+     */
+    cost: 40_000,
     description: "Doubles invasion cost in its protected area.",
   },
   factory: {
@@ -159,12 +169,12 @@ export const STRUCTURE_MIN_SPACING = 0.37;
  * some two thousand ticks in — which also reverses the order the milestone
  * used to arrive in. The first factory used to land as the frontier closed;
  * now the frontier closes first and the realm is still saving. The rung is
- * priced against the 20K mobilization floor on purpose: one savings pot,
- * three critical ways to spend it. A court that banks for its first factory cannot also
- * fund a war chest, and the rival that bought a city instead holds +10K
- * troop cap when the border turns hostile. The founding capital does not
- * count as a purchase (see nextStructureCost), so the first built city and
- * the first factory cost the same and the choice is a real either/or.
+ * the whole of what a treasury is for now that war is free to declare
+ * (DIPLOMACY_RULES): one savings pot, and a court that banks for its first
+ * factory is not buying the city that would have carried +10K of troop cap
+ * when the border turns hostile. The founding capital does not count as a
+ * purchase (see nextStructureCost), so the first built city and the first
+ * factory cost the same and the choice is a real either/or.
  */
 export const STRUCTURE_COST_LADDER = [18_000, 40_000, 90_000] as const;
 
@@ -191,6 +201,23 @@ export function cityStationMultiplier(level: number): number {
  * The simulation's balance surface lives here instead of being scattered across
  * systems. That keeps the deterministic rules easy to tune, test or replace
  * without coupling them to rendering or AI policy.
+ *
+ * War is free to declare. It used to spend a mobilization chest — 1.6 gold a
+ * soldier, with a 20,000 floor — and that chest, not any appetite for peace,
+ * is what kept the world silent: the slow-economy retune cut income
+ * twentyfold and the floor did not follow it, so a war chest became some ten
+ * thousand ticks of saving and a hundred-game sweep recorded zero wars ever.
+ * The treasury is a builder's purse now and nothing else; a court that wants
+ * a war has only to want it.
+ *
+ * The ground paces the opening in the ledger's place. Settlement is cheaper
+ * than invasion, so a realm with wilderness left prefers taking it
+ * (openFrontierWarReluctance), and frontiers close at geography-dependent
+ * times; weariness, the per-war reluctance inside warDesire and the court's
+ * action budget carry the rest. Should an opening ever fire on one tick
+ * again, minimumPeaceTicks (world.ts) is the lever that answered that
+ * before — it was lowered to 64 on the strength of the chest that is no
+ * longer there.
  */
 export const DIPLOMACY_RULES = {
   minimumWarTicks: 176,
@@ -216,20 +243,6 @@ export const DIPLOMACY_RULES = {
    */
   courtActionsPerTerm: 2,
   /**
-   * Gold a declaration of war spends per soldier on raising and provisioning
-   * the host, with a floor for the smallest realms. War is funded, not free:
-   * the treasury pays the full chest at the declaration, and war desire
-   * scales with the realm's ability to pay (see warDesire). The cost rides
-   * the army rather than a flat number so it stays meaningful at every era —
-   * and because treasuries grow at genuinely different rates (terrain
-   * yields, trade income, construction programs all compete for the same
-   * gold) realms reach funding at different times, which is what staggers
-   * the opening wars without any forced scheduling. Spending the chest also
-   * delays the same realm's next declaration until it has saved up again.
-   */
-  mobilizationGoldPerTroop: 1.6,
-  mobilizationFloor: 20_000,
-  /**
    * How strongly open wilderness frontier suppresses war desire. Settlement
    * is always cheaper than invasion (see WILDERNESS_TERRAIN_COST), so a
    * realm with free land left to take prefers taking it; the pull fades as
@@ -243,14 +256,6 @@ export const DIPLOMACY_RULES = {
    */
   pileOnWarDesire: 0.34,
 } as const;
-
-/** The war chest a declaration must fund: raising this realm's host. */
-export function mobilizationCostFor(troops: number): number {
-  return Math.max(
-    DIPLOMACY_RULES.mobilizationFloor,
-    troops * DIPLOMACY_RULES.mobilizationGoldPerTroop,
-  );
-}
 
 export const CAMPAIGN_RULES = {
   maximumStrengthRatio: 2,
@@ -653,9 +658,20 @@ export const STRATEGY_RULES = {
   /** Weight added to diplomacy while any rival holds this much of the land. */
   hegemonDiplomacySurge: 0.12,
   hegemonShareThreshold: 0.3,
-  /** Weight added to economy while the treasury outruns the works. */
+  /**
+   * Weight added to economy while the treasury outruns the works.
+   *
+   * The floor is denominated in gold, so the twentyfold income cut left it
+   * stranded: at 2,000,000 it stood thirteen times above the richest treasury
+   * any realm reached in a ten-game sweep to tick 6,000, and the surge that
+   * is supposed to turn a court toward building simply never fired — realms
+   * spent 1.2% of their lives on an economic focus and 51.5% on a diplomatic
+   * one. Divided by the same twenty as the income that has to reach it, it
+   * fires for the realms genuinely sitting on more gold than works: past the
+   * ladder's top rung with another rung banked.
+   */
   richEconomySurge: 0.1,
-  richTreasuryFloor: 2_000_000,
+  richTreasuryFloor: 100_000,
   /** Weight added to trade while the realm is entirely at peace. */
   peacefulTradeSurge: 0.08,
 } as const;
@@ -672,10 +688,25 @@ export const STRATEGY_RULES = {
  * the carriers take the same twentyfold from three levers at once — longer
  * waits between dispatches, slower vehicles, smaller rewards — so trade
  * reads as sparse and unhurried rather than merely cheap. See TRADE_RULES.
+ *
+ * Two and a half of that twentyfold has since come back, to the passive rates
+ * alone. The ladder was priced so that "the first savings milestone lands as
+ * the frontier closes", and it did — against a frontier that ran to about
+ * tick 2,400. Population management then roughly halved the frontier era
+ * without the ladder following it, and the two clocks came apart: a ten-game
+ * sweep to tick 6,000 had the world fully settled by tick ~1,200 and the
+ * median realm's first building at tick 2,354, by which point a third of the
+ * roster was already dead and the survivors were deciding the map by war.
+ * Construction was not a decision anyone got to make.
+ *
+ * So ground and capitals pay two and a half times what they did, which puts
+ * the first rung back where it was meant to land. The carriers are
+ * deliberately left alone: trade should stay sparse and unhurried, and its
+ * three levers are the wrong place to chase a build clock.
  */
 export const ECONOMY_RULES = {
-  landIncomeScale: 0.024,
-  cityIncome: 5,
+  landIncomeScale: 0.06,
+  cityIncome: 12.5,
   maximumTreasury: 100_000_000,
 } as const;
 
@@ -860,40 +891,69 @@ export const TROOP_CAP_RULES = {
 } as const;
 
 /**
- * Population is the strategic economy. Only people at home reproduce; anyone
- * committed to a campaign still consumes capacity but contributes no growth.
- * The curve deliberately rewards a healthy, uncrowded realm near 65% of cap.
+ * Population is the strategic economy, and the home ratio is the dial that
+ * runs it. Only people at home reproduce, and they reproduce fastest in a
+ * band — roughly two fifths to seven tenths of capacity, best at 65%. A
+ * depleted realm has too few people to make more; a crowded one has nowhere
+ * to put them. Both ends approach zero, so neither is a resting place.
  *
- * The peak rate is divided by six from 0.018 for the slower opening. Only the
- * rate moves: the curve's shape, its thresholds and its 65% optimum are all
- * unchanged, so a realm is rewarded for exactly the same demographic balance
- * it always was — it simply takes six times as long to get anywhere.
+ * A host committed to a campaign is outside this entirely: it neither
+ * reproduces nor occupies capacity at home, which is what makes marching
+ * people out the way a realm manages its demography rather than a sacrifice
+ * of it. A realm sitting at 90% grows at a sixth of peak; the same realm
+ * that ships three tenths of its people to a front sits at 60%, grows at
+ * something near peak, and has an army in the field — and while that army
+ * is away its living population, home plus committed, may exceed the cap
+ * outright. Overshoot is the reward for using people, not a bookkeeping bug:
+ * a host sent out at 30% of cap and landed after the realm has regrown to
+ * 70% genuinely leaves the realm holding more people than its ground
+ * nominally supports.
+ *
+ * The overshoot is a loan, not a gift, and that is the discipline in the
+ * system: survivors come home into the population, where the cap still holds
+ * them, so anything that does not fit is gone. A realm that ships a host out
+ * and lets home climb back to the ceiling gets its ground's worth back and
+ * loses the rest — which is the second reason to sit in the band rather than
+ * on top of it, and the reason a court that means to take its army back buys
+ * the capacity to hold it.
+ *
+ * The peak rate is divided by six from 0.018 for the slower opening. Only
+ * the rate moves; the curve's shape decides where a realm wants to sit.
  *
  * Where that lands is worth knowing, because it is not evenly spread.
- * Settlement barely notices: claiming ground costs people
- * (CLAIM_RULES.populationCostPerCell) but is paced by pressurePerTick, and a
- * hundred-game sweep at this rate still has the world 99.5% settled by tick
- * 180 — the old schedule, within a rounding error. War notices enormously. A host
- * spent on a campaign is replaced six times slower, so offensives that used
- * to be renewed in a season now need an age, and conquest runs at something
- * like a sixth of its old pace: on the calibration seed, with war chests
- * staked so gold is not the constraint, the old world was down to five
- * realms by tick three thousand where this one is still at forty.
+ * Settlement barely notices the rate: claiming ground costs people
+ * (CLAIM_RULES.populationCostPerCell) but is paced by pressurePerTick. War
+ * notices enormously — a host spent on a campaign is replaced six times
+ * slower — which is exactly why a realm that keeps its ratio in the band is
+ * the one that can afford to fight at all.
  *
- * That is the intended shape of a slower game — the map fills at close to
- * the pace it did, and then the empires take an age to form on top of it —
- * but the war and diplomacy clocks were not rescaled with it, so wars now
- * reach their exhaustion and stalemate horizons having achieved perhaps a
- * third of what they used to. DIPLOMACY_RULES is where that would be
- * corrected if the shorter, less decisive war is not what is wanted.
+ * The war and diplomacy clocks were never rescaled with that division, so
+ * wars still reach their exhaustion and stalemate horizons having achieved
+ * perhaps a third of what they used to. DIPLOMACY_RULES is where that would
+ * be corrected if the shorter, less decisive war is not what is wanted.
  */
 export const POPULATION_RULES = {
-  lowGrowthThreshold: 0.2,
+  /** Below this share of capacity growth falls away toward a bare floor. */
+  lowGrowthThreshold: 0.4,
   peakGrowthRatio: 0.65,
-  highGrowthThreshold: 0.82,
+  /** Above this share crowding begins, and it steepens toward the cap. */
+  highGrowthThreshold: 0.7,
   peakGrowthPerTick: 0.003,
   minimumExpansionRatio: 0.2,
-  matureExpansionReserveRatio: 0.5,
+  /**
+   * Where a realm steers its home population back to after committing a
+   * host. Just under the 65% optimum on purpose: a realm that lands exactly
+   * on the peak has nowhere to grow but downhill, while one that lands a
+   * little under it grows through the best of the curve on its way back up.
+   */
+  targetHomeRatio: 0.6,
+  /**
+   * The home ratio at which a realm ships its surplus out. The gap between
+   * this and the target is deliberate hysteresis: a realm commits a tenth of
+   * its capacity at a time rather than dribbling a hundred soldiers into the
+   * field every decision it makes.
+   */
+  commitmentTriggerRatio: 0.7,
 } as const;
 
 /**
@@ -979,7 +1039,24 @@ export const CLAIM_RULES = {
   minimumCampaignCommitment: 2_000,
   neglectFullEffectTicks: 400,
   completionUrgencyPower: 3,
+  /**
+   * Troops on one frontier cell that read as a settler front at full pace,
+   * and the band a front's readiness is held inside.
+   *
+   * A frontier saturates: past `settlerFrontTroops * maximumFrontReadiness`
+   * on a cell the push does not get any faster, so this is also what tells a
+   * court how large a settlement commitment is worth making. Without that
+   * ceiling a realm whose committed host costs it no capacity could pour
+   * people into the same frontier forever and bank an army for nothing.
+   */
+  settlerFrontTroops: 850,
+  minimumFrontReadiness: 0.015,
+  maximumFrontReadiness: 1.45,
 } as const;
+
+/** The most troops one wilderness frontier cell can be pressed with usefully. */
+export const SETTLER_FRONT_SATURATION =
+  CLAIM_RULES.settlerFrontTroops * CLAIM_RULES.maximumFrontReadiness;
 
 function smoothstep(value: number): number {
   const t = clamp(value, 0, 1);
@@ -987,28 +1064,36 @@ function smoothstep(value: number): number {
 }
 
 /**
- * A smooth, skewed fertility curve with an explicit 65% optimum. It avoids a
- * zero-population deadlock while making both depleted and crowded realms grow
- * substantially slower than a realm that preserves its demographic balance.
+ * A smooth fertility curve with a broad plateau and two collapsing tails.
+ *
+ * Between the thresholds — 40% and 70% of capacity — a realm keeps at least
+ * seven tenths of peak growth, and peaks outright at 65%. That band is the
+ * whole strategy: it is wide enough to live in while committing hosts and
+ * taking them back, so a realm is asked to manage a range rather than to hit
+ * a number. Outside it the curve falls away and keeps falling, steeply near
+ * both extremes: a tenth-full realm grows at a sixth of peak and a
+ * nine-tenths-full one at a fifth, so neither emptiness nor a full bar is
+ * anywhere to sit. A small floor at the bottom keeps a gutted realm
+ * recovering rather than deadlocked at zero.
  */
 export function populationGrowthEfficiency(populationRatio: number): number {
   const ratio = clamp(populationRatio, 0, 1);
   const { lowGrowthThreshold, peakGrowthRatio, highGrowthThreshold } = POPULATION_RULES;
 
   if (ratio <= lowGrowthThreshold) {
-    return 0.06 + 0.32 * smoothstep(ratio / lowGrowthThreshold);
+    return 0.06 + 0.64 * smoothstep(ratio / lowGrowthThreshold);
   }
   if (ratio <= peakGrowthRatio) {
-    return 0.38 + 0.62 * smoothstep(
+    return 0.7 + 0.3 * smoothstep(
       (ratio - lowGrowthThreshold) / (peakGrowthRatio - lowGrowthThreshold),
     );
   }
   if (ratio <= highGrowthThreshold) {
-    return 1 - 0.46 * smoothstep(
+    return 1 - 0.18 * smoothstep(
       (ratio - peakGrowthRatio) / (highGrowthThreshold - peakGrowthRatio),
     );
   }
-  return 0.54 * (1 - smoothstep(
+  return 0.82 * (1 - smoothstep(
     (ratio - highGrowthThreshold) / (1 - highGrowthThreshold),
   ));
 }
