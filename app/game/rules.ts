@@ -871,9 +871,9 @@ export const TROOP_CAP_RULES = {
  *
  * Where that lands is worth knowing, because it is not evenly spread.
  * Settlement barely notices: claiming ground costs people
- * (CLAIM_RULES.populationCostPerCell) but is paced by pressurePerTick, so a
- * world that used to be fully claimed around tick twelve hundred is fully
- * claimed around tick two thousand instead. War notices enormously. A host
+ * (CLAIM_RULES.populationCostPerCell) but is paced by pressurePerTick, and a
+ * hundred-game sweep at this rate still has the world 99.5% settled by tick
+ * 180 — the old schedule, within a rounding error. War notices enormously. A host
  * spent on a campaign is replaced six times slower, so offensives that used
  * to be renewed in a season now need an age, and conquest runs at something
  * like a sixth of its old pace: on the calibration seed, with war chests
