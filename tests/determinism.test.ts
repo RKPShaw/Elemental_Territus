@@ -15,7 +15,21 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the crucible of conquest — ascension reworked from tally
+ * Re-recorded for the living land — dwell terraforming and terrain affinity —
+ * and the gameplay changes are the point. Terrain stops being immutable:
+ * eight terraformed terrains join the space (worldgen never places them; an
+ * element's long tenure does, read off the existing capturedAt clock, so the
+ * heartland transforms first and sequences ride the current terrain — Ember
+ * scorches plains, Fungus mires the scorch). Terrain affinity multiplies
+ * three chokepoints inside the matchup band — invasion cost of the
+ * defender's ground, land income, troop sustain — and the settle lens
+ * learns the ground each element leans toward, so settlement re-aims from
+ * the first planning window: cell digests move from tick 60 on ownership
+ * alone, long before the first transform can fire (dwell thresholds start
+ * at 3,000 ticks). Realm saturation is new faction state, so every world
+ * digest moves by construction as well.
+ *
+ * Before that, re-recorded for the crucible of conquest — ascension reworked from tally
  * thresholds to conquest-held fusion, and the gameplay change is the point.
  * Three moves, two of them by construction: the transmutation window is new
  * faction state (FactionState.transmutation), so every world digest moves;
@@ -252,25 +266,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "5d9bb87f26e1074b7902fc96b64be814", cells: "1e71590ddb73544f" },
-      { tick: 200, world: "9a5226c68c299010f22fc027e6a8c9e0", cells: "9f85f55f65ac4177" },
-      { tick: 600, world: "ed7a1dc22ff440a1fa07cb40076bb4df", cells: "2f74974d65382dc9", deep: true },
+      { tick: 60, world: "c9981258284726eb2376015a84d71e18", cells: "e60f1c9dfb4af684" },
+      { tick: 200, world: "680835a5ced5ddc6f78297ed1e015543", cells: "27eac351e0b25ecb" },
+      { tick: 600, world: "d1d3b51ec532d2e04c339f615aa880ed", cells: "4bb0e64f265bfb8b", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "5f03f52415a4151750a2454e34446542", cells: "3090bf8cad8f8076" },
-      { tick: 200, world: "7e46da79410fb01b2a90e6e59bd4506c", cells: "3bbb05529c75808f" },
-      { tick: 600, world: "d24d0e5059b21fe15a3211b5d0ca7efa", cells: "b3196ad8b3d04f2a", deep: true },
+      { tick: 60, world: "e6af5d855a3eb33739a3be9e2d3d57e5", cells: "30a212c36bb6febc" },
+      { tick: 200, world: "fe0ca5ae44387ecb61eff7a898aa4442", cells: "c9d13c55243c40a4" },
+      { tick: 600, world: "8e58b09a013cd5eaa89343651f6e97aa", cells: "47445cd9d3c9dc92", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "a00f202da2887d2e1644319f6d992c99", cells: "85545d735bcd4879" },
-      { tick: 200, world: "48b48ed0bdc5c027d0896d6deb757bf5", cells: "9d96f136758ecbec" },
-      { tick: 600, world: "f68163a2b2d606ffdcc9344914869705", cells: "475d01c7d5b75616", deep: true },
+      { tick: 60, world: "480039ef67f5ffe20b5558e1753d7e70", cells: "40bba3f89e599f90" },
+      { tick: 200, world: "8a5d0c1224910178b20256f06e63db8f", cells: "0ccea2ddae10ee71" },
+      { tick: 600, world: "bb2a778221eda41a4539dbbca83849b3", cells: "ec8470b282044b4e", deep: true },
     ],
   },
 ];

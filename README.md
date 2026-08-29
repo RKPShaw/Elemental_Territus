@@ -97,6 +97,23 @@ only ever upgrades, and each rung of the ladder pays a window of its own.
 the composed 25×25 table with graded relief for the founding bases a
 disadvantaged realm's history covers.
 
+The land answers to whoever lives on it. Terrain stops at nothing worldgen
+drew: land an element holds past a dwell threshold transforms — Ember makes
+scorched earth of the plains, Tide drowns them to marsh, Stone raises
+terraces, Gale strips dunes, and the compounds go further (Magma's basalt
+flows, Ice's glaciers, Grove's verdant overgrowth, Fungus's spore-mires).
+Because a transform reads only the current terrain, the owner's expressed
+element and the tenure already stamped on `Cell.capturedAt`, sequences fall
+out for free: scorched earth taken by Fungus becomes spore-mire; a glacier
+taken by Ember melts back to bare mountains. The land is the memory.
+`app/game/terraform.ts` owns the table and the terrain-affinity leans —
+band-clamped multipliers on invasion cost, land income and troop sustain,
+so obsidian ground on basalt fights harder while fungus withers on open
+scorch — and the settle lens reads the same leans, so courts settle toward
+the country their elements want. Each realm's `saturation` tracks how much
+of its land is already its own signature ground: the gauge of an element
+that has spent itself on its country.
+
 Identity now answers the story. Realms wake with plain, generic founding
 names — unique village names like "Corvale", drafted from the world seed in
 `app/game/naming.ts` — and earn grander ones as their history is written: the
@@ -181,8 +198,9 @@ last. `app/game/spawn.ts` owns this; `SPAWN_RULES` in `rules.ts` tunes it.
 `app/game/systems/index.ts` is the composition root. Every shared clock tick runs:
 
 1. clock and pressure decay;
-2. neutral-land settlement, realm accounting, elemental ascension, power
-   meters and troop-cap recalculation;
+2. dwell terraforming (throttled to its sweep cadence), neutral-land
+   settlement, realm accounting, elemental ascension, power meters and
+   troop-cap recalculation;
 3. economic growth and trade-vehicle resolution;
 4. truce timers plus diplomatic and military AI intent;
 5. construction intent;
@@ -294,6 +312,15 @@ drive the same simulation safely.
   annexed mid-window dies with it, and chained conquests each pay a fresh
   window. Expression never demotes, and an ascended realm keeps its name and
   colors — titles, not rebrands.
+- Worldgen draws six terrains and never the eight terraformed ones; only the
+  dwell sweep (`TERRAFORM_RULES.sweepCadenceTicks`) mutates `cell.terrain`
+  after tick zero. A transform is a pure function of (current terrain, owner's
+  expressed element, tenure off `capturedAt`) plus a hash jitter that consumes
+  no RNG stream — so sibling engines transform identically and sequences need
+  no extra state. Terrain affinity multiplies exactly three chokepoints —
+  enemy conquest cost, land income, troop sustain — and stays inside the
+  affinity band; water always reads 1. Saturation counts only terraformed
+  signature ground, never natural country a realm merely holds.
 - Information identities act only on beliefs, never on the world. A glass or
   airborne-trading realm observes twice per interval instead of once; a mist
   realm's plurality regions blend distant rivals' measurements 70% back

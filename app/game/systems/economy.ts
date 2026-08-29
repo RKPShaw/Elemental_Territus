@@ -12,6 +12,7 @@ import {
 } from "../rules";
 import type { PlayerId, SimulationContext, SimulationSystem } from "../types";
 import { structurePayoutMultiplier } from "../elements";
+import { terrainAffinityFactor } from "../terraform";
 import { powerGrowthFactor } from "../powers";
 import { recordLandIncome } from "../economics";
 
@@ -28,9 +29,15 @@ export class EconomySystem implements SimulationSystem {
     const cityIncome = new Map<PlayerId, number>();
     for (const cell of state.cells) {
       if (!cell.owner) continue;
+      // Terrain affinity prices the ground's yield by how well its owner's
+      // element lives on it — verdant pays a bloom realm more than a magma
+      // realm, scorch shorts everyone but the fire family.
       landIncome.set(
         cell.owner,
-        (landIncome.get(cell.owner) ?? 0) + TERRAIN_RULES[cell.terrain].goldYield * cellArea,
+        (landIncome.get(cell.owner) ?? 0)
+          + TERRAIN_RULES[cell.terrain].goldYield
+          * terrainAffinityFactor(state.factions[cell.owner].expressedElement, cell.terrain)
+          * cellArea,
       );
       if (cell.structure === "city") {
         cityIncome.set(

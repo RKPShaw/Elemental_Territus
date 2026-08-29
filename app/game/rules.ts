@@ -73,6 +73,82 @@ export const TERRAIN_RULES: Record<TerrainId, TerrainRule> = {
     sustain: 0.38,
     goldYield: 0.52,
   },
+  // Everything below is terraformed ground: worldgen never places these, an
+  // element's long tenure does (terraform.ts). Each keeps the established
+  // bands — defenseCost 0.78–1.85, sustain 0–1.5, goldYield 0–1.45 — so a
+  // transformed map plays by the same arithmetic as a fresh one.
+  scorched: {
+    id: "scorched",
+    name: "Scorched earth",
+    shortName: "Scorch",
+    fill: "#b0755a",
+    defenseCost: 0.95,
+    sustain: 0.3,
+    goldYield: 0.4,
+  },
+  marsh: {
+    id: "marsh",
+    name: "Drowned marsh",
+    shortName: "Marsh",
+    fill: "#8fae9b",
+    defenseCost: 1.32,
+    sustain: 0.85,
+    goldYield: 0.75,
+  },
+  duneland: {
+    id: "duneland",
+    name: "Wandering dunes",
+    shortName: "Dunes",
+    fill: "#ddc48e",
+    defenseCost: 1,
+    sustain: 0.45,
+    goldYield: 0.55,
+  },
+  terrace: {
+    id: "terrace",
+    name: "Terraced slopes",
+    shortName: "Terraces",
+    fill: "#b3a17c",
+    defenseCost: 1.45,
+    sustain: 0.95,
+    goldYield: 0.9,
+  },
+  glacier: {
+    id: "glacier",
+    name: "Creeping glacier",
+    shortName: "Glacier",
+    fill: "#cfe6ea",
+    defenseCost: 1.85,
+    sustain: 0.15,
+    goldYield: 0.3,
+  },
+  basalt: {
+    id: "basalt",
+    name: "Basalt flows",
+    shortName: "Basalt",
+    fill: "#6b6470",
+    defenseCost: 1.6,
+    sustain: 0.35,
+    goldYield: 0.65,
+  },
+  sporemire: {
+    id: "sporemire",
+    name: "Spore-mire",
+    shortName: "Mire",
+    fill: "#9c8a67",
+    defenseCost: 1.25,
+    sustain: 0.75,
+    goldYield: 0.6,
+  },
+  verdant: {
+    id: "verdant",
+    name: "Verdant overgrowth",
+    shortName: "Verdant",
+    fill: "#8fbf6f",
+    defenseCost: 1.05,
+    sustain: 1.5,
+    goldYield: 1.2,
+  },
 };
 
 export const LAND_TERRAINS: readonly LandTerrainId[] = [
@@ -81,7 +157,22 @@ export const LAND_TERRAINS: readonly LandTerrainId[] = [
   "forest",
   "hills",
   "mountains",
+  "scorched",
+  "marsh",
+  "duneland",
+  "terrace",
+  "glacier",
+  "basalt",
+  "sporemire",
+  "verdant",
 ] as const;
+
+/** One zeroed count per land terrain; regions and theaters both profile with it. */
+export function emptyTerrainProfile(): Record<LandTerrainId, number> {
+  const profile = {} as Record<LandTerrainId, number>;
+  for (const terrain of LAND_TERRAINS) profile[terrain] = 0;
+  return profile;
+}
 
 export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
   city: {
@@ -377,6 +468,14 @@ export const WILDERNESS_TERRAIN_COST: Record<LandTerrainId, number> = {
   forest: 1.4,
   hills: 1.9,
   mountains: 2.8,
+  scorched: 1.1,
+  marsh: 1.6,
+  duneland: 1.2,
+  terrace: 1.5,
+  glacier: 2.6,
+  basalt: 2.2,
+  sporemire: 1.5,
+  verdant: 0.85,
 };
 
 export const ENEMY_TERRAIN_COST: Record<LandTerrainId, number> = {
@@ -385,6 +484,14 @@ export const ENEMY_TERRAIN_COST: Record<LandTerrainId, number> = {
   forest: 5.15,
   hills: 5.65,
   mountains: 6.3,
+  scorched: 4.4,
+  marsh: 5.4,
+  duneland: 4.6,
+  terrace: 5.7,
+  glacier: 6.5,
+  basalt: 5.9,
+  sporemire: 5.3,
+  verdant: 4.35,
 };
 
 /**
@@ -514,6 +621,41 @@ export const ELEMENT_RULES = {
  * rung of the tier ladder pays a window of its own, and tier 3 pays the
  * longer one because compound-on-compound conquest earns a longer forging.
  */
+/**
+ * The living land: dwell terraforming and terrain affinity.
+ *
+ * Land held long enough by an element transforms — the transform table and
+ * the per-element leans live in terraform.ts, every threshold and band here.
+ * Tenure is read straight off Cell.capturedAt (the existing per-tile clock;
+ * founding tiles sit at -99 and so transform first — the heartland shows an
+ * empire's mark before its marches do). The jitter is a pure cell-noise hash,
+ * consuming no RNG stream, so a province annexed in one stroke transforms as
+ * a spreading stain rather than flipping as a wall.
+ */
+export const TERRAFORM_RULES = {
+  /** Ticks between dwell sweeps; a full map pass runs only on these. */
+  sweepCadenceTicks: 48,
+  /** ± spread hashed per cell onto every dwell threshold. */
+  jitterTicks: 600,
+  /**
+   * How hard terrain affinity leans on the three chokepoints it multiplies
+   * (invasion cost of the defender's ground, land income, troop sustain).
+   * The composed factor is clamped to the matchup band, so ground helps or
+   * hurts a realm at most as much as a full elemental counter does.
+   */
+  affinityBand: 0.12,
+  affinityFloor: 0.85,
+  affinityCeiling: 1.15,
+  /**
+   * Composition share a founding base needs before its base transforms apply
+   * to an element (0.5 = tier 1, both halves of a tier 2, and a dominant
+   * tier 3's repeated base). Balanced advanced elements transform only
+   * through their authored entries — some elements leave no mark, which is
+   * also a mark.
+   */
+  baseCompositionThreshold: 0.5,
+} as const;
+
 export const TRANSMUTATION_RULES = {
   /** Ticks a tier 2 fusion spends in the crucible. */
   tier2WindowTicks: 720,

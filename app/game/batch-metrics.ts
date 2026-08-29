@@ -8,7 +8,10 @@ import {
   populationGrowthEfficiency,
 } from "./rules";
 import { ELEMENTS } from "./elements";
+import { TERRAFORMED_TERRAINS } from "./terraform";
 import { STRATEGIC_DOMAINS } from "./strategy";
+
+const TERRAFORMED_SET: ReadonlySet<string> = new Set(TERRAFORMED_TERRAINS);
 import type {
   ElementId,
   ElementTier,
@@ -81,6 +84,8 @@ export interface PlayerCumulativeMetrics {
   ascensions: number;
   /** Transmutation windows this realm opened — fusions begun, completed or not. */
   transmutationsStarted: number;
+  /** Cells this realm's dwell has transformed, lifetime. */
+  cellsTerraformed: number;
   /** Bespoke-mechanic drama, one counter per tier 3 power. */
   geyserEruptions: number;
   tempestCrests: number;
@@ -112,6 +117,8 @@ export interface PlayerBalanceSnapshot {
   absorbedElements: number;
   expressedElement: ElementId;
   expressedTier: ElementTier;
+  /** Share of this realm's land turned to its own signature terrain. */
+  saturation: number;
   strategicFocus: StrategicDomain;
   structuresOwned: StructureCounts;
   citySitesOwned: number;
@@ -142,6 +149,8 @@ export interface WorldBalanceSnapshot {
   tierCounts: Record<"1" | "2" | "3", number>;
   /** Living realms currently inside a transmutation window. */
   transmutingRealms: number;
+  /** Share of land the dwell system has transformed from its worldgen terrain. */
+  terraformedLandShare: number;
   populationConcentrationHhi: number;
   totalHomePopulation: number;
   totalCommittedPopulation: number;
@@ -249,6 +258,7 @@ function emptyPlayerMetrics(): PlayerCumulativeMetrics {
     ticksByFocus: emptyFocusCounts(),
     ascensions: 0,
     transmutationsStarted: 0,
+    cellsTerraformed: 0,
     geyserEruptions: 0,
     tempestCrests: 0,
     bloomOverextensions: 0,
@@ -361,6 +371,9 @@ export class BatchMetricsCollector {
     if (event.kind === "leadership.strategy-adopted" && actor) this.players[actor].strategyChanges += 1;
     if (event.kind === "dynasty.element-ascended" && actor) this.players[actor].ascensions += 1;
     if (event.kind === "dynasty.transmutation-begun" && actor) this.players[actor].transmutationsStarted += 1;
+    if (event.kind === "society.land-transformed" && actor) {
+      this.players[actor].cellsTerraformed += Number(event.facts.cells ?? 0);
+    }
     if (event.kind === "dynasty.geyser-erupted" && actor) this.players[actor].geyserEruptions += 1;
     if (event.kind === "dynasty.tempest-crested" && actor) this.players[actor].tempestCrests += 1;
     if (event.kind === "dynasty.bloom-overextended" && actor) this.players[actor].bloomOverextensions += 1;
@@ -481,9 +494,11 @@ export class BatchMetricsCollector {
     const citySites = Object.fromEntries(PLAYER_ORDER.map((id) => [id, 0])) as Record<PlayerId, number>;
     const frontierCells = Object.fromEntries(PLAYER_ORDER.map((id) => [id, 0])) as Record<PlayerId, number>;
     let unclaimed = 0;
+    let terraformed = 0;
     for (let index = 0; index < state.cells.length; index += 1) {
       const cell = state.cells[index]!;
       if (cell.terrain !== "water" && cell.owner === null) unclaimed += 1;
+      if (TERRAFORMED_SET.has(cell.terrain)) terraformed += 1;
       if (!cell.owner) continue;
       if (cell.structure === "city") citySites[cell.owner] += 1;
       if (isFrontierCell(state, index)) frontierCells[cell.owner] += 1;
@@ -518,6 +533,7 @@ export class BatchMetricsCollector {
         absorbedElements: faction.absorbedElements.length,
         expressedElement: faction.expressedElement,
         expressedTier: ELEMENTS[faction.expressedElement].tier,
+        saturation: faction.saturation,
         strategicFocus: faction.strategy.focus,
         structuresOwned: { ...faction.structures },
         citySitesOwned: citySites[id],
@@ -572,6 +588,7 @@ export class BatchMetricsCollector {
       treasuryGini: gini(alive.map((id) => state.factions[id].gold)),
       tierCounts,
       transmutingRealms,
+      terraformedLandShare: terraformed / state.landTiles,
       populationConcentrationHhi: concentration(livingByNation),
       totalHomePopulation: totalHome,
       totalCommittedPopulation: totalCommitted,

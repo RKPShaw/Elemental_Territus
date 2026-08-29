@@ -9,7 +9,7 @@ import {
   regionIntelligence,
 } from "../../app/game/information";
 import { ACTION_REPORT_KINDS } from "../../app/game/reporting";
-import { THEATER_MAP_RULES } from "../../app/game/rules";
+import { TERRAIN_RULES, THEATER_MAP_RULES } from "../../app/game/rules";
 import type { ReportEventKind, WorldState } from "../../app/game/types";
 
 /**
@@ -277,6 +277,33 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
       ? `${transmutations} windows opened, ${ascensions} fusions completed, books exact across the living roster`
       : `${pendingIdle} idle realms sit on an eligible fusion, ${malformedWindows} malformed windows, ${maskDrift} base masks drifted`,
     fusionBooksExact,
+  );
+
+  // Dwell terraforming. Invariants that can genuinely fail: every cell's
+  // terrain must still have a rules entry, and every living realm's
+  // saturation must sit inside [0, 1]. Activity: land transformed inside the
+  // horizon — dwell thresholds start at 3,000 ticks, beyond this horizon on
+  // an unstaked world, so silence is inconclusive rather than sick.
+  const landTransforms = count("society.land-transformed");
+  let unknownTerrain = 0;
+  for (const cell of state.cells) {
+    if (!TERRAIN_RULES[cell.terrain]) unknownTerrain += 1;
+  }
+  let saturationDrift = 0;
+  for (const id of PLAYER_ORDER) {
+    const faction = state.factions[id];
+    if (!faction.alive) continue;
+    if (!(faction.saturation >= 0 && faction.saturation <= 1)) saturationDrift += 1;
+  }
+  const terraformBooksExact = unknownTerrain === 0 && saturationDrift === 0;
+  add(
+    "dwell-terraforming",
+    "long tenure transforms the ground it holds",
+    terraformBooksExact && landTransforms > 0,
+    terraformBooksExact
+      ? `${landTransforms} transform reports, terrain table and saturation exact`
+      : `${unknownTerrain} cells hold unknown terrain, ${saturationDrift} saturations out of band`,
+    terraformBooksExact,
   );
 
   // The naming system: founding names must be unique, and by the horizon at

@@ -5,6 +5,7 @@ import {
   normalizedCellArea,
 } from "../rules";
 import { committedTroopsFor } from "../campaigns";
+import { terrainAffinityFactor } from "../terraform";
 import { PLAYER_ORDER } from "../players";
 import type { PlayerId, StructureCounts, WorldState } from "../types";
 
@@ -36,7 +37,11 @@ export function collectRealmAccounting(
     if (!cell.owner) continue;
     const draft = drafts[cell.owner]!;
     draft.territory += 1;
-    draft.sustainableLand += TERRAIN_RULES[cell.terrain].sustain * cellArea;
+    // Terrain affinity scales what the ground sustains for its owner: an ice
+    // realm peoples its glaciers where anyone else would starve on them.
+    draft.sustainableLand += TERRAIN_RULES[cell.terrain].sustain
+      * terrainAffinityFactor(state.factions[cell.owner].expressedElement, cell.terrain)
+      * cellArea;
     if (cell.structure) {
       draft.structures[cell.structure] += cell.structure === "city"
         ? Math.max(1, cell.structureLevel)

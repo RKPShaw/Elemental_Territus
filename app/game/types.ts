@@ -52,13 +52,29 @@ export type TradeForm = "energy" | "waterway" | "land" | "airborne";
  */
 export type PlayerId = string;
 
+/**
+ * The first six terrains are worldgen's vocabulary; everything after
+ * "mountains" exists only through dwell terraforming — land an element has
+ * held long enough transforms (see terraform.ts), so these are the marks
+ * empires leave on the map. The current terrain is the land's memory: a
+ * spore-mire exists only where something first scorched or drowned the
+ * ground and Fungus dwelt on the ruin after.
+ */
 export type TerrainId =
   | "water"
   | "farmland"
   | "plains"
   | "forest"
   | "hills"
-  | "mountains";
+  | "mountains"
+  | "scorched"
+  | "marsh"
+  | "duneland"
+  | "terrace"
+  | "glacier"
+  | "basalt"
+  | "sporemire"
+  | "verdant";
 
 export type LandTerrainId = Exclude<TerrainId, "water">;
 
@@ -339,6 +355,12 @@ export interface FactionState {
   power: ElementPowerState;
   /** The fusion window this realm is inside, if any; see ascension.ts. */
   transmutation: TransmutationState;
+  /**
+   * Share of this realm's land already turned to its own signature terrain,
+   * 0..1, refreshed by the terraform sweep. High saturation means the element
+   * has spent itself on the ground it holds — fresh conquest dilutes it.
+   */
+  saturation: number;
   /** Distinct elemental powers held; drives terrain affinity and matchups. */
   absorbedElements: ElementId[];
   /**
@@ -391,13 +413,7 @@ export interface Campaign {
   storyKey: string;
 }
 
-export interface TheaterTerrainProfile {
-  farmland: number;
-  plains: number;
-  forest: number;
-  hills: number;
-  mountains: number;
-}
+export type TheaterTerrainProfile = Record<LandTerrainId, number>;
 
 /**
  * A stable-identity, adaptive economic/terrain area beneath political ownership.

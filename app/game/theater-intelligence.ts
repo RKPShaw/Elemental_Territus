@@ -58,11 +58,19 @@ const INFRASTRUCTURE_VALUE = {
 } as const;
 
 export const RELATED_TERRAINS: Record<LandTerrainId, readonly LandTerrainId[]> = {
-  farmland: ["plains"],
-  plains: ["farmland", "hills"],
-  forest: ["hills"],
-  hills: ["plains", "forest", "mountains"],
-  mountains: ["hills"],
+  farmland: ["plains", "verdant", "marsh"],
+  plains: ["farmland", "hills", "duneland", "scorched"],
+  forest: ["hills", "verdant", "sporemire"],
+  hills: ["plains", "forest", "mountains", "terrace", "basalt"],
+  mountains: ["hills", "glacier"],
+  scorched: ["plains", "basalt", "duneland"],
+  marsh: ["farmland", "verdant", "sporemire"],
+  duneland: ["plains", "scorched"],
+  terrace: ["hills", "mountains"],
+  glacier: ["mountains"],
+  basalt: ["hills", "scorched", "mountains"],
+  sporemire: ["marsh", "forest"],
+  verdant: ["farmland", "forest", "marsh"],
 };
 
 function normalizeCellLayer(state: WorldState, source: Float32Array): Float32Array {

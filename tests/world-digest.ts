@@ -149,7 +149,10 @@ const HERITAGE_CODES = [
   "plasma", "ash", "obsidian", "glass", "spirit",
   "aurora", "lodestone", "amber", "fungus", "crystal",
 ] as const;
-const TERRAIN_CODES = ["water", "farmland", "plains", "forest", "hills", "mountains"] as const;
+const TERRAIN_CODES = [
+  "water", "farmland", "plains", "forest", "hills", "mountains",
+  "scorched", "marsh", "duneland", "terrace", "glacier", "basalt", "sporemire", "verdant",
+] as const;
 const STRUCTURE_CODES = ["city", "fort", "factory", "harbor", "plant", "skyport"] as const;
 
 /** Everything outside the cell grid, hashed with sorted keys. */
