@@ -538,8 +538,9 @@ function makeFaction(id: PlayerId, seed: number, foundingName: string): FactionS
     troopCap: 1,
     troopGrowth: 0,
     // A token founding purse. The old 20K bought the first factory almost
-    // immediately; the opening economy now runs on tax, so the first
-    // structure is saved for across roughly four hundred ticks instead.
+    // immediately; the opening economy now runs on tax, so the first big
+    // purchase — factory, city, or war chest, deliberately priced against
+    // each other — is saved for across the opening age instead.
     gold: 2_000,
     goldRate: 0,
     economy: createEconomyLedger(),

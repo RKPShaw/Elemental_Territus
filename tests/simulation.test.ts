@@ -101,16 +101,20 @@ test("batch snapshots distinguish city construction, sites, captures, and losses
 
 test("structure ladders, spacing, and stacked-city capacity share one rule boundary", () => {
   const empty = { city: 0, fort: 0, factory: 0, harbor: 0, plant: 0, skyport: 0 };
-  assert.equal(nextStructureCost("city", empty), 45_000);
-  assert.equal(nextStructureCost("city", { ...empty, city: 1 }), 135_000);
-  assert.equal(nextStructureCost("city", { ...empty, city: 2 }), 250_000);
-  assert.equal(nextStructureCost("city", { ...empty, city: 3 }), 400_000);
-  assert.equal(nextStructureCost("harbor", { ...empty, factory: 2 }), 250_000);
-  assert.equal(nextStructureCost("factory", { ...empty, factory: 2, harbor: 1 }), 400_000);
+  // The founding capital is not a purchase, so a realm's first *built* city
+  // costs the same opening rung as its first factory — that symmetry is what
+  // makes economy-or-cities a real decision at the first savings milestone.
+  assert.equal(nextStructureCost("city", empty), 18_000);
+  assert.equal(nextStructureCost("city", { ...empty, city: 1 }), 18_000);
+  assert.equal(nextStructureCost("city", { ...empty, city: 2 }), 40_000);
+  assert.equal(nextStructureCost("city", { ...empty, city: 3 }), 90_000);
+  assert.equal(nextStructureCost("city", { ...empty, city: 4 }), 180_000);
+  assert.equal(nextStructureCost("harbor", { ...empty, factory: 2 }), 90_000);
+  assert.equal(nextStructureCost("factory", { ...empty, factory: 2, harbor: 1 }), 180_000);
   // Every trade building rides one ladder: a plant or skyport counts toward
   // the next one's price exactly as a factory or harbor does.
-  assert.equal(nextStructureCost("plant", { ...empty, factory: 1 }), 135_000);
-  assert.equal(nextStructureCost("factory", { ...empty, plant: 1, skyport: 1 }), 250_000);
+  assert.equal(nextStructureCost("plant", { ...empty, factory: 1 }), 40_000);
+  assert.equal(nextStructureCost("factory", { ...empty, plant: 1, skyport: 1 }), 90_000);
   assert.equal(TROOP_CAP_RULES.troopsPerCity, 10_000);
 
   const state = createWorld(7);
@@ -128,12 +132,12 @@ test("structure ladders, spacing, and stacked-city capacity share one rule bound
     report: () => 1,
   };
   new CommandExecutionSystem().update(context);
-  // The capital opens as a level-one city, so both commands stack onto it and
-  // pay the second and third rungs of the city ladder (135K + 250K).
+  // The capital opens as a level-one city but never counts as a purchase, so
+  // the two stacked levels pay the first and second rungs (18K + 40K).
   assert.equal(state.cells[cityIndex]!.structure, "city");
   assert.equal(state.cells[cityIndex]!.structureLevel, 3);
   assert.equal(actor.structures.city, 3);
-  assert.equal(actor.gold, 615_000);
+  assert.equal(actor.gold, 942_000);
   assert.equal(cityStationMultiplier(2), 1.5);
 
   const tooClose = neighborIndices(cityIndex, state.config.width, state.config.height)
