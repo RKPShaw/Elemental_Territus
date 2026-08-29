@@ -154,10 +154,10 @@ function drawStreams(
     if (course.length < 2) continue;
     context.beginPath();
     traceSmoothedPath(context, state, shape, course);
-    context.strokeStyle = "rgba(29, 63, 76, 0.30)";
+    context.strokeStyle = "rgba(21, 48, 59, 0.5)";
     context.lineWidth = 2.3;
     context.stroke();
-    context.strokeStyle = "rgba(116, 168, 183, 0.85)";
+    context.strokeStyle = "rgba(84, 133, 149, 0.9)";
     context.lineWidth = 1.1;
     context.stroke();
   }

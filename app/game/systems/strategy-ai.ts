@@ -4,11 +4,11 @@ import { ascensionAppetite } from "../ascension";
 import { otherParty, warsFor } from "../diplomacy";
 import { realmMatchup } from "../elements";
 import {
-  borderLength,
   coastalCells,
   neighborIndices,
   structureCells,
 } from "../grid";
+import { frontierTargets } from "../frontier";
 import { CLAIM_RULES, ELEMENT_RULES, POPULATION_RULES, compactNumber, clamp } from "../rules";
 import { strategyFactor } from "../strategy";
 import type { PlayerId, SimulationContext, SimulationSystem } from "../types";
@@ -160,7 +160,10 @@ export class StrategyAiSystem implements SimulationSystem {
         const rivalId = otherParty(relation, id);
         const rival = state.factions[rivalId];
         if (!rival.alive) continue;
-        const border = borderLength(state, id, rivalId);
+        // Marchable frontier, not raw adjacency: a border that is all river
+        // counts for nothing here, which correctly deflates a front that
+        // could only be pressed by sea.
+        const border = frontierTargets(state, id, rivalId).length;
         const troopEdge = faction.troops / Math.max(1, rival.troops);
         const invasionBy = incoming.reduce(
           (total, campaign) => campaign.attacker === rivalId ? total + campaign.remaining : total,
@@ -234,7 +237,10 @@ export class StrategyAiSystem implements SimulationSystem {
         const share = launched === 0 ? (fronts.length > 1 ? 0.66 : 1) : 1;
         const commitment = Math.floor(spendable * share);
         if (commitment < 15_000) continue;
-        const landBorder = borderLength(state, id, front.target);
+        // A shared border only counts if an army can actually march over it:
+        // the frontier index already refuses steps that cross a stream, so a
+        // realm walled off behind a river mounts a naval crossing instead.
+        const landBorder = frontierTargets(state, id, front.target).length;
         if (landBorder > 0) {
           state.commands.push({
             type: "launch-campaign",
@@ -265,7 +271,7 @@ export class StrategyAiSystem implements SimulationSystem {
         (campaign) => campaign.attacker === id && campaign.target === target,
       );
       const counterTarget = incoming.some((campaign) => campaign.attacker === target);
-      const route = borderLength(state, id, target) > 0 ? "shared frontier" : "sea lane";
+      const route = frontierTargets(state, id, target).length > 0 ? "shared frontier" : "sea lane";
       faction.intent = {
         target,
         posture: outgoing || plannedCommitment > 0 ? "invading" : "mobilizing",

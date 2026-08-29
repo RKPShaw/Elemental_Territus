@@ -30,10 +30,20 @@ function cacheKey(start: number, destinations: readonly number[]): string {
 }
 
 /**
- * Steps from each water cell to the nearest land, measured cardinally. Land is
- * fixed for a world's lifetime, so the field is computed once per seed and
- * shared by every route search; it is what lets the lane cost prefer open
- * water without re-discovering the coastline on every voyage.
+ * Navigable water is the open sea plus the stream network: streams are minor
+ * rivers flagged on land cells, and a transport or merchant ship may sail up
+ * one the way it sails the coast, which is what lets a river be crossed --
+ * and traded on -- only by ship.
+ */
+function isNavigableCell(cell: { terrain: string; stream: boolean }): boolean {
+  return cell.terrain === "water" || cell.stream;
+}
+
+/**
+ * Steps from each navigable cell to the nearest unnavigable land, measured
+ * cardinally. Land is fixed for a world's lifetime, so the field is computed
+ * once per seed and shared by every route search; it is what lets the lane
+ * cost prefer open water without re-discovering the coastline on every voyage.
  */
 let shoreDistance: Int32Array | null = null;
 
@@ -45,7 +55,7 @@ function shoreDistanceField(state: WorldState): Int32Array {
   let head = 0;
   let tail = 0;
   for (let index = 0; index < state.cells.length; index += 1) {
-    if (state.cells[index]!.terrain !== "water") {
+    if (!isNavigableCell(state.cells[index]!)) {
       field[index] = 0;
       queue[tail] = index;
       tail += 1;
@@ -189,11 +199,11 @@ export function waterPathToAnyLandCell(
 
   const { width, height } = state.config;
   const starts = neighborIndices(startLandCell, width, height)
-    .filter((index) => state.cells[index]!.terrain === "water");
+    .filter((index) => isNavigableCell(state.cells[index]!));
   const landingByWater = new Map<number, number>();
   for (const destination of destinations) {
     for (const neighbor of neighborIndices(destination, width, height)) {
-      if (state.cells[neighbor]!.terrain === "water" && !landingByWater.has(neighbor)) {
+      if (isNavigableCell(state.cells[neighbor]!) && !landingByWater.has(neighbor)) {
         landingByWater.set(neighbor, destination);
       }
     }
@@ -223,7 +233,7 @@ export function waterPathToAnyLandCell(
 
   const shore = shoreDistanceField(state);
   const cells = state.cells;
-  const isWater = (index: number): boolean => cells[index]!.terrain === "water";
+  const isWater = (index: number): boolean => isNavigableCell(cells[index]!);
   beginNavSearch(cells.length);
   for (const start of starts) {
     navCost[start] = 0;
@@ -285,9 +295,10 @@ export function waterPathBetweenLandCells(
 }
 
 /**
- * True only when the endpoints are land, every interior cell is water, the
- * docking steps at either end are cardinal, and every interior step is at most
- * one cell in each axis without cutting a land corner.
+ * True only when the endpoints are land, every interior cell is navigable
+ * water (sea, river, or a stream cell), the docking steps at either end are
+ * cardinal, and every interior step is at most one cell in each axis without
+ * cutting a land corner.
  */
 export function isValidWaterPath(state: WorldState, path: readonly number[]): boolean {
   if (path.length < 3) return false;
@@ -297,7 +308,7 @@ export function isValidWaterPath(state: WorldState, path: readonly number[]): bo
     return false;
   }
   for (let position = 1; position < path.length - 1; position += 1) {
-    if (cells[path[position]!]!.terrain !== "water") return false;
+    if (!isNavigableCell(cells[path[position]!]!)) return false;
   }
   for (let position = 1; position < path.length; position += 1) {
     const from = path[position - 1]!;
@@ -315,7 +326,7 @@ export function isValidWaterPath(state: WorldState, path: readonly number[]): bo
     if (dx !== 0 && dy !== 0) {
       const across = fy * width + tx;
       const down = ty * width + fx;
-      if (cells[across]!.terrain !== "water" || cells[down]!.terrain !== "water") return false;
+      if (!isNavigableCell(cells[across]!) || !isNavigableCell(cells[down]!)) return false;
     }
   }
   return true;

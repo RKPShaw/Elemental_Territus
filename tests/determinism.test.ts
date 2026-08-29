@@ -15,7 +15,26 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the frontier-and-wars rework, and the gameplay changes were
+ * Re-recorded for the rivers-and-slow-money rework, and the gameplay changes
+ * were the point, all of them. Watercourses now hold a heading (a turn
+ * penalty in the carve walk stops steepest-descent from coiling around flat
+ * basins), and stream courses are trimmed to land, so the map itself moves —
+ * every digest by construction. Streams became ship-only borders: the
+ * frontier index refuses enemy conquest steps that enter or leave a stream
+ * cell, stream banks count as coast, and ships (merchant and transport
+ * alike) sail the stream network, with transports slowed fourfold so a
+ * crossing is a real commitment. And the opening economy slowed the way the
+ * settlement pace once did: realms open with a 2K purse instead of 20K, the
+ * shared ladder became 18K / 40K / 90K / 180K priced against the 20K war
+ * chest, and the founding capital no longer counts as a purchase — so the
+ * first savings milestone is a real decision between a factory, a city's
+ * +10K troop cap, and funding a war, and every court reaches it at its own
+ * pace. The construction planner keeps that decision honest: the hard-coded
+ * first factory is gone, and the opening purchase competes on capacity
+ * pressure — a realm packed against its troop cap buys the city, a sprawling
+ * one buys the income.
+ *
+ * Before that, re-recorded for the frontier-and-wars rework, and the gameplay changes were
  * the point, all five of them. Streams — minor rivers carved as land lines
  * that raise the cost of taking their banks — are a new cell field and a new
  * world field, so every digest moves by construction, and they reshape where
@@ -195,25 +214,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "59c52fe9e9cd9b1717b5ea25b663be41", cells: "d058e52ff49e744c" },
-      { tick: 200, world: "220a72a4e8943cbe3b6d512921a6c6ec", cells: "9966a0655de90fbd" },
-      { tick: 600, world: "7fb9d658a02763aacc827ed243e16a8b", cells: "0e28dbcd5dbdbd5f", deep: true },
+      { tick: 60, world: "a4ea7699c73689cc5f443f08f7e5a22c", cells: "3c6f4e0154e16267" },
+      { tick: 200, world: "62edb718759924b093e5be7516b2d665", cells: "dd1bcdd1c3034f11" },
+      { tick: 600, world: "2a3e8ce58f416a1cf7c0cb6a7008e67a", cells: "d2ddb95a93780801", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "3d0869ed2f038364e6e78d679a1c826d", cells: "c82e87ddc5911bed" },
-      { tick: 200, world: "65cf9e0f62a7d731d784f0e9809fdd8e", cells: "8ebe141aa80506c1" },
-      { tick: 600, world: "22e62afb6e5d0d6d02e24c3032ac031e", cells: "d95192e0bf7c9b1f", deep: true },
+      { tick: 60, world: "2e125f531fa43222653d0fc0d2eb3e51", cells: "471cca811b42bb97" },
+      { tick: 200, world: "687830fabcbb61e3f7c2330dc465da04", cells: "1a7a6dba904c0b91" },
+      { tick: 600, world: "ae1523e7d0dcb4a242f81fbefaa12945", cells: "8200937aa1518b97", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "7c40984bfbad3b0434ce76fdd4aade48", cells: "dd2cfa50d8d2a55b" },
-      { tick: 200, world: "02ee609bd848ae3898cb8f3ed531fd32", cells: "550d9208da469ae8" },
-      { tick: 600, world: "2c8d24f138bdf47f12c46fd925536269", cells: "a072a48dbd9a8b56", deep: true },
+      { tick: 60, world: "cacc5b56e09313937c402c35682a1fce", cells: "5eb456e30833eb9d" },
+      { tick: 200, world: "bec2198397afded26db4ba45b0bbe573", cells: "dc9636ec3112ff06" },
+      { tick: 600, world: "0da7debeddcd388f05488a5e963de9b5", cells: "b2b4176081366551", deep: true },
     ],
   },
 ];

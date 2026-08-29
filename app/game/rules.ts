@@ -88,7 +88,7 @@ export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
     id: "city",
     name: "City",
     glyph: "●",
-    cost: 25_000,
+    cost: 18_000,
     description: "Develops 10K troop capacity. Cities may stack; each added level gives a station +50% value.",
   },
   fort: {
@@ -102,28 +102,28 @@ export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
     id: "factory",
     name: "Factory",
     glyph: "▥",
-    cost: 25_000,
-    description: "Shares the 25K / 50K / 100K / 250K trade-building ladder and dispatches one train at a time.",
+    cost: 18_000,
+    description: "Shares the 18K / 40K / 90K / 180K trade-building ladder and dispatches one train at a time.",
   },
   harbor: {
     id: "harbor",
     name: "Harbor",
     glyph: "⚓",
-    cost: 25_000,
+    cost: 18_000,
     description: "Shares the trade-building ladder and earns 800 gold for every second of its completed water voyage.",
   },
   plant: {
     id: "plant",
     name: "Power plant",
     glyph: "⌁",
-    cost: 25_000,
+    cost: 18_000,
     description: "Energy realms only. Strings straight conduits to nearby stations and sends paying pulses down them.",
   },
   skyport: {
     id: "skyport",
     name: "Skyport",
     glyph: "✈",
-    cost: 25_000,
+    cost: 18_000,
     description: "Airborne realms only. Flies freight in a straight line to any other skyport in the world.",
   },
 };
@@ -133,7 +133,20 @@ export const WARSHIP_COST = 165_000;
 export const FORT_RADIUS = 4;
 export const STRUCTURE_MIN_SPACING = 2.2;
 
-export const STRUCTURE_COST_LADDER = [25_000, 50_000, 100_000] as const;
+/**
+ * The opening economy is deliberately slow, and this ladder is where the
+ * pace lives. Realms open with a token treasury (see makeFaction), so the
+ * first rung is saved for out of tax — roughly a hundred and fifty ticks at
+ * an opening realm's ~110-gold-a-tick land-and-capital income, landing just
+ * as the frontier closes and wars become legal. The rung is priced against
+ * the 20K mobilization floor on purpose: one savings pot, three critical
+ * ways to spend it. A court that banks for its first factory cannot also
+ * fund a war chest, and the rival that bought a city instead holds +10K
+ * troop cap when the border turns hostile. The founding capital does not
+ * count as a purchase (see nextStructureCost), so the first built city and
+ * the first factory cost the same and the choice is a real either/or.
+ */
+export const STRUCTURE_COST_LADDER = [18_000, 40_000, 90_000] as const;
 
 /** Cities have one ladder; every trade building advances one shared ladder. */
 export function nextStructureCost(
@@ -141,10 +154,13 @@ export function nextStructureCost(
   counts: StructureCounts,
 ): number {
   if (structure === "fort") return STRUCTURE_RULES.fort.cost;
+  // The founding capital is an inheritance, not a purchase: it never climbs
+  // the ladder, so the first *built* city costs the same first rung as the
+  // first factory and the economy-or-cities decision starts symmetric.
   const count = structure === "city"
-    ? counts.city
+    ? Math.max(0, counts.city - 1)
     : counts.factory + counts.harbor + counts.plant + counts.skyport;
-  return STRUCTURE_COST_LADDER[count] ?? 250_000;
+  return STRUCTURE_COST_LADDER[count] ?? 180_000;
 }
 
 export function cityStationMultiplier(level: number): number {
@@ -243,7 +259,12 @@ export const CAMPAIGN_RULES = {
   /** A contested beach costs more than open ground. */
   landingCostMultiplier: 1.22,
   navalLandingPressurePerTick: 0.064,
-  navalTransportVelocity: 0.75,
+  /**
+   * Slowed fourfold from 0.75: a loaded transport crawls, so a crossing --
+   * ocean or river alike -- is a real commitment that leaves the expedition
+   * exposed to interception for the whole voyage rather than a quick hop.
+   */
+  navalTransportVelocity: 0.1875,
   maximumDurationTicks: 480,
   defenderStuntRate: 0.012,
   topologyRefreshTicks: 12,
@@ -310,12 +331,17 @@ export const STRATEGIC_REGION_RULES = {
 
 /**
  * Streams are the minor rivers: lines of running water too small to be a
- * terrain of their own. A stream cell stays ordinary land — armies cross it,
- * settlers claim it — but taking ground on a stream costs more, so political
- * borders prefer to come to rest along the watercourses the way real ones do.
+ * terrain of their own. A stream cell stays ordinary land for settlers —
+ * they ford it and claim its banks — but to an army at war it counts as
+ * ocean: the frontier index refuses any conquest step that enters or leaves
+ * a stream cell, so a border resting on a river can only be forced by a
+ * naval campaign's transport ships (streams are navigable water to ships;
+ * see water-navigation). The enemy multiplier below now prices the one way
+ * enemy stream ground still falls short of annexation: a naval landing on
+ * the watercourse itself.
  */
 export const STREAM_RULES = {
-  /** Conquest-cost multiplier for enemy ground on a stream bank. */
+  /** Conquest-cost multiplier for a naval landing on enemy stream ground. */
   enemyCrossingCost: 1.5,
   /** Settlement-cost multiplier for wilderness on a stream bank. */
   wildernessCrossingCost: 1.2,

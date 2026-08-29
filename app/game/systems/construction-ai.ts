@@ -304,7 +304,6 @@ function desiredInfrastructure(
 
   if (allowFort && (counts.fort < desiredForts || defensiveResourceDump) && vulnerable.length > 0) return "fort";
   if (counts.city === 0) return "city";
-  if (tradeBuildings === 0) return "factory";
 
   const cityShortfall = Math.max(0, (desiredCities - counts.city) / desiredCities);
   const tradeShortfall = Math.max(0, (desiredTrade - tradeBuildings) / desiredTrade);
@@ -316,10 +315,25 @@ function desiredInfrastructure(
     : 0;
   // Every program competes through its weighted shortfall, so the trade-form
   // affinity composes with the quota-driven appetites instead of gating them.
-  const cityPriority = cityShortfall * affinity.city;
+  // The opening purchase is deliberately part of that competition: a first
+  // factory used to be hard-coded here, and with the ladder pricing a city
+  // and a factory identically the game's first savings milestone is meant to
+  // be a real decision, not a script.
+  //
+  // What tips it is capacity pressure: the 10K of troop cap a city carries
+  // is worth most when home population presses the ceiling. The term is
+  // neutral at the 65% growth sweet spot, lifts the city program as a realm
+  // packs toward its cap, and discounts it while there is still room — so a
+  // hemmed-in realm buys space to raise an army while a sprawling one buys
+  // the income, and a court that chose economy really is thinner on troops
+  // when a neighbor who chose the city comes across the border.
+  const capPressure = clamp(faction.troops / Math.max(1, faction.troopCap), 0, 1);
+  const cityPriority = cityShortfall * affinity.city * (0.55 + capPressure * 0.7);
   const tradePriority = tradeShortfall * affinity.trade;
-  const plantPriority = plantShortfall * affinity.plant;
-  const skyportPriority = skyportShortfall * affinity.skyport;
+  // The exclusive carriers still wait for a first factory: a conduit or a
+  // flight network needs an economy underneath it before it earns.
+  const plantPriority = tradeBuildings > 0 ? plantShortfall * affinity.plant : 0;
+  const skyportPriority = tradeBuildings > 0 ? skyportShortfall * affinity.skyport : 0;
   const best = Math.max(cityPriority, tradePriority, plantPriority, skyportPriority);
   if (best <= 0) return null;
   if (plantPriority === best) return "plant";
