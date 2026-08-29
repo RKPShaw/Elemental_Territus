@@ -95,7 +95,17 @@ export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
     id: "fort",
     name: "Fort",
     glyph: "▣",
-    cost: 135_000,
+    /**
+     * A fort is off the shared ladder — it buys no income and no capacity, so
+     * it never made sense for one to raise the price of the next factory —
+     * but it is still priced against that ladder, and it was left behind when
+     * the ladder came down. 135,000 was the old second rung; the ladder is
+     * 18/40/90K now, so a fort costs what a second building costs, which is
+     * what it always meant to cost. At the old number a court reached its
+     * third city before it could afford one wall, and a ten-game sweep to
+     * tick 6,000 recorded 1.3 forts built in a whole world.
+     */
+    cost: 40_000,
     description: "Doubles invasion cost in its protected area.",
   },
   factory: {
@@ -648,9 +658,20 @@ export const STRATEGY_RULES = {
   /** Weight added to diplomacy while any rival holds this much of the land. */
   hegemonDiplomacySurge: 0.12,
   hegemonShareThreshold: 0.3,
-  /** Weight added to economy while the treasury outruns the works. */
+  /**
+   * Weight added to economy while the treasury outruns the works.
+   *
+   * The floor is denominated in gold, so the twentyfold income cut left it
+   * stranded: at 2,000,000 it stood thirteen times above the richest treasury
+   * any realm reached in a ten-game sweep to tick 6,000, and the surge that
+   * is supposed to turn a court toward building simply never fired — realms
+   * spent 1.2% of their lives on an economic focus and 51.5% on a diplomatic
+   * one. Divided by the same twenty as the income that has to reach it, it
+   * fires for the realms genuinely sitting on more gold than works: past the
+   * ladder's top rung with another rung banked.
+   */
   richEconomySurge: 0.1,
-  richTreasuryFloor: 2_000_000,
+  richTreasuryFloor: 100_000,
   /** Weight added to trade while the realm is entirely at peace. */
   peacefulTradeSurge: 0.08,
 } as const;

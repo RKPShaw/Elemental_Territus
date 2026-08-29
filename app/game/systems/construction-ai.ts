@@ -4,6 +4,8 @@ import { getRelation, warsFor } from "../diplomacy";
 import { buildDistanceField, distanceAt } from "../distance-field";
 import type { DistanceField } from "../distance-field";
 import { buildAffinityOf } from "../elements";
+import { frontierTargets } from "../frontier";
+import { sitesOf } from "../structure-index";
 
 import {
   canPlaceStructureSite,
@@ -101,7 +103,8 @@ const NO_STRUCTURES: Record<StructureType, number[]> = {
   city: [], fort: [], factory: [], harbor: [], plant: [], skyport: [],
 };
 
-function vulnerableBoundaryCells(context: SimulationContext, owner: PlayerId): number[] {
+/** Boundary cells of the invasions actually pressing into this realm now. */
+function pressedBoundaryCells(context: SimulationContext, owner: PlayerId): number[] {
   const campaignIds = new Set(
     context.state.campaigns
       .filter((campaign) => campaign.target === owner && campaign.remaining > 0)
@@ -111,6 +114,75 @@ function vulnerableBoundaryCells(context: SimulationContext, owner: PlayerId): n
     .filter((theater) => campaignIds.has(theater.campaignId) && theater.staleRefreshes === 0)
     .sort((a, b) => b.strategicValue * b.allocation - a.strategicValue * a.allocation)
     .flatMap((theater) => theater.boundaryCells);
+}
+
+/** Structures a fort is built to stand over. A fort does not guard forts. */
+const FORT_PRIZES: readonly StructureType[] = ["city", "factory", "harbor", "plant", "skyport"];
+
+/** How many approaches a realm keeps under guard, richest first. */
+const FORTIFIED_APPROACHES = 10;
+
+/**
+ * What an invader gains by breaking in at this cell: the developed ground a
+ * fort here would stand over, plus a little for the country itself so that
+ * approaches still rank against each other before anything is built.
+ */
+function approachWorth(state: SimulationContext["state"], index: number, owner: PlayerId): number {
+  let worth = TERRAIN_RULES[state.cells[index]!.terrain].sustain * 0.25;
+  for (const structure of FORT_PRIZES) {
+    for (const site of sitesOf(state, owner, structure)) {
+      if (distanceBetween(state, index, site) > FORT_RADIUS) continue;
+      const cell = state.cells[site]!;
+      worth += cell.capitalOf !== null
+        ? 8
+        : structure === "city"
+          ? 3 + Math.max(0, cell.structureLevel - 1) * 1.5
+          : 2;
+    }
+  }
+  return worth;
+}
+
+/**
+ * The ground worth walling: where a rival would march, not only where one is
+ * already marching.
+ *
+ * A theater is chosen for what it opens divided by what it costs to force
+ * (see the priority in theaters.ts), and a fort doubles the cost of every
+ * cell in its radius. So a wall on a rich approach moves that quotient twice
+ * over: it argues the invasion somewhere else, and it charges double for the
+ * ground and double in casualties if the argument fails. That is what the
+ * approaches below are ranked for — the realm's own frontier, worth first.
+ *
+ * Forts used to be wanted only where a campaign was already inside the
+ * border, which is why a whole world built barely one: by the time the
+ * appetite existed the wall was a monument rather than a defense, and a court
+ * at peace with a treasury full never wanted one at all. Ground under attack
+ * still comes first and unranked — it is answered because it is burning — and
+ * everything after it is the preventive half that was missing.
+ */
+function fortifiableApproaches(context: SimulationContext, owner: PlayerId): number[] {
+  const { state } = context;
+  const pressed = pressedBoundaryCells(context, owner);
+  const seen = new Set<number>(pressed);
+  const ranked: { index: number; worth: number }[] = [];
+  for (const rival of PLAYER_ORDER) {
+    if (rival === owner || !state.factions[rival].alive) continue;
+    // The frontier index answers "which of my cells can this rival step
+    // into" for every pair in one pass, and it already refuses the steps a
+    // river forbids — so an approach only ranks if an army could really come
+    // that way.
+    for (const index of frontierTargets(state, rival, owner)) {
+      if (seen.has(index)) continue;
+      seen.add(index);
+      ranked.push({ index, worth: approachWorth(state, index, owner) });
+    }
+  }
+  // Ties break on cell index so the ranking is total and the world stays
+  // reproducible.
+  ranked.sort((first, second) => second.worth - first.worth || first.index - second.index);
+  for (const entry of ranked.slice(0, FORTIFIED_APPROACHES)) pressed.push(entry.index);
+  return pressed;
 }
 
 function bestBuildTile(
@@ -129,7 +201,7 @@ function bestBuildTile(
   const ownSites = sites.structuresByOwner.get(owner) ?? NO_STRUCTURES;
   const ownFactories = ownSites.factory;
   const ownCities = ownSites.city;
-  const vulnerable = vulnerableBoundaryCells(context, owner);
+  const vulnerable = fortifiableApproaches(context, owner);
   const peacefulForeignHubs = PLAYER_ORDER
     .filter((id) => {
       if (id === owner) return false;
@@ -345,11 +417,34 @@ function desiredInfrastructure(
     )
     : 0;
   const tradeBuildings = counts.factory + counts.harbor;
-  const vulnerable = vulnerableBoundaryCells(context, owner);
-  const desiredForts = Math.min(18, Math.max(0, Math.ceil((vulnerable.length / 18) * fortQuota)));
-  const defensiveResourceDump = vulnerable.length > 0 && faction.gold >= 1_250_000;
+  const approaches = fortifiableApproaches(context, owner);
+  const pressed = pressedBoundaryCells(context, owner);
+  // A few developed places, well held. The appetite follows what the realm
+  // has worth defending rather than the length of its border, so a sprawling
+  // realm with one city wants one wall and a compact realm with six wants
+  // several -- and a realm with nowhere an army could come wants none.
+  const developedSites = counts.city + counts.factory + counts.harbor + counts.plant + counts.skyport;
+  const desiredForts = approaches.length === 0
+    ? 0
+    : clamp(Math.ceil(developedSites * 0.4 * fortQuota), 1, 18);
+  // A treasury with nothing better to do fortifies. The threshold is gold, so
+  // the twentyfold income cut stranded it the same way it stranded the fort's
+  // own price and STRATEGY_RULES.richTreasuryFloor: at 1,250,000 no realm in a
+  // ten-game sweep came within a factor of eight of it. Divided by the same
+  // twenty, it means what it always meant — richer than any build program the
+  // realm can currently spend on.
+  const defensiveResourceDump = approaches.length > 0 && faction.gold >= 62_500;
 
-  if (allowFort && (counts.fort < desiredForts || defensiveResourceDump) && vulnerable.length > 0) return "fort";
+  // A burning border pre-empts the whole program: ground already being taken
+  // is answered before anything is bought for the future. A quiet one does
+  // not -- a preventive wall competes for the same purse as a city or a
+  // factory through the shortfall weights below, which is what keeps a realm
+  // that is merely near a rival from walling instead of building.
+  if (
+    allowFort &&
+    pressed.length > 0 &&
+    (counts.fort < desiredForts || defensiveResourceDump)
+  ) return "fort";
   if (counts.city === 0) return "city";
 
   const cityShortfall = Math.max(0, (desiredCities - counts.city) / desiredCities);
@@ -386,12 +481,21 @@ function desiredInfrastructure(
   );
   const cityPriority = cityShortfall * affinity.city * (0.55 + capPressure * 0.7);
   const tradePriority = tradeShortfall * affinity.trade;
+  // The preventive wall, competing on the same terms as the rest. It is
+  // weighted by the realm's own appetite for defense, so a martial court
+  // builds walls where a mercantile one builds works and both are answering
+  // the same border.
+  const fortShortfall = desiredForts > 0
+    ? Math.max(0, (desiredForts - counts.fort) / desiredForts)
+    : 0;
+  const fortPriority = allowFort ? fortShortfall * fortQuota : 0;
   // The exclusive carriers still wait for a first factory: a conduit or a
   // flight network needs an economy underneath it before it earns.
   const plantPriority = tradeBuildings > 0 ? plantShortfall * affinity.plant : 0;
   const skyportPriority = tradeBuildings > 0 ? skyportShortfall * affinity.skyport : 0;
-  const best = Math.max(cityPriority, tradePriority, plantPriority, skyportPriority);
+  const best = Math.max(cityPriority, tradePriority, plantPriority, skyportPriority, fortPriority);
   if (best <= 0) return null;
+  if (fortPriority === best) return "fort";
   if (plantPriority === best) return "plant";
   if (skyportPriority === best) return "skyport";
   if (cityPriority >= tradePriority) return "city";
