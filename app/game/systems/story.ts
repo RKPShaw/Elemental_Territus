@@ -65,6 +65,11 @@ function inferStoryKind(event: WorldReportEvent): StoryKind {
   if (event.domain === "dynasty") return "dynasty";
   if (event.domain === "leadership") return "leadership";
   if (event.kind === "politics.revolt" || event.kind.includes("revolt")) return "revolt";
+  if (
+    event.kind === "politics.instability-rising"
+    || event.kind === "politics.fission"
+    || event.kind === "politics.realm-restored"
+  ) return "revolt";
   if (event.kind === "world.created" || event.kind === "world.victory") return "world";
   if (event.kind.includes("alliance")) return "alliance";
   if (event.domain === "trade" || event.kind === "diplomacy.trade-policy-changed") return "trade";
@@ -95,7 +100,12 @@ function initialHeadline(event: WorldReportEvent, kind: StoryKind): string {
     return `A new bond for ${initiator}`;
   }
   if (kind === "leadership") return `${initiator} sets its course`;
-  if (kind === "revolt") return `Revolt challenges ${target ?? initiator}`;
+  if (kind === "revolt") {
+    if (event.kind === "politics.instability-rising") return `Strain builds within ${initiator}`;
+    if (event.kind === "politics.fission") return `${initiator} breaks apart`;
+    if (event.kind === "politics.realm-restored") return `${initiator} rises again`;
+    return `Revolt challenges ${target ?? initiator}`;
+  }
   return event.kind === "world.created" ? `${initiator} begins` : event.summary;
 }
 

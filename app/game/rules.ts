@@ -73,6 +73,82 @@ export const TERRAIN_RULES: Record<TerrainId, TerrainRule> = {
     sustain: 0.38,
     goldYield: 0.52,
   },
+  // Everything below is terraformed ground: worldgen never places these, an
+  // element's long tenure does (terraform.ts). Each keeps the established
+  // bands — defenseCost 0.78–1.85, sustain 0–1.5, goldYield 0–1.45 — so a
+  // transformed map plays by the same arithmetic as a fresh one.
+  scorched: {
+    id: "scorched",
+    name: "Scorched earth",
+    shortName: "Scorch",
+    fill: "#b0755a",
+    defenseCost: 0.95,
+    sustain: 0.3,
+    goldYield: 0.4,
+  },
+  marsh: {
+    id: "marsh",
+    name: "Drowned marsh",
+    shortName: "Marsh",
+    fill: "#8fae9b",
+    defenseCost: 1.32,
+    sustain: 0.85,
+    goldYield: 0.75,
+  },
+  duneland: {
+    id: "duneland",
+    name: "Wandering dunes",
+    shortName: "Dunes",
+    fill: "#ddc48e",
+    defenseCost: 1,
+    sustain: 0.45,
+    goldYield: 0.55,
+  },
+  terrace: {
+    id: "terrace",
+    name: "Terraced slopes",
+    shortName: "Terraces",
+    fill: "#b3a17c",
+    defenseCost: 1.45,
+    sustain: 0.95,
+    goldYield: 0.9,
+  },
+  glacier: {
+    id: "glacier",
+    name: "Creeping glacier",
+    shortName: "Glacier",
+    fill: "#cfe6ea",
+    defenseCost: 1.85,
+    sustain: 0.15,
+    goldYield: 0.3,
+  },
+  basalt: {
+    id: "basalt",
+    name: "Basalt flows",
+    shortName: "Basalt",
+    fill: "#6b6470",
+    defenseCost: 1.6,
+    sustain: 0.35,
+    goldYield: 0.65,
+  },
+  sporemire: {
+    id: "sporemire",
+    name: "Spore-mire",
+    shortName: "Mire",
+    fill: "#9c8a67",
+    defenseCost: 1.25,
+    sustain: 0.75,
+    goldYield: 0.6,
+  },
+  verdant: {
+    id: "verdant",
+    name: "Verdant overgrowth",
+    shortName: "Verdant",
+    fill: "#8fbf6f",
+    defenseCost: 1.05,
+    sustain: 1.5,
+    goldYield: 1.2,
+  },
 };
 
 export const LAND_TERRAINS: readonly LandTerrainId[] = [
@@ -81,7 +157,22 @@ export const LAND_TERRAINS: readonly LandTerrainId[] = [
   "forest",
   "hills",
   "mountains",
+  "scorched",
+  "marsh",
+  "duneland",
+  "terrace",
+  "glacier",
+  "basalt",
+  "sporemire",
+  "verdant",
 ] as const;
+
+/** One zeroed count per land terrain; regions and theaters both profile with it. */
+export function emptyTerrainProfile(): Record<LandTerrainId, number> {
+  const profile = {} as Record<LandTerrainId, number>;
+  for (const terrain of LAND_TERRAINS) profile[terrain] = 0;
+  return profile;
+}
 
 export const STRUCTURE_RULES: Record<StructureType, StructureRule> = {
   city: {
@@ -382,6 +473,14 @@ export const WILDERNESS_TERRAIN_COST: Record<LandTerrainId, number> = {
   forest: 1.4,
   hills: 1.9,
   mountains: 2.8,
+  scorched: 1.1,
+  marsh: 1.6,
+  duneland: 1.2,
+  terrace: 1.5,
+  glacier: 2.6,
+  basalt: 2.2,
+  sporemire: 1.5,
+  verdant: 0.85,
 };
 
 export const ENEMY_TERRAIN_COST: Record<LandTerrainId, number> = {
@@ -390,6 +489,14 @@ export const ENEMY_TERRAIN_COST: Record<LandTerrainId, number> = {
   forest: 5.15,
   hills: 5.65,
   mountains: 6.3,
+  scorched: 4.4,
+  marsh: 5.4,
+  duneland: 4.6,
+  terrace: 5.7,
+  glacier: 6.5,
+  basalt: 5.9,
+  sporemire: 5.3,
+  verdant: 4.35,
 };
 
 /**
@@ -427,10 +534,6 @@ export const ELEMENT_RULES = {
    * raise it if sweeps show mid-game combat going elementally flat.
    */
   neutralPairEdge: 0,
-  /** Absorbed base depth required in each constituent to form a tier 2. */
-  tier2BaseDepth: 2,
-  /** Total realms absorbed before any tier 3 becomes formable. */
-  tier3MinimumRealms: 6,
   /**
    * War desire added for a target whose absorption fully advances the next
    * tier, before the realm's own ascension weight scales it. Comparable to
@@ -509,6 +612,72 @@ export const ELEMENT_RULES = {
    * attacker trades by: works it could run natively are worth marching for.
    */
   heritagePrizeWeight: 1.3,
+} as const;
+
+/**
+ * The crucible of conquest: how two elements held inside one realm fuse.
+ *
+ * Conquest is the trigger — the annexation that puts both constituents of a
+ * higher element inside one realm opens a transmutation window rather than
+ * flipping the expression on the spot. The window is the brake and the
+ * drama: a realm in flux fights, settles and grows dulled by the transition
+ * sickness, its court hesitates to open new wars, and its bespoke mechanic
+ * holds its breath until the fusion completes. Windows never retarget, each
+ * rung of the tier ladder pays a window of its own, and tier 3 pays the
+ * longer one because compound-on-compound conquest earns a longer forging.
+ */
+/**
+ * The living land: dwell terraforming and terrain affinity.
+ *
+ * Land held long enough by an element transforms — the transform table and
+ * the per-element leans live in terraform.ts, every threshold and band here.
+ * Tenure is read straight off Cell.capturedAt (the existing per-tile clock;
+ * founding tiles sit at -99 and so transform first — the heartland shows an
+ * empire's mark before its marches do). The jitter is a pure cell-noise hash,
+ * consuming no RNG stream, so a province annexed in one stroke transforms as
+ * a spreading stain rather than flipping as a wall.
+ */
+export const TERRAFORM_RULES = {
+  /** Ticks between dwell sweeps; a full map pass runs only on these. */
+  sweepCadenceTicks: 48,
+  /** ± spread hashed per cell onto every dwell threshold. */
+  jitterTicks: 600,
+  /**
+   * How hard terrain affinity leans on the three chokepoints it multiplies
+   * (invasion cost of the defender's ground, land income, troop sustain).
+   * The composed factor is clamped to the matchup band, so ground helps or
+   * hurts a realm at most as much as a full elemental counter does.
+   */
+  affinityBand: 0.12,
+  affinityFloor: 0.85,
+  affinityCeiling: 1.15,
+  /**
+   * Composition share a founding base needs before its base transforms apply
+   * to an element (0.5 = tier 1, both halves of a tier 2, and a dominant
+   * tier 3's repeated base). Balanced advanced elements transform only
+   * through their authored entries — some elements leave no mark, which is
+   * also a mark.
+   */
+  baseCompositionThreshold: 0.5,
+} as const;
+
+export const TRANSMUTATION_RULES = {
+  /** Ticks a tier 2 fusion spends in the crucible. */
+  tier2WindowTicks: 720,
+  /** Ticks a tier 3 fusion spends in the crucible. */
+  tier3WindowTicks: 1_260,
+  /** Multiplier on campaign progress while the realm is in flux. */
+  attackFactor: 0.85,
+  /** Multiplier on settlement pressure while in flux. */
+  settleFactor: 0.85,
+  /** Multiplier on population growth while in flux. */
+  growthFactor: 0.9,
+  /** Multiplier on the invasion cost of in-flux ground; 1 keeps it neutral. */
+  defenseFactor: 1,
+  /** Multiplier on the court's war desire while mid-merge. */
+  warDesireFactor: 0.5,
+  /** Whether bespoke power meters freeze while the realm is in flux. */
+  pausePowers: true,
 } as const;
 
 /**
@@ -988,6 +1157,74 @@ export const SPAWN_RULES = {
    * or fragmented world still seats everyone instead of failing to place them.
    */
   separationRelaxation: 0.78,
+  /**
+   * The Catan cost of company: every earlier pick charges later scores a
+   * decaying penalty by distance, so each player weighs the best land against
+   * sharing borders with everyone already seated. The hard separation radius
+   * still guarantees breathing room; this shapes preference inside it.
+   */
+  crowdingWeight: 0.3,
+  /** World units over which a neighbour's crowding cost decays by e. */
+  crowdingFalloff: 4,
+} as const;
+
+/**
+ * Imperial instability and fission — how compound empires come apart.
+ *
+ * Strain is the slow clock of overreach. It accrues for realms expressing a
+ * compound element (tier 1 never strains, which is what makes fission an end
+ * of one story rather than a death spiral) from three pressures: territory
+ * beyond what cities and forts support, saturation — a country fully turned
+ * to the empire's own signature ground has nothing left to give its element —
+ * and war weariness. Fresh conquest relieves all three at once, which is the
+ * loop: expand, transform, saturate, strain, break. At full strain the realm
+ * FISSIONS: its founding constituents come free as restarted realms drafted
+ * onto the best ground of the former empire, the rump survives humbled around
+ * its capital demoted to its founding element, and everything else reverts to
+ * wilderness with every structure standing — the freed infrastructure is the
+ * next age's prize.
+ */
+export const FISSION_RULES = {
+  /** Ticks between strain evaluations. */
+  cadenceTicks: 12,
+  /** Cells one realm administers for free. */
+  supportedBaseArea: 30,
+  /** Additional supported cells per stacked city level. */
+  supportedPerCityLevel: 16,
+  /** Additional supported cells per fort. */
+  supportedPerFort: 6,
+  /** Pressure weight of the unsupported share of territory. */
+  overextensionWeight: 1,
+  /** Pressure weight of signature-terrain saturation past its grace. */
+  saturationWeight: 0.8,
+  /** Saturation below this adds no pressure at all. */
+  saturationGrace: 0.35,
+  /** Pressure weight of standing war weariness. */
+  wearinessWeight: 0.4,
+  /** How fast each expressed tier accrues strain; tier 1 never does. */
+  tierAmplification: { 1: 0, 2: 1, 3: 1.35 } satisfies Record<ElementTier, number>,
+  /** Strain gained per tick at full pressure (scaled by cadence and tier). */
+  strainPerTick: 0.0004,
+  /** Strain recovered per tick when pressure lifts. */
+  recoveryPerTick: 0.0008,
+  /** Realms below this many cells are too small to track. */
+  minimumTerritoryCells: 40,
+  /** World units of territory the rump keeps around its capital. */
+  rumpRadius: 1.2,
+  /** World units of territory each freed successor opens with. */
+  successorRadius: 0.8,
+  /** Hard separation between successor seats during the fission draft. */
+  successorSeparation: 1.6,
+  /** Constituent elements freed by one fission, at most. */
+  maxSuccessors: 3,
+  /** The purse a restarted realm wakes with. */
+  successorGold: 2_000,
+  /** The host a restarted realm wakes with, capped by its actual lands. */
+  successorTroops: 12_000,
+  /** Ticks of grace before a newborn (or newly humbled) realm strains again. */
+  graceTicks: 900,
+  /** War desire multiplier lost to strain: desire × (1 − strain × this). */
+  strainWarReluctance: 0.5,
 } as const;
 
 export const THEATER_MAP_RULES = {

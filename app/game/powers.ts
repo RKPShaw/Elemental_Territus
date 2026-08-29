@@ -1,4 +1,5 @@
-import { POWER_RULES, clamp } from "./rules";
+import { transmuting } from "./ascension";
+import { POWER_RULES, TRANSMUTATION_RULES, clamp } from "./rules";
 import type {
   ElementId,
   ElementPowerState,
@@ -156,6 +157,14 @@ export function advancePowerState(
   const element = faction.expressedElement;
   let event: PowerEvent | null = null;
 
+  // A realm in a transmutation window holds its breath: the mechanic neither
+  // banks nor breaks while the fusion runs, but the capture bookkeeping below
+  // stays current so the meter resumes from now, not from the missed weeks.
+  if (TRANSMUTATION_RULES.pausePowers && transmuting(faction)) {
+    power.tally = faction.capturedTiles;
+    return null;
+  }
+
   if (element === "geyser") {
     power.charge = Math.min(1, power.charge + 1 / POWER_RULES.geyserBankTicks);
     if (power.charge >= 1 && campaigning) {
@@ -227,46 +236,61 @@ export function advancePowerState(
   return event;
 }
 
+/** The transition-sickness multiplier a chokepoint pays while a realm fuses. */
+function fluxFactor(faction: FactionState, chokepoint: keyof ElementStatProfile): number {
+  if (!transmuting(faction)) return 1;
+  switch (chokepoint) {
+    case "attack": return TRANSMUTATION_RULES.attackFactor;
+    case "defense": return TRANSMUTATION_RULES.defenseFactor;
+    case "settle": return TRANSMUTATION_RULES.settleFactor;
+    case "growth": return TRANSMUTATION_RULES.growthFactor;
+    default: return 1;
+  }
+}
+
 /** Multiplier on a realm's campaign progress when it attacks. */
 export function powerAttackFactor(state: WorldState, attacker: PlayerId): number {
   const faction = state.factions[attacker];
+  const flux = fluxFactor(faction, "attack");
   const element = faction.expressedElement;
   if (element === "geyser") {
-    return geyserSurging(faction.power, state.tick) ? POWER_RULES.geyserSurgeAttack : 1;
+    return (geyserSurging(faction.power, state.tick) ? POWER_RULES.geyserSurgeAttack : 1) * flux;
   }
   if (element === "tempest") {
-    return 1 + POWER_RULES.tempestMomentumAttack * faction.power.charge;
+    return (1 + POWER_RULES.tempestMomentumAttack * faction.power.charge) * flux;
   }
-  return statProfileOf(element).attack;
+  return statProfileOf(element).attack * flux;
 }
 
 /** Multiplier on the invasion cost of a realm's ground. */
 export function powerDefenseFactor(state: WorldState, defender: PlayerId): number {
   const faction = state.factions[defender];
+  const flux = fluxFactor(faction, "defense");
   const element = faction.expressedElement;
   if (element === "geyser") {
-    return geyserVenting(faction.power, state.tick)
+    return (geyserVenting(faction.power, state.tick)
       ? POWER_RULES.geyserVentDefense
-      : 1 + POWER_RULES.geyserBankDefense * faction.power.charge;
+      : 1 + POWER_RULES.geyserBankDefense * faction.power.charge) * flux;
   }
   if (element === "bloom") {
-    return bloomIsOverextended(faction.power) ? POWER_RULES.bloomOverextendedDefense : 1;
+    return (bloomIsOverextended(faction.power) ? POWER_RULES.bloomOverextendedDefense : 1) * flux;
   }
   if (element === "obsidian") {
-    return obsidianShattered(faction.power, state.tick)
+    return (obsidianShattered(faction.power, state.tick)
       ? POWER_RULES.obsidianShatterDefense
-      : 1;
+      : 1) * flux;
   }
-  return statProfileOf(element).defense;
+  return statProfileOf(element).defense * flux;
 }
 
 /** Multiplier on a realm's settlement pressure. */
 export function powerSettleFactor(state: WorldState, attacker: PlayerId): number {
   const faction = state.factions[attacker];
+  const flux = fluxFactor(faction, "settle");
   if (faction.expressedElement === "bloom") {
-    return bloomIsOverextended(faction.power) ? 1 : POWER_RULES.bloomSettleBonus;
+    return (bloomIsOverextended(faction.power) ? 1 : POWER_RULES.bloomSettleBonus) * flux;
   }
-  return statProfileOf(faction.expressedElement).settle;
+  return statProfileOf(faction.expressedElement).settle * flux;
 }
 
 /** Multiplier on everything a realm's structures pay it. */
@@ -282,7 +306,8 @@ export function powerPayoutFactor(state: WorldState, owner: PlayerId): number {
 
 /** Multiplier on a realm's population growth. */
 export function powerGrowthFactor(state: WorldState, owner: PlayerId): number {
-  return statProfileOf(state.factions[owner].expressedElement).growth;
+  const faction = state.factions[owner];
+  return statProfileOf(faction.expressedElement).growth * fluxFactor(faction, "growth");
 }
 
 /** Multiplier on attacker casualties when pushing into a realm's ground. */

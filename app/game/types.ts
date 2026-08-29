@@ -52,13 +52,29 @@ export type TradeForm = "energy" | "waterway" | "land" | "airborne";
  */
 export type PlayerId = string;
 
+/**
+ * The first six terrains are worldgen's vocabulary; everything after
+ * "mountains" exists only through dwell terraforming — land an element has
+ * held long enough transforms (see terraform.ts), so these are the marks
+ * empires leave on the map. The current terrain is the land's memory: a
+ * spore-mire exists only where something first scorched or drowned the
+ * ground and Fungus dwelt on the ruin after.
+ */
 export type TerrainId =
   | "water"
   | "farmland"
   | "plains"
   | "forest"
   | "hills"
-  | "mountains";
+  | "mountains"
+  | "scorched"
+  | "marsh"
+  | "duneland"
+  | "terrace"
+  | "glacier"
+  | "basalt"
+  | "sporemire"
+  | "verdant";
 
 export type LandTerrainId = Exclude<TerrainId, "water">;
 
@@ -208,18 +224,44 @@ export interface ElementPowerState {
 }
 
 /**
+ * A fusion in progress. Conquest is the trigger: the moment annexation puts
+ * both constituents of a higher element inside one realm, a transmutation
+ * window opens — the realm is visibly in flux, its armies and growth dulled
+ * by the transition sickness — and when the window closes the realm emerges
+ * expressing the fused element. Windows never retarget (held elements only
+ * grow, so the chosen target stays valid) and each rung of the tier ladder
+ * pays a window of its own. Idle state is target null with the tick marks
+ * at -1; `completed` counts lifetime fusions for panels and metrics.
+ */
+export interface TransmutationState {
+  /** The element this realm is fusing toward; null while idle. */
+  target: ElementId | null;
+  /** The expression held when the window opened; null while idle. */
+  from: ElementId | null;
+  /** Tick the window opened; -1 while idle. */
+  startedAt: number;
+  /** Tick the fusion completes; -1 while idle. */
+  completesAt: number;
+  /** Lifetime completed fusions. */
+  completed: number;
+}
+
+/**
  * Why a realm's name changed. "founding" is the name it woke with; "conquest"
  * is the title ladder climbing on absorbed realms and held land; "ascension"
  * weaves a newly expressed element into the style; "union" folds a fallen
- * great power's name into its conqueror's. "marriage" and "decree" are
- * reserved for future dynastic systems — a married pair combining names, a
- * court renaming itself — so those stories can reuse this same machinery.
+ * great power's name into its conqueror's; "restoration" restyles a realm
+ * that fission has returned to its founding element — the old name carried
+ * forward under the old banner. "marriage" and "decree" are reserved for
+ * future dynastic systems — a married pair combining names, a court renaming
+ * itself — so those stories can reuse this same machinery.
  */
 export type NameChangeReason =
   | "founding"
   | "conquest"
   | "ascension"
   | "union"
+  | "restoration"
   | "marriage"
   | "decree";
 
@@ -314,6 +356,22 @@ export interface FactionState {
   strategy: StrategicPriorities;
   /** The meter behind the expressed element's mechanic; see powers.ts. */
   power: ElementPowerState;
+  /** The fusion window this realm is inside, if any; see ascension.ts. */
+  transmutation: TransmutationState;
+  /**
+   * Share of this realm's land already turned to its own signature terrain,
+   * 0..1, refreshed by the terraform sweep. High saturation means the element
+   * has spent itself on the ground it holds — fresh conquest dilutes it.
+   */
+  saturation: number;
+  /**
+   * Imperial strain, 0..1: the slow clock of overreach for compound-expressed
+   * realms. At 1 the realm fissions into its founding constituents. See
+   * FISSION_RULES and the imperial-instability system.
+   */
+  strain: number;
+  /** Tick before which this realm accrues no strain — newborn grace. */
+  strainGraceUntil: number;
   /** Distinct elemental powers held; drives terrain affinity and matchups. */
   absorbedElements: ElementId[];
   /**
@@ -366,13 +424,7 @@ export interface Campaign {
   storyKey: string;
 }
 
-export interface TheaterTerrainProfile {
-  farmland: number;
-  plains: number;
-  forest: number;
-  hills: number;
-  mountains: number;
-}
+export type TheaterTerrainProfile = Record<LandTerrainId, number>;
 
 /**
  * A stable-identity, adaptive economic/terrain area beneath political ownership.

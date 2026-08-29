@@ -1,5 +1,5 @@
 import { cellCoordinates, cellIndex, neighborIndices, surroundingIndices } from "./grid";
-import { STRATEGIC_REGION_RULES, TERRAIN_RULES } from "./rules";
+import { STRATEGIC_REGION_RULES, TERRAIN_RULES, emptyTerrainProfile } from "./rules";
 import type {
   LandTerrainId,
   StrategicRegion,
@@ -126,10 +126,6 @@ class FrontierHeap {
   }
 }
 
-function emptyTerrainProfile(): TheaterTerrainProfile {
-  return { farmland: 0, plains: 0, forest: 0, hills: 0, mountains: 0 };
-}
-
 function terrainHeat(terrain: LandTerrainId): number {
   const rule = TERRAIN_RULES[terrain];
   return rule.sustain * 0.34 + rule.goldYield * 0.22;
@@ -141,6 +137,14 @@ const TERRAIN_RELIEF: Record<LandTerrainId, number> = {
   forest: 0.4,
   hills: 0.7,
   mountains: 1,
+  scorched: 0.2,
+  marsh: 0.12,
+  duneland: 0.22,
+  terrace: 0.55,
+  glacier: 0.95,
+  basalt: 0.75,
+  sporemire: 0.3,
+  verdant: 0.3,
 };
 
 function normalizeLayer(layer: Float32Array): Float32Array {

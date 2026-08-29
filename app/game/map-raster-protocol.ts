@@ -17,6 +17,16 @@ export const RASTER_TERRAIN_ORDER: readonly TerrainId[] = [
   "forest",
   "hills",
   "mountains",
+  // Terraformed ground appends after the worldgen six — the codes are
+  // positional on the wire, so append-only keeps old captures decodable.
+  "scorched",
+  "marsh",
+  "duneland",
+  "terrace",
+  "glacier",
+  "basalt",
+  "sporemire",
+  "verdant",
 ];
 
 export const RASTER_PLAYER_INDEX: ReadonlyMap<PlayerId, number> = new Map(

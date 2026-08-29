@@ -2,14 +2,16 @@ import { PLAYER_ORDER } from "../players";
 import { allRelations, countRelationStatuses, otherParty } from "../diplomacy";
 import { relationKey } from "../diplomacy";
 import type { RelationCounts } from "../diplomacy";
-import { ascensionAppetite } from "../ascension";
+import { ascensionAppetite, transmuting } from "../ascension";
 import { realmMatchup } from "../elements";
 import { frontierTargets } from "../frontier";
 import { borderLength } from "../grid";
 import {
   DIPLOMACY_RULES,
   ELEMENT_RULES,
+  FISSION_RULES,
   POPULATION_RULES,
+  TRANSMUTATION_RULES,
   clamp,
 } from "../rules";
 import { strategyFactor } from "../strategy";
@@ -161,6 +163,11 @@ function warDesire(
   const ascensionPull = ascensionAppetite(state, actor, target)
     * ELEMENT_RULES.ascensionWarDesire
     * strategyFactor(self.strategy, "ascension");
+  // A court mid-fusion turns inward: the transition sickness halves its
+  // appetite for opening a new war until the transmutation completes. A
+  // straining court turns inward too — the seams need holding.
+  const fluxCaution = (transmuting(self) ? TRANSMUTATION_RULES.warDesireFactor : 1)
+    * (1 - self.strain * FISSION_RULES.strainWarReluctance);
   // A conquest-minded realm wants the same war more; near the declaration
   // threshold the sum is positive, so the factor moves decisions exactly there.
   //
@@ -173,7 +180,8 @@ function warDesire(
     + (border > 0 ? 0.14 : -0.05) + containLeader + finishVulnerable
     + exposedTraitor + longPeace + ascensionPull + pileOn - self.warWeariness * 0.72
     - existingWars * 0.26 - settlementPull + random.next() * 0.16)
-    * strategyFactor(self.strategy, "conquest");
+    * strategyFactor(self.strategy, "conquest")
+    * fluxCaution;
 }
 
 function considerTradePolicy(

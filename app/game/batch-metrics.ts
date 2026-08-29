@@ -9,7 +9,10 @@ import {
   populationGrowthEfficiency,
 } from "./rules";
 import { ELEMENTS } from "./elements";
+import { TERRAFORMED_TERRAINS } from "./terraform";
 import { STRATEGIC_DOMAINS } from "./strategy";
+
+const TERRAFORMED_SET: ReadonlySet<string> = new Set(TERRAFORMED_TERRAINS);
 import type {
   ElementId,
   ElementTier,
@@ -84,6 +87,14 @@ export interface PlayerCumulativeMetrics {
   ticksByFocus: Record<StrategicDomain, number>;
   /** Elemental ascensions this realm achieved, tier 2 and 3 together. */
   ascensions: number;
+  /** Transmutation windows this realm opened — fusions begun, completed or not. */
+  transmutationsStarted: number;
+  /** Cells this realm's dwell has transformed, lifetime. */
+  cellsTerraformed: number;
+  /** Times this realm fissioned along its elemental seams. */
+  fissionsSuffered: number;
+  /** Times this slot was restored as a freed constituent of a broken empire. */
+  restorations: number;
   /** Bespoke-mechanic drama, one counter per tier 3 power. */
   geyserEruptions: number;
   tempestCrests: number;
@@ -115,6 +126,10 @@ export interface PlayerBalanceSnapshot {
   absorbedElements: number;
   expressedElement: ElementId;
   expressedTier: ElementTier;
+  /** Share of this realm's land turned to its own signature terrain. */
+  saturation: number;
+  /** Imperial strain toward fission, 0..1. */
+  strain: number;
   strategicFocus: StrategicDomain;
   structuresOwned: StructureCounts;
   citySitesOwned: number;
@@ -143,6 +158,12 @@ export interface WorldBalanceSnapshot {
   treasuryGini: number;
   /** Living realms by the tier of the element they express. */
   tierCounts: Record<"1" | "2" | "3", number>;
+  /** Living realms currently inside a transmutation window. */
+  transmutingRealms: number;
+  /** Share of land the dwell system has transformed from its worldgen terrain. */
+  terraformedLandShare: number;
+  /** Fissions the world has seen, lifetime. */
+  fissionsTotal: number;
   populationConcentrationHhi: number;
   totalHomePopulation: number;
   totalCommittedPopulation: number;
@@ -248,6 +269,10 @@ function emptyPlayerMetrics(): PlayerCumulativeMetrics {
     strategyChanges: 0,
     ticksByFocus: emptyFocusCounts(),
     ascensions: 0,
+    transmutationsStarted: 0,
+    cellsTerraformed: 0,
+    fissionsSuffered: 0,
+    restorations: 0,
     geyserEruptions: 0,
     tempestCrests: 0,
     bloomOverextensions: 0,
@@ -358,6 +383,12 @@ export class BatchMetricsCollector {
     if (event.kind === "diplomacy.alliance-betrayed" && actor) this.players[actor].alliancesBetrayed += 1;
     if (event.kind === "leadership.strategy-adopted" && actor) this.players[actor].strategyChanges += 1;
     if (event.kind === "dynasty.element-ascended" && actor) this.players[actor].ascensions += 1;
+    if (event.kind === "dynasty.transmutation-begun" && actor) this.players[actor].transmutationsStarted += 1;
+    if (event.kind === "society.land-transformed" && actor) {
+      this.players[actor].cellsTerraformed += Number(event.facts.cells ?? 0);
+    }
+    if (event.kind === "politics.fission" && actor) this.players[actor].fissionsSuffered += 1;
+    if (event.kind === "politics.realm-restored" && actor) this.players[actor].restorations += 1;
     if (event.kind === "dynasty.geyser-erupted" && actor) this.players[actor].geyserEruptions += 1;
     if (event.kind === "dynasty.tempest-crested" && actor) this.players[actor].tempestCrests += 1;
     if (event.kind === "dynasty.bloom-overextended" && actor) this.players[actor].bloomOverextensions += 1;
@@ -478,9 +509,11 @@ export class BatchMetricsCollector {
     const citySites = Object.fromEntries(PLAYER_ORDER.map((id) => [id, 0])) as Record<PlayerId, number>;
     const frontierCells = Object.fromEntries(PLAYER_ORDER.map((id) => [id, 0])) as Record<PlayerId, number>;
     let unclaimed = 0;
+    let terraformed = 0;
     for (let index = 0; index < state.cells.length; index += 1) {
       const cell = state.cells[index]!;
       if (cell.terrain !== "water" && cell.owner === null) unclaimed += 1;
+      if (TERRAFORMED_SET.has(cell.terrain)) terraformed += 1;
       if (!cell.owner) continue;
       if (cell.structure === "city") citySites[cell.owner] += 1;
       if (isFrontierCell(state, index)) frontierCells[cell.owner] += 1;
@@ -515,6 +548,8 @@ export class BatchMetricsCollector {
         absorbedElements: faction.absorbedElements.length,
         expressedElement: faction.expressedElement,
         expressedTier: ELEMENTS[faction.expressedElement].tier,
+        saturation: faction.saturation,
+        strain: faction.strain,
         strategicFocus: faction.strategy.focus,
         structuresOwned: { ...faction.structures },
         citySitesOwned: citySites[id],
@@ -539,6 +574,8 @@ export class BatchMetricsCollector {
     for (const id of alive) {
       tierCounts[String(ELEMENTS[state.factions[id].expressedElement].tier) as "1" | "2" | "3"] += 1;
     }
+    const transmutingRealms = alive
+      .filter((id) => state.factions[id].transmutation.target !== null).length;
     const leader = [...alive].sort(
       (first, second) => state.factions[second].territory - state.factions[first].territory,
     )[0] ?? null;
@@ -566,6 +603,9 @@ export class BatchMetricsCollector {
       landConcentrationHhi: concentration(PLAYER_ORDER.map((id) => state.factions[id].territory)),
       treasuryGini: gini(alive.map((id) => state.factions[id].gold)),
       tierCounts,
+      transmutingRealms,
+      terraformedLandShare: terraformed / state.landTiles,
+      fissionsTotal: total((metrics) => metrics.fissionsSuffered),
       populationConcentrationHhi: concentration(livingByNation),
       totalHomePopulation: totalHome,
       totalCommittedPopulation: totalCommitted,

@@ -19,8 +19,10 @@ import {
   TERRAIN_RULES,
   WILDERNESS_TERRAIN_COST,
   clamp,
+  emptyTerrainProfile,
   normalizedCellLength,
 } from "../rules";
+import { terrainAffinityFactor } from "../terraform";
 import {
   campaignSubject,
   realmSubject,
@@ -49,10 +51,6 @@ interface TheaterDraft {
   resistance: number;
   supplyQuality: number;
   observedValue: number;
-}
-
-function emptyTerrainProfile(): TheaterTerrainProfile {
-  return { farmland: 0, plains: 0, forest: 0, hills: 0, mountains: 0 };
 }
 
 function targetOwnsCell(state: WorldState, index: number, target: CampaignTarget): boolean {
@@ -100,8 +98,12 @@ export function conquestCostAt(
   const stream = cell.stream ? STREAM_RULES.enemyCrossingCost : 1;
   // The defender's elemental power prices its own ground: a geyser's banked
   // pressure stiffens it, a venting geyser's or a shattered obsidian's lies
-  // soft, and the profile identities lean it inside the band.
-  return ENEMY_TERRAIN_COST[terrain] * fort * city * stream * powerDefenseFactor(state, target);
+  // soft, and the profile identities lean it inside the band. Terrain
+  // affinity prices it again — obsidian ground on basalt fights harder,
+  // fungus caught defending open scorch folds sooner.
+  return ENEMY_TERRAIN_COST[terrain] * fort * city * stream
+    * powerDefenseFactor(state, target)
+    * terrainAffinityFactor(state.factions[target].expressedElement, terrain);
 }
 
 function infrastructureValue(state: WorldState, index: number, viewer?: PlayerId): number {

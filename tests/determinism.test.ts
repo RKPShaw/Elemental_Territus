@@ -15,7 +15,63 @@ import { cellDigest, worldDigest } from "./world-digest";
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
  *
- * Re-recorded for the population-management pass, and the gameplay change was
+ * Re-recorded when the population-management pass (PR #19) merged with the
+ * elemental overhaul (conquest-fusion, the living land, the settlement draft
+ * and imperial fission). Both lines had re-recorded every digest for reasons
+ * their own paragraphs below still explain, and the merged world is a third
+ * thing neither line played: free war meets the crowd-aware draft's spread
+ * capitals, band-managed populations settle terrain the dwell sweep will
+ * remake, and the faster frontier reaches the fusion trigger sooner. Every
+ * digest moves by construction — both sides added faction state — and the
+ * calibration horizons were re-probed on the merged world rather than
+ * inherited from either side.
+ *
+ * Before that, re-recorded for the settlement draft and imperial fission, and the gameplay
+ * changes are the point. The spawn draft became the shared Catan draft: every
+ * pick still takes the best site with full knowledge, but the score now pays
+ * a decaying crowding cost toward everyone already seated and reads terrain
+ * through the composed element leans instead of a single favoured terrain —
+ * all forty-eight capitals move, so every world differs from tick zero by
+ * construction. Imperial strain is new faction state (strain and its grace
+ * clock move every world digest), accrued by compound-expressed realms from
+ * overextension, saturation and war weariness; at full strain a realm
+ * fissions into its founding constituents through the same draft, restoring
+ * dead roster slots on the freed ground. No fission fires inside these
+ * horizons — tier 1 never strains, and no realm reaches tier 2 by tick 600 —
+ * so the checkpoint movement here is the draft and the new state, with the
+ * fission machinery proven by its own staged tests.
+ *
+ * Before that, re-recorded for the living land — dwell terraforming and terrain affinity —
+ * and the gameplay changes are the point. Terrain stops being immutable:
+ * eight terraformed terrains join the space (worldgen never places them; an
+ * element's long tenure does, read off the existing capturedAt clock, so the
+ * heartland transforms first and sequences ride the current terrain — Ember
+ * scorches plains, Fungus mires the scorch). Terrain affinity multiplies
+ * three chokepoints inside the matchup band — invasion cost of the
+ * defender's ground, land income, troop sustain — and the settle lens
+ * learns the ground each element leans toward, so settlement re-aims from
+ * the first planning window: cell digests move from tick 60 on ownership
+ * alone, long before the first transform can fire (dwell thresholds start
+ * at 3,000 ticks). Realm saturation is new faction state, so every world
+ * digest moves by construction as well.
+ *
+ * Before that, re-recorded for the crucible of conquest — ascension reworked from tally
+ * thresholds to conquest-held fusion, and the gameplay change is the point.
+ * Three moves, two of them by construction: the transmutation window is new
+ * faction state (FactionState.transmutation), so every world digest moves;
+ * the stream flag joined the cell digest (it was the one cell field the
+ * digest never learned, an omission this phase repairs), so every cell
+ * digest moves. The third is the real mechanic: a realm now becomes
+ * eligible for a higher element the moment annexation puts both
+ * constituents inside it — one cross-family conquest, not a depth-two
+ * tally — and eligibility opens a visible transmutation window (dulled
+ * attack, settlement, growth and war desire; bespoke meters held) instead
+ * of flipping expression on the spot. Ascension appetite reads the same
+ * held-constituent arithmetic, so war targeting genuinely re-aims from the
+ * first diplomacy pass and the worlds diverge long before the first window
+ * opens.
+ *
+ * Alongside those, re-recorded for the population-management pass, and the gameplay change was
  * the whole point. Four things moved together. A host on campaign no longer
  * occupies capacity at home, so a realm's living strength may stand above its
  * cap while its army is away (POPULATION_RULES). The growth curve was reshaped
@@ -282,25 +338,25 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
   {
     seed: 0x240823,
     checkpoints: [
-      { tick: 60, world: "6feb8533980b535d6ef73772134e495b", cells: "7661244e657755eb" },
-      { tick: 200, world: "d01511b52cc0d7eb6c5fe8b5f6a4feda", cells: "e786cf0f17b7a9bb" },
-      { tick: 600, world: "188d2475b6095e4496175f2ddf537af3", cells: "75c4bdff28b245ed", deep: true },
+      { tick: 60, world: "9d6815349a3970c2b644c32cd745c705", cells: "1984ddfd81022e83" },
+      { tick: 200, world: "33baa57b2821c6914936baa2237c1e46", cells: "6877fdad40c8c536" },
+      { tick: 600, world: "b410d5388899534517f87aa207293aa1", cells: "f1cc592b1d0becfb", deep: true },
     ],
   },
   {
     seed: 0x5eed01,
     checkpoints: [
-      { tick: 60, world: "fdbf4c81986e6e40584dab051fe71f1f", cells: "0004cbf1437b58f7" },
-      { tick: 200, world: "ac70dae33538bfeb730fb533cfd6c03e", cells: "8314d4103cb10ac4" },
-      { tick: 600, world: "d67397e8649b7337dfa5278f7d89d9d0", cells: "f1ddf430edf8fa19", deep: true },
+      { tick: 60, world: "0fdeecc2f8a82e354a28f0cd5d25d3d0", cells: "c25317cec18a000a" },
+      { tick: 200, world: "bd13880e62d37f884bd5d2c9f6d8628a", cells: "56d7c2fd5a1fb4f1" },
+      { tick: 600, world: "6277100184ef876b2b29318616d032e4", cells: "ffcfcd65bdb9ef33", deep: true },
     ],
   },
   {
     seed: 0xbadbeef,
     checkpoints: [
-      { tick: 60, world: "09a9cc0bc4bcfe045f7431dc44018aec", cells: "4c7f3c024686aa5b" },
-      { tick: 200, world: "0f4f52fd78af46e5de83fb9e60ab4355", cells: "9e1fb175d456b7dc" },
-      { tick: 600, world: "5d8bc49cb4653c2b6b057e226dfc8d8e", cells: "2086fa442a277e32", deep: true },
+      { tick: 60, world: "fa1311154852f8a388a0e9bfee9a9c68", cells: "c1c72c3cce40ee2e" },
+      { tick: 200, world: "5b2d2dbc9fb46ccfa35fa1826b43f767", cells: "ca837ae5c6e8534b" },
+      { tick: 600, world: "b975faf1fdf05708904d9c6d95ce16c3", cells: "d0dec691ad526c3f", deep: true },
     ],
   },
 ];

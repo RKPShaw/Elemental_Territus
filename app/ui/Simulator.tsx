@@ -18,6 +18,7 @@ import { realmLabel, realmTitle } from "../game/naming";
 import { DOMAIN_LABELS, STRATEGIC_DOMAINS } from "../game/strategy";
 import {
   ELEMENT_RULES,
+  LAND_TERRAINS,
   STRUCTURE_RULES,
   STRUCTURE_MIN_SPACING,
   TERRAIN_RULES,
@@ -850,7 +851,7 @@ export function Simulator() {
             <p className="eyebrow">Land trade-off</p>
             <h3>Food or fortification?</h3>
             <div className="terrain-rule-list">
-              {(["farmland", "plains", "forest", "hills", "mountains"] as const).map((terrain) => (
+              {LAND_TERRAINS.map((terrain) => (
                 <div key={terrain}><i style={{ background: TERRAIN_RULES[terrain].fill }} /><span>{TERRAIN_RULES[terrain].shortName}</span><b>{TERRAIN_RULES[terrain].defenseCost.toFixed(2)}× defense</b><small>{TERRAIN_RULES[terrain].sustain.toFixed(2)} sustain</small></div>
               ))}
             </div>

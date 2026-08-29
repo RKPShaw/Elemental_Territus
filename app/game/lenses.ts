@@ -1,4 +1,6 @@
 import { ELEMENTS } from "./elements";
+import { LAND_TERRAINS } from "./rules";
+import { terrainLeanOf } from "./terraform";
 import { RELATED_TERRAINS } from "./theater-intelligence";
 import { OBSERVED_LAYERS, believedValue } from "./theater-map";
 import type { ObservedLayer } from "./theater-map";
@@ -42,6 +44,14 @@ function elementFitOf(state: WorldState, viewer: PlayerId): (terrain: LandTerrai
     const home = ELEMENTS[element].favoredTerrain;
     favoured.add(home);
     for (const near of RELATED_TERRAINS[home]) related.add(near);
+    // Terraformed ground the element leans toward counts as home country
+    // too, so an obsidian court settles toward basalt and a fungus court
+    // toward its mires without either being told to.
+    for (const terrain of LAND_TERRAINS) {
+      const lean = terrainLeanOf(element, terrain);
+      if (lean > 0.05) favoured.add(terrain);
+      else if (lean > 0) related.add(terrain);
+    }
   }
   return (terrain) => (favoured.has(terrain) ? 1 : related.has(terrain) ? 0.45 : 0);
 }

@@ -3,133 +3,115 @@ import assert from "node:assert/strict";
 import {
   ascensionAppetite,
   baseDepthsOf,
-  expressionFor,
-  formationProgress,
-  isFormable,
+  createTransmutationState,
+  fusionTargetFor,
   nextFormable,
   totalRealmsAbsorbed,
 } from "../app/game/ascension";
 import { ELEMENTS, baseMaskOf } from "../app/game/elements";
 import { ElementalWarEngine } from "../app/game/engine";
 import { PLAYER_ORDER } from "../app/game/players";
-import { ELEMENT_RULES } from "../app/game/rules";
-import type { ElementId, WorldState } from "../app/game/types";
+import { advancePowerState, powerAttackFactor, powerGrowthFactor } from "../app/game/powers";
+import { POWER_RULES, TRANSMUTATION_RULES } from "../app/game/rules";
+import type { ElementId, FactionState, WorldState } from "../app/game/types";
 
 /**
- * Ascension is the element system's progression rule: conquest tallies alone
- * decide what a realm can express, expression only ever upgrades, and the
- * running world keeps every realm's expression and base mask exactly what
- * recomputing them from its history would produce.
+ * Ascension is the crucible of conquest: annexation is the only way elements
+ * enter a realm, the moment one realm holds both constituents of a higher
+ * element a transmutation window opens, and the realm emerges from the window
+ * expressing the fusion. Expression only ever upgrades, eligibility climbs
+ * one rung at a time, and the running world keeps every realm's window,
+ * expression and base mask exactly consistent.
  */
 
 type Counts = Partial<Record<ElementId, number>>;
 
-function depthsOf(counts: Counts) {
-  return baseDepthsOf(counts);
+function realmOf(
+  expressedElement: ElementId,
+  absorbedElements: ElementId[],
+  elementCounts: Counts = {},
+) {
+  return {
+    expressedElement,
+    absorbedElements,
+    elementCounts: elementCounts as Record<ElementId, number>,
+  };
 }
 
 test("absorbed depth decomposes every element into its founding multiset", () => {
   // A founding realm is one slot of itself.
-  assert.deepEqual(depthsOf({ ember: 1 }), { ember: 1, tide: 0, stone: 0, gale: 0 });
+  assert.deepEqual(baseDepthsOf({ ember: 1 }), { ember: 1, tide: 0, stone: 0, gale: 0 });
   // A conquered compound feeds both its bases: steam is one ember, one tide.
-  assert.deepEqual(depthsOf({ steam: 1 }), { ember: 1, tide: 1, stone: 0, gale: 0 });
+  assert.deepEqual(baseDepthsOf({ steam: 1 }), { ember: 1, tide: 1, stone: 0, gale: 0 });
   // A dominant tier 3 fills four slots, its repeated base twice.
-  assert.deepEqual(depthsOf({ geyser: 1 }), { ember: 2, tide: 1, stone: 1, gale: 0 });
+  assert.deepEqual(baseDepthsOf({ geyser: 1 }), { ember: 2, tide: 1, stone: 1, gale: 0 });
   // A balanced tier 3 touches everything once.
-  assert.deepEqual(depthsOf({ mirage: 1 }), { ember: 1, tide: 1, stone: 1, gale: 1 });
+  assert.deepEqual(baseDepthsOf({ mirage: 1 }), { ember: 1, tide: 1, stone: 1, gale: 1 });
   // Tallies scale linearly and mix additively.
-  assert.deepEqual(depthsOf({ ember: 2, tide: 3, grove: 1 }), {
+  assert.deepEqual(baseDepthsOf({ ember: 2, tide: 3, grove: 1 }), {
     ember: 2, tide: 4, stone: 1, gale: 0,
   });
+  assert.equal(totalRealmsAbsorbed({ ember: 2, tide: 3, grove: 1 }), 6);
 });
 
-test("tier 2 takes roughly three conquests with the right spread", () => {
-  // An ember realm's own founding stock counts one; two tide conquests and a
-  // second ember complete steam's requirement of depth two in each base.
-  const twoShort: Counts = { ember: 1, tide: 1 };
-  const complete: Counts = { ember: 2, tide: 2 };
+test("conquest-held constituents decide fusion eligibility", () => {
+  // Holding only your own base fuses nothing.
+  assert.equal(fusionTargetFor(realmOf("ember", ["ember"], { ember: 1 })), null);
+  // One cross-family element held: the compound of the pair becomes eligible.
   assert.equal(
-    isFormable("steam", depthsOf(twoShort), totalRealmsAbsorbed(twoShort)),
-    false,
-  );
-  assert.equal(
-    isFormable("steam", depthsOf(complete), totalRealmsAbsorbed(complete)),
-    true,
-  );
-  assert.equal(ELEMENT_RULES.tier2BaseDepth, 2);
-  // Grove forms the same way from tide and stone — the Mossbound return as
-  // something earned rather than given.
-  const nature: Counts = { tide: 2, stone: 2 };
-  assert.ok(isFormable("grove", depthsOf(nature), totalRealmsAbsorbed(nature)));
-});
-
-test("tier 3 needs both constituents formable and a long conquest record", () => {
-  // Geyser is steam + magma: ember 2, tide 2, stone 2 covers both compounds,
-  // but five realms absorbed is one short of the record it demands.
-  const deep: Counts = { ember: 2, tide: 2, stone: 2 };
-  assert.equal(totalRealmsAbsorbed(deep), 6);
-  assert.ok(isFormable("geyser", depthsOf(deep), 6));
-  assert.equal(isFormable("geyser", depthsOf(deep), 5), false);
-  assert.equal(ELEMENT_RULES.tier3MinimumRealms, 6);
-  // Progress is limited by the least satisfied requirement.
-  const partial: Counts = { ember: 2, tide: 1 };
-  assert.equal(formationProgress("steam", depthsOf(partial), 3), 0.5);
-});
-
-test("expression upgrades to the best-supported formable element and never demotes", () => {
-  // Not yet formable: expression stands at the founding element.
-  assert.equal(
-    expressionFor({ expressedElement: "ember", elementCounts: { ember: 1, tide: 1 } }),
-    "ember",
-  );
-  // The single formable compound is taken.
-  assert.equal(
-    expressionFor({ expressedElement: "ember", elementCounts: { ember: 2, tide: 2 } }),
+    fusionTargetFor(realmOf("ember", ["ember", "tide"], { ember: 1, tide: 1 })),
     "steam",
   );
-  // Absorbing ascended civilizations feeds every base they carried. Steam,
-  // magma and grove are all formable here with equal support, and the
-  // element-space order settles the tie — a conqueror of water and earth
-  // histories expresses grove: Nature is earned, never given.
+  // Equal support ties break by element-space order: grove sits before steam
+  // in the canon, so a conqueror of water and earth histories expresses
+  // grove — Nature is earned, never given.
   assert.equal(
-    expressionFor({
-      expressedElement: "tide",
-      elementCounts: { steam: 1, magma: 1, tide: 1, stone: 1 },
-    }),
+    fusionTargetFor(realmOf("tide", ["tide", "ember", "stone"], { tide: 2, ember: 1, stone: 1 })),
     "grove",
   );
   // Deeper support beats space order: this history leans magma's way.
   assert.equal(
-    expressionFor({
-      expressedElement: "ember",
-      elementCounts: { magma: 2, steam: 1, tide: 1, stone: 1 },
-    }),
+    fusionTargetFor(realmOf(
+      "ember",
+      ["ember", "tide", "stone"],
+      { magma: 2, steam: 1, tide: 1, stone: 1 },
+    )),
     "magma",
   );
-  // Expression never moves sideways: a magma realm with a complete steam
-  // history stays magma until a higher tier forms.
+  // Tier 3 needs both compound constituents held as elements in their own
+  // right — raw founding coverage is not enough.
   assert.equal(
-    expressionFor({
-      expressedElement: "magma",
-      elementCounts: { ember: 2, tide: 2, stone: 1 },
-    }),
-    "magma",
+    fusionTargetFor(realmOf("steam", ["ember", "tide", "steam"], { ember: 2, tide: 2 })),
+    null,
   );
-  // A history deep enough for tier 3 expresses it directly.
   assert.equal(
-    expressionFor({
-      expressedElement: "ember",
-      elementCounts: { ember: 2, tide: 2, stone: 2 },
-    }),
+    fusionTargetFor(realmOf("steam", ["ember", "tide", "steam", "magma"], { ember: 2, tide: 2, magma: 1 })),
     "geyser",
   );
-  // Tier 3 is the apex: nothing higher exists to upgrade into.
+  // Tier 3 is the apex: nothing higher exists to fuse into.
   assert.equal(
-    expressionFor({ expressedElement: "geyser", elementCounts: { ember: 9, gale: 9 } }),
-    "geyser",
+    fusionTargetFor(realmOf("geyser", ["ember", "tide", "steam", "magma", "geyser"], { ember: 9 })),
+    null,
   );
+});
+
+test("fusion climbs the ladder one rung at a time", () => {
+  // A tier 1 realm that swallowed two transmuted compounds still fuses to a
+  // tier 2 first — each rung pays a window of its own.
+  const gorged = realmOf(
+    "ember",
+    ["ember", "tide", "steam", "magma", "stone"],
+    { ember: 1, steam: 2, magma: 2 },
+  );
+  const target = fusionTargetFor(gorged);
+  assert.ok(target !== null && ELEMENTS[target].tier === 2, "the first fusion is tier 2");
+  // The prospect panel reads held constituents as progress.
+  const prospect = nextFormable(realmOf("ember", ["ember", "tide"], { ember: 1, tide: 1 }));
+  assert.ok(prospect && prospect.element === "steam" && prospect.progress === 1);
+  const cold = nextFormable(realmOf("ember", ["ember"], { ember: 1 }));
+  assert.ok(cold && cold.progress === 0.5, "your own base is half of any pair it joins");
   assert.equal(
-    nextFormable({ expressedElement: "geyser", elementCounts: { ember: 9 } }),
+    nextFormable(realmOf("geyser", ["geyser"], { ember: 9 })),
     null,
   );
 });
@@ -137,21 +119,125 @@ test("expression upgrades to the best-supported formable element and never demot
 test("ascension appetite rises exactly when a conquest advances the next tier", () => {
   const state = {
     factions: {
-      // One tide conquest away from steam.
-      seeker: { expressedElement: "ember", elementCounts: { ember: 2, tide: 1 } },
-      completes: { expressedElement: "tide", elementCounts: { tide: 1 } },
-      redundant: { expressedElement: "ember", elementCounts: { ember: 1 } },
-      apex: { expressedElement: "geyser", elementCounts: { ember: 4, tide: 4 } },
+      // Holding ember only: tide would complete steam.
+      seeker: realmOf("ember", ["ember"], { ember: 2 }),
+      completes: realmOf("tide", ["tide"], { tide: 1 }),
+      redundant: realmOf("ember", ["ember"], { ember: 1 }),
+      apex: realmOf("geyser", ["geyser"], { ember: 4, tide: 4 }),
     },
   } as unknown as WorldState;
-  const completing = ascensionAppetite(state, "seeker", "completes");
-  const useless = ascensionAppetite(state, "seeker", "redundant");
-  assert.ok(completing > 0, "a target that completes the history is wanted");
-  assert.equal(useless, 0, "a target adding nothing to the next tier is not");
+  assert.equal(
+    ascensionAppetite(state, "seeker", "completes"),
+    1,
+    "a target that completes a fusion outright is worth the full pull",
+  );
+  assert.equal(
+    ascensionAppetite(state, "seeker", "redundant"),
+    0,
+    "a target adding nothing to the next tier is not wanted",
+  );
   assert.equal(ascensionAppetite(state, "apex", "completes"), 0, "the apex wants nothing");
 });
 
-test("a running world keeps expression, masks and held powers exactly consistent", () => {
+test("a transmutation window pauses the bespoke mechanic without losing the books", () => {
+  const faction = {
+    expressedElement: "geyser",
+    power: { charge: 0.4, releasedAt: -1, tally: 0 },
+    capturedTiles: 7,
+    transmutation: { target: "geyser", from: "steam", startedAt: 10, completesAt: 700, completed: 1 },
+    structures: { city: 0, fort: 0, factory: 0, harbor: 0, plant: 0, skyport: 0 },
+    gold: 0,
+    troops: 0,
+    troopCap: 1,
+  } as unknown as FactionState;
+  assert.equal(advancePowerState(faction, { tick: 50, campaigning: true, pressed: false }), null);
+  assert.equal(faction.power.charge, 0.4, "the meter holds its breath during the fusion");
+  assert.equal(faction.power.tally, 7, "capture bookkeeping stays current through the pause");
+  faction.transmutation = createTransmutationState();
+  advancePowerState(faction, { tick: 51, campaigning: false, pressed: false });
+  assert.ok(
+    Math.abs(faction.power.charge - (0.4 + 1 / POWER_RULES.geyserBankTicks)) < 1e-12,
+    "an idle window lets the meter bank again",
+  );
+});
+
+test("the crucible: a cross-family annexation opens a window, dulls the realm, then crowns it", () => {
+  // Conquest histories assemble tens of thousands of ticks out on the slow
+  // world, so the history is handed over rather than waited for: granting the
+  // held element is exactly what annexing its realm leaves behind, and the
+  // window, debuffs, completion and reports all run through the real systems.
+  const engine = new ElementalWarEngine(0x240823);
+  engine.step(200);
+  engine.observe((world) => {
+    const faction = world.factions["ember-1"]!;
+    faction.elementCounts.tide = 1;
+    if (!faction.absorbedElements.includes("tide")) faction.absorbedElements.push("tide");
+  });
+  let state = engine.step(1);
+  const opened = state.factions["ember-1"]!;
+  assert.equal(opened.transmutation.target, "steam", "the window opens the tick eligibility lands");
+  assert.equal(opened.expressedElement, "ember", "expression waits for the window");
+  assert.equal(
+    opened.transmutation.completesAt - opened.transmutation.startedAt,
+    TRANSMUTATION_RULES.tier2WindowTicks,
+    "a tier 2 fusion pays the tier 2 window",
+  );
+  const begun = state.reports.filter((event) => event.kind === "dynasty.transmutation-begun");
+  assert.ok(begun.length > 0, "entering the crucible is reported");
+  assert.equal(begun[begun.length - 1]!.facts.to, "steam");
+  assert.equal(begun[begun.length - 1]!.importance, "major");
+  // The transition sickness is visible at the chokepoints while the window runs.
+  assert.equal(powerAttackFactor(state, "ember-1"), TRANSMUTATION_RULES.attackFactor);
+  assert.equal(powerGrowthFactor(state, "ember-1"), TRANSMUTATION_RULES.growthFactor);
+  // Fast-forward the window rather than waiting out 720 slow-world ticks.
+  engine.observe((world) => {
+    world.factions["ember-1"]!.transmutation.completesAt = world.tick + 1;
+  });
+  state = engine.step(2);
+  const crowned = state.factions["ember-1"]!;
+  assert.equal(crowned.expressedElement, "steam", "the realm emerges expressing the fusion");
+  assert.ok(crowned.absorbedElements.includes("steam"), "an ascended realm holds what it became");
+  assert.equal(crowned.transmutation.target, null, "the window closes behind it");
+  assert.equal(crowned.transmutation.completed, 1);
+  assert.equal(crowned.baseMask, baseMaskOf(crowned.absorbedElements));
+  const ascensions = state.reports.filter((event) => event.kind === "dynasty.element-ascended");
+  assert.ok(ascensions.length > 0, "the crowning is reported");
+  for (const event of ascensions) {
+    assert.equal(event.domain, "dynasty");
+    assert.ok(event.initiator?.realmId, "ascensions name their realm");
+    const to = event.facts.to as ElementId;
+    const tier = ELEMENTS[to].tier;
+    assert.ok(tier >= 2, "realms ascend to compound or advanced elements");
+    assert.equal(event.facts.tier, tier);
+    assert.equal(event.importance, tier === 3 ? "historic" : "major");
+  }
+  assert.equal(powerAttackFactor(state, "ember-1"), 1, "the sickness lifts with the crown");
+  assert.ok(
+    state.stories.some((story) => story.kind === "dynasty"),
+    "ascensions must flow into story arcs",
+  );
+  // Chained conquest: handing the steam realm its complementary compound
+  // opens the tier 3 window immediately — the next rung, paid in full.
+  engine.observe((world) => {
+    const faction = world.factions["ember-1"]!;
+    faction.elementCounts.magma = 1;
+    if (!faction.absorbedElements.includes("magma")) faction.absorbedElements.push("magma");
+  });
+  state = engine.step(1);
+  const chained = state.factions["ember-1"]!;
+  assert.equal(chained.transmutation.target, "geyser", "compound on compound reaches tier 3");
+  assert.equal(
+    chained.transmutation.completesAt - chained.transmutation.startedAt,
+    TRANSMUTATION_RULES.tier3WindowTicks,
+    "a tier 3 fusion pays the longer window",
+  );
+  const historicBegun = state.reports.filter(
+    (event) => event.kind === "dynasty.transmutation-begun" && event.facts.to === "geyser",
+  );
+  assert.equal(historicBegun[0]!.importance, "historic");
+});
+
+test("a running world keeps windows, expression, masks and held powers exactly consistent", () => {
   const engine = new ElementalWarEngine(0x240823);
   const tiers = new Map<string, number>();
   for (const gate of [400, 800, 1_200]) {
@@ -160,11 +246,25 @@ test("a running world keeps expression, masks and held powers exactly consistent
       for (const id of PLAYER_ORDER) {
         const faction = state.factions[id];
         if (!faction.alive) continue;
-        assert.equal(
-          faction.expressedElement,
-          expressionFor(faction),
-          `${id} must express exactly what its history makes formable`,
-        );
+        const window = faction.transmutation;
+        if (window.target === null) {
+          assert.equal(
+            fusionTargetFor(faction),
+            null,
+            `${id} must not sit idle on an eligible fusion`,
+          );
+          assert.ok(window.startedAt === -1 && window.completesAt === -1);
+        } else {
+          assert.ok(
+            window.startedAt >= 0 && window.completesAt > window.startedAt,
+            `${id} window must be well-formed`,
+          );
+          assert.equal(
+            ELEMENTS[window.target].tier,
+            ELEMENTS[faction.expressedElement].tier + 1,
+            `${id} window must aim exactly one rung up`,
+          );
+        }
         assert.equal(
           faction.baseMask,
           baseMaskOf(faction.absorbedElements),
@@ -184,64 +284,4 @@ test("a running world keeps expression, masks and held powers exactly consistent
       return null;
     });
   }
-});
-
-test("conquest histories produce ascensions and report them as dynasty facts", () => {
-  // This horizon kept following the pace out. Funded mobilization moved the
-  // first ascension a couple of hundred ticks (~1420 on this seed); the slow
-  // opening economy moved it past what the test could afford and staking war
-  // chests bought it back. The pacing retune moves it again and much further,
-  // and no stake buys it back this time: what conquest is short of now is
-  // people, not gold. Population grows at a sixth of the old rate, so a war
-  // of attrition takes about six times as long to end a realm, and the four
-  // conquests a tier 2 needs assemble tens of thousands of ticks out.
-  //
-  // So the history is handed over rather than waited for. Ascension reads a
-  // realm's conquest tallies and nothing else (see expressionFor), so a realm
-  // given the tallies four conquests would have left it ascends through the
-  // real system on a real running world and reports exactly what a besieger's
-  // would. What this test is about — that an ascension happens and that it is
-  // reported as a well-formed dynasty fact — is unchanged; only the waiting
-  // is gone.
-  const engine = new ElementalWarEngine(0x240823);
-  engine.step(200);
-  engine.observe((world) => {
-    const faction = world.factions["ember-1"]!;
-    // Depth two in both of steam's founding bases: its own ember stock, a
-    // second ember, and two tides.
-    faction.elementCounts.ember = 2;
-    faction.elementCounts.tide = 2;
-    for (const element of ["ember", "tide"] as const) {
-      if (!faction.absorbedElements.includes(element)) faction.absorbedElements.push(element);
-    }
-  });
-  // Two ticks: one for the ascension system to crown it, one for the story
-  // correlator to pick the report up.
-  const state = engine.step(2);
-  const ascensions = state.reports.filter(
-    (event) => event.kind === "dynasty.element-ascended",
-  );
-  assert.ok(
-    ascensions.length > 0,
-    "the calibration world should crown at least one ascension by tick 1500",
-  );
-  for (const event of ascensions) {
-    assert.equal(event.domain, "dynasty");
-    assert.ok(event.initiator?.realmId, "ascensions name their realm");
-    const to = event.facts.to as ElementId;
-    const tier = ELEMENTS[to].tier;
-    assert.ok(tier >= 2, "realms ascend to compound or advanced elements");
-    assert.equal(event.facts.tier, tier);
-    assert.equal(event.importance, tier === 3 ? "historic" : "major");
-    const realm = state.factions[event.initiator!.realmId!];
-    assert.ok(
-      realm.absorbedElements.includes(to) || !realm.alive,
-      "an ascended realm holds what it became",
-    );
-  }
-  // The chronicle carries the arrival too — ascension is an observer beat.
-  assert.ok(
-    state.stories.some((story) => story.kind === "dynasty"),
-    "ascensions must flow into story arcs",
-  );
 });

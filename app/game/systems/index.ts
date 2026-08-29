@@ -9,10 +9,12 @@ import { DiplomacyAiSystem } from "./diplomacy-ai";
 import { DiplomacyClockSystem } from "./diplomacy-clock";
 import { EconomySystem } from "./economy";
 import { ElementPowersSystem } from "./element-powers";
+import { InstabilitySystem } from "./instability";
 import { StrategicPlanningSystem } from "./strategy-plan";
 import { StrategyAiSystem } from "./strategy-ai";
 import { RealmNamingSystem } from "./naming";
 import { StorySystem } from "./story";
+import { TerraformSystem } from "./terraform";
 import { StrategicGeographySystem } from "./strategic-geography";
 import { TheaterMapSystem } from "./theater-map";
 import { TheaterSystem } from "./theaters";
@@ -22,8 +24,14 @@ import { VictorySystem } from "./victory";
 export const DEFAULT_SYSTEMS: readonly SimulationSystem[] = [
   new WorldClockSystem(),
   new DiplomacyClockSystem(),
+  // Terraform runs before accounting so the same tick's sustain, troop caps
+  // and income already read the ground a transform just changed.
+  new TerraformSystem(),
   new RealmAccountingSystem(),
   new ElementAscensionSystem(),
+  // Instability reads the accounting and expression the two systems above
+  // just settled; a fission's renames land before naming styles titles.
+  new InstabilitySystem(),
   new RealmNamingSystem(),
   new ElementPowersSystem(),
   new EconomySystem(),

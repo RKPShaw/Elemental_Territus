@@ -1,6 +1,6 @@
 import { PLAYER_ORDER } from "../../app/game/players";
-import { expressionFor } from "../../app/game/ascension";
-import { baseMaskOf } from "../../app/game/elements";
+import { fusionTargetFor } from "../../app/game/ascension";
+import { ELEMENTS, baseMaskOf } from "../../app/game/elements";
 import { ElementalWarEngine } from "../../app/game/engine";
 import {
   hasSwiftSight,
@@ -9,7 +9,7 @@ import {
   regionIntelligence,
 } from "../../app/game/information";
 import { ACTION_REPORT_KINDS } from "../../app/game/reporting";
-import { THEATER_MAP_RULES } from "../../app/game/rules";
+import { TERRAIN_RULES, THEATER_MAP_RULES } from "../../app/game/rules";
 import type { ReportEventKind, WorldState } from "../../app/game/types";
 
 /**
@@ -242,29 +242,94 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     `${strategyShifts} focus changes reported`,
   );
 
-  // Two proofs, one per failure mode. Bookkeeping: recomputing every living
-  // realm's expression and base mask from its tallies must change nothing,
-  // because the system claims to keep them current every tick. Activity: an
-  // ascension reported inside the horizon; a run where no realm assembled a
-  // deep enough history is inconclusive rather than sick.
+  // Two proofs, one per failure mode. Bookkeeping: no living idle realm may
+  // sit on an eligible fusion (the system claims to open windows the tick
+  // conquest makes them eligible), every open window must be well-formed and
+  // aimed exactly one rung up, and base masks must recompute exactly.
+  // Activity: a transmutation begun or completed inside the horizon; a run
+  // where no conquest assembled the constituents is inconclusive, not sick.
   const ascensions = count("dynasty.element-ascended");
-  let expressionLag = 0;
+  const transmutations = count("dynasty.transmutation-begun");
+  let pendingIdle = 0;
+  let malformedWindows = 0;
   let maskDrift = 0;
   for (const id of PLAYER_ORDER) {
     const faction = state.factions[id];
     if (!faction.alive) continue;
-    if (expressionFor(faction) !== faction.expressedElement) expressionLag += 1;
+    const window = faction.transmutation;
+    if (window.target === null) {
+      if (fusionTargetFor(faction) !== null) pendingIdle += 1;
+    } else if (
+      window.startedAt < 0
+      || window.completesAt <= window.startedAt
+      || ELEMENTS[window.target].tier !== ELEMENTS[faction.expressedElement].tier + 1
+    ) {
+      malformedWindows += 1;
+    }
     if (baseMaskOf(faction.absorbedElements) !== faction.baseMask) maskDrift += 1;
   }
-  const ascensionBooksExact = expressionLag === 0 && maskDrift === 0;
+  const fusionBooksExact = pendingIdle === 0 && malformedWindows === 0 && maskDrift === 0;
   add(
     "element-ascension",
-    "absorbed histories express higher elements",
-    ascensionBooksExact && ascensions > 0,
-    ascensionBooksExact
-      ? `${ascensions} ascensions reported, expression and base masks exact across the living roster`
-      : `${expressionLag} realms lag their formable expression, ${maskDrift} base masks drifted`,
-    ascensionBooksExact,
+    "conquest-held constituents fuse through transmutation windows",
+    fusionBooksExact && (transmutations > 0 || ascensions > 0),
+    fusionBooksExact
+      ? `${transmutations} windows opened, ${ascensions} fusions completed, books exact across the living roster`
+      : `${pendingIdle} idle realms sit on an eligible fusion, ${malformedWindows} malformed windows, ${maskDrift} base masks drifted`,
+    fusionBooksExact,
+  );
+
+  // Dwell terraforming. Invariants that can genuinely fail: every cell's
+  // terrain must still have a rules entry, and every living realm's
+  // saturation must sit inside [0, 1]. Activity: land transformed inside the
+  // horizon — dwell thresholds start at 3,000 ticks, beyond this horizon on
+  // an unstaked world, so silence is inconclusive rather than sick.
+  const landTransforms = count("society.land-transformed");
+  let unknownTerrain = 0;
+  for (const cell of state.cells) {
+    if (!TERRAIN_RULES[cell.terrain]) unknownTerrain += 1;
+  }
+  let saturationDrift = 0;
+  for (const id of PLAYER_ORDER) {
+    const faction = state.factions[id];
+    if (!faction.alive) continue;
+    if (!(faction.saturation >= 0 && faction.saturation <= 1)) saturationDrift += 1;
+  }
+  const terraformBooksExact = unknownTerrain === 0 && saturationDrift === 0;
+  add(
+    "dwell-terraforming",
+    "long tenure transforms the ground it holds",
+    terraformBooksExact && landTransforms > 0,
+    terraformBooksExact
+      ? `${landTransforms} transform reports, terrain table and saturation exact`
+      : `${unknownTerrain} cells hold unknown terrain, ${saturationDrift} saturations out of band`,
+    terraformBooksExact,
+  );
+
+  // Imperial instability. Invariants that can genuinely fail: every living
+  // realm's strain sits inside [0, 1], and no tier 1 realm carries strain
+  // (tier 1 never accrues, and both fission outcomes reset it). Activity: a
+  // fission needs a compound empire to overreach first, far beyond this
+  // horizon, so silence is inconclusive rather than sick.
+  const fissions = count("politics.fission");
+  const restorations = count("politics.realm-restored");
+  let strainDrift = 0;
+  let tier1Strained = 0;
+  for (const id of PLAYER_ORDER) {
+    const faction = state.factions[id];
+    if (!faction.alive) continue;
+    if (!(faction.strain >= 0 && faction.strain <= 1)) strainDrift += 1;
+    if (ELEMENTS[faction.expressedElement].tier === 1 && faction.strain > 0) tier1Strained += 1;
+  }
+  const strainBooksExact = strainDrift === 0 && tier1Strained === 0;
+  add(
+    "imperial-instability",
+    "overreached compound empires strain and fission",
+    strainBooksExact && fissions > 0,
+    strainBooksExact
+      ? `${fissions} fissions, ${restorations} realms restored, strain books exact`
+      : `${strainDrift} strains out of band, ${tier1Strained} tier 1 realms straining`,
+    strainBooksExact,
   );
 
   // The naming system: founding names must be unique, and by the horizon at
@@ -360,11 +425,18 @@ export function runDoctor(seed: number, ticks: number): DoctorResult {
     `${commandBacked} command-backed reports, queue ${evidence.commandsDrained ? "always drained" : "left a backlog"}`,
   );
 
+  // Repartitioning must run — that half can genuinely fail. Boundary motion
+  // is evidence-only: the crowd-aware settlement draft seats the opening
+  // partition near its equilibrium, and value barely moves before the first
+  // dwell transforms (thousands of ticks out), so a horizon where nothing
+  // moved is quiescence, not sickness. The geography tests stage a mass
+  // transform and prove the migration mechanism directly.
   add(
     "adaptive-equal-area-strategic-geography",
     "the partition repartitions and moves",
     evidence.geographyUpdatedAt > 0 && evidence.regionsChanged,
     `${state.strategicRegions.length} regions, last repartition at tick ${evidence.geographyUpdatedAt}, boundaries ${evidence.regionsChanged ? "moved" : "never moved"}`,
+    evidence.geographyUpdatedAt > 0,
   );
 
   // Beliefs are only ever written by the observation system, so a roster that

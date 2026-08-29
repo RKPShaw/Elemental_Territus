@@ -61,6 +61,14 @@ const TERRAIN_CHAR = {
   forest: "§",
   hills: "n",
   mountains: "^",
+  scorched: "x",
+  marsh: "=",
+  duneland: ":",
+  terrace: "≡",
+  glacier: "*",
+  basalt: "#",
+  sporemire: "%",
+  verdant: "&",
 } as const;
 
 /**

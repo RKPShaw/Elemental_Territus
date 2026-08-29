@@ -14,6 +14,7 @@ import {
   statProfileOf,
 } from "../app/game/powers";
 import { ELEMENT_SPACE, ELEMENTS, structurePayoutMultiplier } from "../app/game/elements";
+import { createTransmutationState } from "../app/game/ascension";
 import { POWER_RULES } from "../app/game/rules";
 import type {
   Cell,
@@ -37,6 +38,7 @@ function makeFaction(
   return {
     expressedElement: element,
     power: createPowerState(),
+    transmutation: createTransmutationState(),
     troops: 50_000,
     troopCap: 100_000,
     gold: 1_000_000,

@@ -83,15 +83,36 @@ and `PlayerId` means the power.
 The wider space is earned, not seated. Grove retired as a starting family and
 returns as the first acquirable compound: every element beyond the founding
 four — six tier-2 compounds and fifteen tier-3 advanced elements — is declared
-in `app/game/elements.ts` and expressed through ascension. Conquest transfers
-a fallen realm's element tallies to its conqueror; when those tallies cover a
-compound's founding bases deeply enough (or an advanced element's compounds,
-with a long enough conquest record), the realm ascends: `dynasty.element-ascended`
-enters the report, its priorities lean toward what it became, and its combat
-matchups read its expressed element. Expression only ever upgrades.
+in `app/game/elements.ts` and expressed through ascension. Conquest is the
+crucible: annexation transfers a fallen realm's held elements and tallies to
+its conqueror, and the moment one realm holds both constituents of a higher
+element — both founding bases for a tier 2, both compound elements for a
+tier 3 — a transmutation window opens (`dynasty.transmutation-begun`). The
+realm spends the window visibly in flux — dulled attack, settlement, growth
+and war desire, its bespoke meter held — and emerges expressing the fusion:
+`dynasty.element-ascended` enters the report, its priorities lean toward what
+it became, and its combat matchups read its expressed element. Expression
+only ever upgrades, and each rung of the ladder pays a window of its own.
 `app/game/ascension.ts` owns the arithmetic; combat resolves matchups through
 the composed 25×25 table with graded relief for the founding bases a
 disadvantaged realm's history covers.
+
+The land answers to whoever lives on it. Terrain stops at nothing worldgen
+drew: land an element holds past a dwell threshold transforms — Ember makes
+scorched earth of the plains, Tide drowns them to marsh, Stone raises
+terraces, Gale strips dunes, and the compounds go further (Magma's basalt
+flows, Ice's glaciers, Grove's verdant overgrowth, Fungus's spore-mires).
+Because a transform reads only the current terrain, the owner's expressed
+element and the tenure already stamped on `Cell.capturedAt`, sequences fall
+out for free: scorched earth taken by Fungus becomes spore-mire; a glacier
+taken by Ember melts back to bare mountains. The land is the memory.
+`app/game/terraform.ts` owns the table and the terrain-affinity leans —
+band-clamped multipliers on invasion cost, land income and troop sustain,
+so obsidian ground on basalt fights harder while fungus withers on open
+scorch — and the settle lens reads the same leans, so courts settle toward
+the country their elements want. Each realm's `saturation` tracks how much
+of its land is already its own signature ground: the gauge of an element
+that has spent itself on its country.
 
 Identity now answers the story. Realms wake with plain, generic founding
 names — unique village names like "Corvale", drafted from the world seed in
@@ -145,12 +166,36 @@ share glass's swift sight — the view from above stacks on the skyport
 carrier. `app/game/information.ts` owns all of it; no fog-of-war system
 exists, and no other system knows the identities are there.
 
-Starts are drafted rather than fixed. Terrain is generated first, then each
-player in turn takes the best site still available to it, scoring the shared
-strategic value field against how well the surrounding terrain suits its
-element, with a minimum separation between rivals. The pick order snakes across
-the elements, because picking sequentially is otherwise unfair to whoever picks
-last. `app/game/spawn.ts` owns this; `SPAWN_RULES` in `rules.ts` tunes it.
+Starts are drafted rather than fixed — the Catan seating. Terrain is
+generated first, then each player in turn takes the best site still available
+to it with full knowledge of the map: the shared strategic value field, how
+well the surrounding terrain suits its element (read through the composed
+terrain leans, so the draft understands terraformed country exactly as combat
+does), MINUS a decaying crowding cost toward everyone already seated — each
+later pick weighs the best land against sharing borders with all who came
+before — under a hard minimum separation that relaxes only when the map runs
+out of room. The pick order snakes across the elements, because picking
+sequentially is otherwise unfair to whoever picks last. `app/game/draft.ts`
+owns the engine, `app/game/spawn.ts` the worldgen wrapper, `SPAWN_RULES` the
+knobs — and a fission re-seats the freed constituents of a broken empire
+through the very same draft.
+
+Empires end the way they grew: elementally. A realm expressing a compound
+element accrues **strain** from three pressures — territory beyond what its
+cities and forts administer, saturation (a country fully turned to its own
+signature ground has nothing left to give its element), and war weariness —
+amplified by tier, relieved by fresh conquest. At full strain the realm
+**fissions** along its elemental seams (`politics.fission`, historic): its
+founding constituents come free as restarted realms — dead roster slots of
+those families revived under their old names, drafted onto the best freed
+ground — the rump survives humbled around its capital, demoted to its
+founding element (the one sanctioned demotion in the game, recorded as a
+"restoration" rename), and everything else reverts to wilderness with every
+structure standing. Collapse never razes: the freed, built-up, terraformed
+country is the next age's prize, and the freed elements must conquer their
+way back up the ladder. Tier 1 never strains, so fission ends a story
+without starting a death spiral. `app/game/systems/instability.ts` owns it;
+`FISSION_RULES` tunes it.
 
 ### Domain boundaries
 
@@ -177,8 +222,9 @@ last. `app/game/spawn.ts` owns this; `SPAWN_RULES` in `rules.ts` tunes it.
 `app/game/systems/index.ts` is the composition root. Every shared clock tick runs:
 
 1. clock and pressure decay;
-2. neutral-land settlement, realm accounting, elemental ascension, power
-   meters and troop-cap recalculation;
+2. dwell terraforming (throttled to its sweep cadence), neutral-land
+   settlement, realm accounting, elemental ascension, imperial instability,
+   power meters and troop-cap recalculation;
 3. economic growth and trade-vehicle resolution;
 4. truce timers plus diplomatic and military AI intent;
 5. construction intent;
@@ -279,10 +325,39 @@ drive the same simulation safely.
   expressed element against its rival's, graded down by at most a third when
   the disadvantaged side's absorbed history covers the advantaged element's
   founding bases — history softens a matchup, it never erases one.
-- Ascension is the technology tree: tier 2 needs depth two in both founding
-  constituents, tier 3 needs both compound constituents formable and six realms
-  absorbed altogether. Expression upgrades once and never demotes, and an
-  ascended realm keeps its name and colors — titles, not rebrands.
+- Ascension is the technology tree, and conquest is its trigger: a tier 2
+  becomes eligible when annexation puts both of its founding bases inside one
+  realm, a tier 3 when both of its compound constituents are held as elements
+  in their own right, and eligibility always looks exactly one rung up.
+  Eligibility opens a transmutation window (`TRANSMUTATION_RULES`) rather
+  than flipping expression: the realm fights, settles and grows dulled while
+  it fuses, its court hesitates to open new wars, its bespoke meter holds,
+  and the crown lands when the window closes. Windows never retarget, a realm
+  annexed mid-window dies with it, and chained conquests each pay a fresh
+  window. Expression never demotes, and an ascended realm keeps its name and
+  colors — titles, not rebrands.
+- Worldgen draws six terrains and never the eight terraformed ones; only the
+  dwell sweep (`TERRAFORM_RULES.sweepCadenceTicks`) mutates `cell.terrain`
+  after tick zero. A transform is a pure function of (current terrain, owner's
+  expressed element, tenure off `capturedAt`) plus a hash jitter that consumes
+  no RNG stream — so sibling engines transform identically and sequences need
+  no extra state. Terrain affinity multiplies exactly three chokepoints —
+  enemy conquest cost, land income, troop sustain — and stays inside the
+  affinity band; water always reads 1. Saturation counts only terraformed
+  signature ground, never natural country a realm merely holds.
+- Strain lives in [0, 1], accrues only for realms expressing tier 2 or 3 past
+  their grace and minimum size, and pulls against recovery so sustained
+  partial pressure finds an equilibrium below the breaking point. A fission
+  is RNG-free end to end: constituents order by composition, dead slots
+  revive lowest-index-first within their family, seats come from the
+  deterministic draft, and two sibling engines fission identically. The rump
+  always survives around its capital; a freed element with no dead slot of
+  its family disperses unclaimed; a restored realm starts at peace with the
+  whole world, its old campaigns dropped, its identity carried forward under
+  a "restoration" rename.
+- The instability system runs between ascension and naming, every
+  `FISSION_RULES.cadenceTicks`; a fission's renames land before naming
+  styles titles the same tick.
 - Information identities act only on beliefs, never on the world. A glass or
   airborne-trading realm observes twice per interval instead of once; a mist
   realm's plurality regions blend distant rivals' measurements 70% back

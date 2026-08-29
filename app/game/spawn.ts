@@ -1,9 +1,8 @@
-import { ELEMENTS } from "./elements";
-import { cellsWithin } from "./grid";
+import { draftSites, elementAffinityField } from "./draft";
 import { draftOrder, playerElement } from "./players";
 import { buildStrategicMetaMap } from "./regions";
 import { SPAWN_RULES, normalizedCellLength } from "./rules";
-import type { Cell, ElementId, PlayerId, SimulationConfig } from "./types";
+import type { Cell, PlayerId, SimulationConfig } from "./types";
 
 interface SpawnWorld {
   cells: Cell[];
@@ -23,120 +22,43 @@ export interface SpawnSite {
 }
 
 /**
- * How much of the land around each cell matches an element's favoured terrain.
+ * Chooses a starting capital for every player, one at a time, through the
+ * shared settlement draft (draft.ts) — the same engine a fission uses to
+ * re-seat freed constituents inside a broken empire.
  *
- * Sampled over a neighbourhood rather than the single cell, because a realm
- * lives off the country around its capital, not the one tile under it.
- */
-function affinityField(world: SpawnWorld, element: ElementId): Float32Array {
-  const favoured = ELEMENTS[element].favoredTerrain;
-  const field = new Float32Array(world.cells.length);
-  for (let index = 0; index < world.cells.length; index += 1) {
-    if (world.cells[index]!.terrain === "water") continue;
-    let matching = 0;
-    let land = 0;
-    for (const nearby of cellsWithin(world, index, SPAWN_RULES.affinityRadius)) {
-      const cell = world.cells[nearby]!;
-      if (cell.terrain === "water") continue;
-      land += 1;
-      if (cell.terrain === favoured) matching += 1;
-    }
-    field[index] = land > 0 ? matching / land : 0;
-  }
-  return field;
-}
-
-/** Marks every cell within `separation` world units of a taken site as unavailable. */
-function blockAround(
-  world: SpawnWorld,
-  blocked: Uint8Array,
-  taken: readonly number[],
-  separation: number,
-): void {
-  blocked.fill(0);
-  const radiusInCells = separation / normalizedCellLength(world.config);
-  for (const index of taken) {
-    for (const nearby of cellsWithin(world, index, radiusInCells)) blocked[nearby] = 1;
-  }
-}
-
-/**
- * Chooses a starting capital for every player, one at a time.
- *
- * Each player in turn takes the best site still available to it, scoring the
- * shared strategic value field against how well the surrounding terrain suits
- * its element. Sites already claimed block a radius around them, so realms open
- * apart rather than on top of each other.
+ * Each player in turn takes the best site still available to it with full
+ * knowledge of the map: the shared strategic value field, how well the
+ * surrounding terrain suits its element, and the Catan cost of company — a
+ * decaying crowding penalty toward everyone already seated, under the hard
+ * separation radius that keeps realms from opening on top of each other.
  *
  * The pick order snakes across the elements (see `draftOrder`), which matters
  * because picking sequentially is inherently unfair to whoever picks last: a
  * snake gives that player the first pick of the following round.
- *
- * When no site satisfies the separation -- a fragmented world, or simply the
- * last few picks -- the requirement relaxes and the round is retried, so every
- * player is always seated somewhere.
  */
 export function draftSpawnSites(world: SpawnWorld): SpawnSite[] {
   const meta = buildStrategicMetaMap(world);
-  const affinity: Partial<Record<ElementId, Float32Array>> = {};
-  const blocked = new Uint8Array(world.cells.length);
-  const taken: number[] = [];
-  const sites: SpawnSite[] = [];
-  const cellLength = normalizedCellLength(world.config);
-
-  for (const player of draftOrder()) {
-    const element = playerElement(player);
-    affinity[element] ??= affinityField(world, element);
-    const field = affinity[element]!;
-
-    let separation = SPAWN_RULES.minimumSeparation;
-    blockAround(world, blocked, taken, separation);
-    let bestIndex = -1;
-    let bestScore = Number.NEGATIVE_INFINITY;
-
-    while (bestIndex < 0) {
-      for (let index = 0; index < world.cells.length; index += 1) {
-        if (blocked[index] || world.cells[index]!.terrain === "water") continue;
-        const score = meta.value[index]! * SPAWN_RULES.valueWeight
-          + field[index]! * SPAWN_RULES.affinityWeight;
-        if (score > bestScore) {
-          bestScore = score;
-          bestIndex = index;
-        }
-      }
-      if (bestIndex >= 0) break;
-      separation *= SPAWN_RULES.separationRelaxation;
-      // Below a cell's width the constraint cannot exclude anything, so the
-      // world genuinely has no room left and any free land will do.
-      if (separation < cellLength) {
-        blocked.fill(0);
-        for (const index of taken) blocked[index] = 1;
-        continue;
-      }
-      blockAround(world, blocked, taken, separation);
-    }
-
-    let closest = Number.POSITIVE_INFINITY;
-    for (const other of taken) {
-      const ax = bestIndex % world.config.width;
-      const ay = (bestIndex - ax) / world.config.width;
-      const bx = other % world.config.width;
-      const by = (other - bx) / world.config.width;
-      closest = Math.min(closest, Math.hypot(ax - bx, ay - by) * cellLength);
-    }
-
-    sites.push({
-      player,
-      index: bestIndex,
-      value: meta.value[bestIndex]!,
-      affinity: field[bestIndex]!,
-      score: bestScore,
-      separation: closest,
-    });
-    taken.push(bestIndex);
-  }
-
-  return sites;
+  const picks = draftOrder().map((player) => ({
+    key: player as string,
+    element: playerElement(player),
+  }));
+  return draftSites(world, picks, {
+    value: meta.value,
+    affinityOf: (element) => elementAffinityField(world, element, SPAWN_RULES.affinityRadius),
+    valueWeight: SPAWN_RULES.valueWeight,
+    affinityWeight: SPAWN_RULES.affinityWeight,
+    crowdingWeight: SPAWN_RULES.crowdingWeight,
+    crowdingFalloff: SPAWN_RULES.crowdingFalloff,
+    separation: SPAWN_RULES.minimumSeparation,
+    separationRelaxation: SPAWN_RULES.separationRelaxation,
+  }).map((site) => ({
+    player: site.key as PlayerId,
+    index: site.index,
+    value: site.value,
+    affinity: site.affinity,
+    score: site.score,
+    separation: site.separation,
+  }));
 }
 
 /**

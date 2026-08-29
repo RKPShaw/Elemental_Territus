@@ -213,12 +213,15 @@ test("capturing a capital hands the captor the defender's whole realm", () => {
   // desire, and the frontier era now runs thousands of ticks). So the world
   // is fast-forwarded to the war age directly: every realm's chest is
   // staked, and the wilderness is dealt to the nearest capital so no
-  // frontier is left to prefer over conquest.
+  // frontier is left to prefer over conquest. The horizon has followed two
+  // reworks: the crowd-aware draft spreads capitals into longer wars, and
+  // band-managed populations defend them better — on the merged world this
+  // seed's first capital falls at tick 2,293.
   engine.observe((state) => {
     for (const faction of Object.values(state.factions)) faction.gold = 1_000_000;
     dealWildernessToNearestCapital(state);
   });
-  engine.advance(1_800);
+  engine.advance(2_400);
   assert.ok(observed > 0, "the calibration world should see a capital fall");
 });
 
@@ -482,18 +485,26 @@ test("strategic geography stays connected, balanced, and migrates toward live va
   const state = engine.step(96);
   assertGeography(state);
   assert.ok(state.strategicRegions.every((region) => region.updatedAt === 96));
-  // Capitals now open as founded cities, so the opening infrastructure map
-  // already resembles the developed one and boundaries drift less than they
-  // did from a bare-marker start; the mechanism still visibly migrates.
-  // The threshold followed the slower-economy retune down: the world develops
-  // a quarter to an eighth as fast, so less infrastructure exists by tick 96
-  // for boundaries to chase, and the same mechanism migrates fewer cells.
-  // It came down again with the straightened watercourses: river valleys
-  // hold boundaries in place harder, so fewer cells change region while the
-  // mechanism itself still visibly moves them.
+  // The crowd-aware settlement draft spreads capitals so evenly that the
+  // opening partition is born near its equilibrium: on this seed a bare
+  // three cells change region across the whole opening, where clustered
+  // capitals once dragged hundreds. Quiescence when nothing moves is the
+  // mechanism working — so migration is proven against value that actually
+  // moves: the map is dealt out, tenure fast-forwarded, the dwell sweep
+  // transforms five thousand cells, and the repartition visibly chases the
+  // reshaped ground while holding its area budget.
+  engine.observe((world) => {
+    dealWildernessToNearestCapital(world);
+    for (const cell of world.cells) {
+      if (cell.owner) cell.capturedAt = -10_000;
+    }
+    return null;
+  });
+  const developed = engine.step(96);
+  assertGeography(developed);
   assert.ok(
-    state.regionByCell.filter((regionId, index) => regionId >= 0 && regionId !== initialAssignments[index]).length > 150,
-    "filtered strategic boundaries should visibly migrate as terrain develops",
+    developed.regionByCell.filter((regionId, index) => regionId >= 0 && regionId !== initialAssignments[index]).length > 150,
+    "strategic boundaries should visibly migrate as terrain develops",
   );
 
   const meta = buildStrategicMetaMap(state);
@@ -702,18 +713,16 @@ test("train stops pay the fixed values, scaled by stacks and trade-form rewards"
   // dealt to the nearest capitals: this test is about what a stop pays, not
   // about how long a court saves or how long the frontier era runs — and a
   // foreign stop needs realms that actually border each other, which the
-  // village-start world does not produce inside any test horizon.
-  //
-  // The horizon is 1,800 ticks because that is where this seed's first
-  // international line now runs. Population management moved it: courts that
-  // keep their people in the growth band lay out a different country, and the
-  // first stop served over a border followed it out to roughly tick 1,700.
+  // village-start world does not produce inside any test horizon. The horizon
+  // has followed two reworks now — population management laid out a different
+  // country and conquest-fusion appetite re-aimed the early wars — and on
+  // their merged world this seed's first foreign stop lands by tick 2,000.
   const engine = new ElementalWarEngine(0x240823);
   engine.observe((world) => {
     for (const faction of Object.values(world.factions)) faction.gold = 1_000_000;
     dealWildernessToNearestCapital(world);
   });
-  const state = engine.step(1_800);
+  const state = engine.step(2_000);
   const stops = state.reports.filter((event) => event.kind === "trade.train-stop-served");
   const domestic = stops.find((event) => event.facts.foreign === false);
   const foreign = stops.find((event) => event.facts.foreign === true);
