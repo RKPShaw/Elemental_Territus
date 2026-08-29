@@ -524,7 +524,7 @@ export function Simulator() {
                     <b><SmoothNumber value={chosen.troopCap} suffix=" cap" /></b>
                   </div>
                   <div className="capacity-meter population-meter" aria-label={`${Math.round(filled)} percent of population capacity alive; peak growth is near 65 percent at home`}>
-                    <i style={{ width: `${homeFilled}%`, background: chosenPlayer.color }} />
+                    <i style={{ width: `${homeFilled}%`, background: chosenExpressed.color }} />
                     <i className="committed-share" style={{ width: `${committedFilled}%` }} />
                     <b className="growth-peak-marker" title="Peak population growth at 65%">65%</b>
                   </div>
