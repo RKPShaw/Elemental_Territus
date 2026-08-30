@@ -292,7 +292,7 @@ export interface RealmIdentity {
   styledElement: ElementId;
   /** Tick this realm's fall was folded into its conqueror's name; null while it stands. */
   absorbedAt: number | null;
-  /** Every name this realm has carried, in order. */
+  /** The realm's most recent renames, in order (capped; oldest fall off). */
   changes: NameChange[];
 }
 
