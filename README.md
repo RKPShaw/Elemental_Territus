@@ -259,11 +259,17 @@ drive the same simulation safely.
 - Launching or defending a campaign deducts committed troops from the home population.
 - Committed troops still count against the troop cap but do not contribute to
   growth; the deployed reservation dwindles through the cost of advancing.
-- Border movement uses hidden local pressure rendered as one advancing front;
-  it does not paint contested squares or spawn skirmish units.
-- Visible borders are threshold bands in a filtered ownership field. They are
-  raster contours rather than splines or paths through grid corners, and local
-  campaign pressure shifts the field continuously before a tile changes owner.
+- Border movement uses hidden local pressure; a cell wears its current owner
+  until the tick it changes hands, and the map paints no contested squares and
+  spawns no skirmish units.
+- The map renders one pixel per area at the world's own resolution — 168 by
+  104 areas on the default world — so every pixel carries exactly one cell's
+  attributes: terrain, owner, structures. Zooming scales those pixels between
+  fit-to-view and 8x without ever rendering finer ground; there is nothing
+  smaller inside an area to reveal.
+- Borders are not drawn lines or probability fields: a realm's border is the
+  perimeter of its territory — every owned area touching ground that is not
+  the same realm's — painted a darker shade of the realm's own color.
 - Attack advantage saturates at a 2:1 troop-density ratio.
 - Terrain changes defense and sustainable growth in opposite directions.
 - Fort coverage doubles invasion cost; forts are the only defensive structure.

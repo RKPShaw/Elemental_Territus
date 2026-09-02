@@ -355,10 +355,60 @@ canvas:focus-visible {
   width: 100%;
   height: auto;
   aspect-ratio: 1180 / 730;
-  cursor: crosshair;
-  touch-action: manipulation;
+  cursor: grab;
+  /* The canvas owns its pointer gestures: drag pans and the wheel zooms. */
+  touch-action: none;
   contain: paint;
   transform: translateZ(0);
+}
+
+.world-map:active {
+  cursor: grabbing;
+}
+
+.map-zoom {
+  position: absolute;
+  left: 15px;
+  bottom: 14px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px 5px 5px;
+  border: 1px solid rgba(60, 54, 45, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 249, 231, 0.82);
+  box-shadow: 0 3px 13px rgba(44, 37, 31, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.map-zoom button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(52, 72, 80, 0.24);
+  border-radius: 999px;
+  color: #33474e;
+  background: rgba(255, 252, 240, 0.92);
+  font-size: 0.8rem;
+  font-weight: 850;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.map-zoom button:hover {
+  color: #fff8e4;
+  border-color: #415b55;
+  background: #415b55;
+}
+
+.map-zoom span {
+  min-width: 26px;
+  color: #5b5144;
+  font-size: 0.5rem;
+  font-weight: 850;
+  text-align: center;
+  letter-spacing: 0.04em;
 }
 
 .map-status,
@@ -1378,10 +1428,9 @@ canvas:focus-visible {
   font-size: 0.55rem;
 }
 
-/* Pressure-front simulation */
+/* Pixel-area simulation map */
 .world-map {
   image-rendering: auto;
-  cursor: pointer;
 }
 
 .map-status.at-peace .live-pip {
@@ -1424,19 +1473,6 @@ canvas:focus-visible {
   height: 3px;
   border-radius: 999px;
   background: #344850;
-}
-
-.map-legend .legend-war {
-  height: 4px;
-  background: #d49a4c;
-  box-shadow: 0 0 3px #9d4148;
-}
-
-.map-legend .legend-push {
-  height: 4px;
-  /* A stand-in for "the attacker's color, darkened": the tint follows
-     whichever realm is pushing, so the swatch shows the idea as a ramp. */
-  background: linear-gradient(90deg, #8e2f35, #176375);
 }
 
 .map-legend .legend-alliance {
@@ -2019,6 +2055,18 @@ canvas:focus-visible {
   .map-card, .panel { border-radius: 17px; }
   .map-hint { display: none; }
   .map-legend { display: none; }
+
+  .map-zoom {
+    left: 8px;
+    bottom: 8px;
+    gap: 3px;
+    padding: 4px 6px 4px 4px;
+  }
+
+  .map-zoom button {
+    width: 30px;
+    height: 30px;
+  }
 
   .map-status {
     top: 8px;
