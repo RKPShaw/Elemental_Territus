@@ -205,6 +205,13 @@ export function Simulator() {
         };
       });
       if (event.data.world.champion) setRunning(false);
+      // This handler only runs when the event loop is free, i.e. when the
+      // previous snapshot's work has been absorbed -- so acknowledging here
+      // paces the worker to what this thread actually consumes. Without the
+      // ack the worker posts on a wall-clock timer regardless, and a display
+      // thread that falls behind queues multi-megabyte world clones without
+      // bound until cloning itself dies of out-of-memory.
+      worker.postMessage({ type: "snapshot-ack" } satisfies SimulationWorkerCommand);
     });
     const initialize: SimulationWorkerCommand = {
       type: "initialize",
