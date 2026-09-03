@@ -269,9 +269,9 @@ drive the same simulation safely.
   nothing smaller inside an area to reveal.
 - The default world is 1.5 times the 168 by 104 world the balance was tuned
   on, chosen by measurement against the tick budget: a developed world costs
-  about 45ms a tick at this size on a 2.8GHz core, inside the 62.5ms that 4x
-  speed allows, where twice the tuned size ran to 170ms and a five-second
-  world creation. Every rule denominated in cells — settlement pressure per
+  under 40ms a tick at this size on a 2.8GHz core (the tuned size costs 15),
+  inside the 62.5ms that 4x speed allows, where twice the tuned size ran to
+  170ms and a five-second world creation. Every rule denominated in cells — settlement pressure per
   tile, troops to take a tile, region size, fort and affinity radii, river
   and stream counts, floodplain width, fission's territory thresholds —
   rescales through `gridFineness` and `gridDensity` in `rules.ts`, so a finer

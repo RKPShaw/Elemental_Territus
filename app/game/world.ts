@@ -30,9 +30,9 @@ import type {
  *
  * The default is 1.5: a 252 by 156 world of 39,312 areas, drawn one pixel
  * per area. It was chosen by measurement against the tick budget -- a
- * developed world costs about 45ms a tick at this size on a 2.8GHz core,
- * inside the 62.5ms that 4x speed allows, where 2x (69,888 areas) ran to
- * 170ms and a five-second world creation. Overridable through
+ * developed world costs under 40ms a tick at this size on a 2.8GHz core
+ * (the tuned size costs 15), inside the 62.5ms that 4x speed allows, where
+ * 2x (69,888 areas) ran to 170ms and a five-second world creation. Overridable through
  * ELEMENTAL_MAP_SCALE, still relative to the tuned world, so a sweep can
  * probe other sizes and `ELEMENTAL_MAP_SCALE=1` replays the old one; fixed
  * once the module loads, so a run stays deterministic. Cell yields are
