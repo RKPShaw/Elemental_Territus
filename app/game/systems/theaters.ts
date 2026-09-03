@@ -1,9 +1,10 @@
 import {
   cellCoordinates,
-  cellsWithin,
   neighborIndices,
   ownedNeighborCount,
 } from "../grid";
+import { buildDistanceField } from "../distance-field";
+import { sitesOf } from "../structure-index";
 import { frontierTargets } from "../frontier";
 import { sharedTradeForms } from "../elements";
 import { powerDefenseFactor } from "../powers";
@@ -20,6 +21,8 @@ import {
   WILDERNESS_TERRAIN_COST,
   clamp,
   emptyTerrainProfile,
+  gridDensity,
+  gridFineness,
   normalizedCellLength,
 } from "../rules";
 import { terrainAffinityFactor } from "../terraform";
@@ -71,13 +74,29 @@ export function campaignBoundaryTargets(
   return frontierTargets(state, attacker, target);
 }
 
+/**
+ * Whether one of the target's forts covers a cell.
+ *
+ * Asked for every front tile every tick, and it used to answer by walking the
+ * whole disc around the tile looking for a fort -- a disc that grows with the
+ * square of the grid's fineness. A realm's forts are a short list in the
+ * structure index, so the same question is now a distance check per fort,
+ * with the identical predicate cellsWithin applied.
+ */
 function isFortProtected(state: WorldState, index: number, target: CampaignTarget): boolean {
   if (target === "wilderness") return false;
+  const forts = sitesOf(state, target, "fort");
+  if (forts.length === 0) return false;
   const radius = FORT_RADIUS / normalizedCellLength(state.config);
-  return cellsWithin(state, index, radius).some((nearby) => {
-    const cell = state.cells[nearby]!;
-    return cell.owner === target && cell.structure === "fort";
-  });
+  const width = state.config.width;
+  const x = index % width;
+  const y = (index - x) / width;
+  for (const fort of forts) {
+    const fx = fort % width;
+    const fy = (fort - fx) / width;
+    if (Math.hypot(x - fx, y - fy) <= radius) return true;
+  }
+  return false;
 }
 
 export function conquestCostAt(
@@ -190,6 +209,101 @@ function railCellsFor(state: WorldState): ReadonlySet<number> {
   return cells;
 }
 
+/**
+ * Distance from every target cell of a region to the nearest front cell.
+ *
+ * This was a pairwise minimum -- every region cell against every boundary
+ * cell -- which grows with the product of the two counts and made theater
+ * drafting quadratic in the grid's fineness. An exact distance transform over
+ * the region's bounding box answers it in one pass regardless of how long the
+ * front is.
+ *
+ * The transform yields exact squared distances, and the value read off them
+ * must be the one the pairwise search produced: Math.hypot of the nearest
+ * front cell, which can differ from the square root of the squared distance
+ * in its last bit. So for the cells the draft actually measures -- those
+ * inside the objective corridor -- the lattice points at exactly that
+ * squared distance are enumerated and the true hypot taken, keeping the
+ * result bit-identical to the pairwise minimum. Beyond the corridor the
+ * depth is clamped anyway, so the square root serves.
+ */
+function frontDistances(
+  state: WorldState,
+  regionCells: readonly number[],
+  targetCells: readonly number[],
+  boundaryCells: readonly number[],
+): Map<number, number> {
+  const width = state.config.width;
+  const distances = new Map<number, number>();
+  if (boundaryCells.length === 0) {
+    for (const index of targetCells) distances.set(index, Number.POSITIVE_INFINITY);
+    return distances;
+  }
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const list of [regionCells, boundaryCells]) {
+    for (const index of list) {
+      const x = index % width;
+      const y = (index - x) / width;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  const boxWidth = maxX - minX + 1;
+  const boxHeight = maxY - minY + 1;
+  const seeds: number[] = [];
+  const boundary = new Set<number>();
+  for (const index of boundaryCells) {
+    const x = index % width;
+    const y = (index - x) / width;
+    seeds.push((y - minY) * boxWidth + (x - minX));
+    boundary.add(index);
+  }
+  const field = buildDistanceField(seeds, boxWidth, boxHeight);
+  const corridorSquared = (STRATEGIC_REGION_RULES.objectiveLookaheadCells * gridFineness(state.config)) ** 2;
+  for (const index of targetCells) {
+    const x = index % width;
+    const y = (index - x) / width;
+    const squared = field.squared[(y - minY) * boxWidth + (x - minX)]!;
+    if (squared > corridorSquared) {
+      distances.set(index, Math.sqrt(squared));
+      continue;
+    }
+    // Exact hypot of the nearest front cell. Math.hypot depends only on the
+    // magnitudes, so every decomposition |dx|, |dy| of this squared distance
+    // is tried once, and counts if any of its four mirror offsets lands on
+    // the front; the smallest reading is what the pairwise minimum returned.
+    const reach = Math.round(Math.sqrt(squared));
+    let best = Number.POSITIVE_INFINITY;
+    for (let dx = 0; dx <= reach; dx += 1) {
+      const rest = squared - dx * dx;
+      const dy = Math.round(Math.sqrt(rest));
+      if (dy * dy !== rest) continue;
+      const reading = Math.hypot(dx, dy);
+      if (reading >= best) continue;
+      let present = false;
+      for (let sx = -1; sx <= 1 && !present; sx += 2) {
+        if (dx === 0 && sx === 1) continue;
+        const nx = x + dx * sx;
+        if (nx < 0 || nx >= width) continue;
+        for (let sy = -1; sy <= 1; sy += 2) {
+          if (dy === 0 && sy === 1) continue;
+          const ny = y + dy * sy;
+          if (ny < 0 || ny >= state.config.height) continue;
+          if (boundary.has(ny * width + nx)) { present = true; break; }
+        }
+      }
+      if (present) best = reading;
+    }
+    distances.set(index, best);
+  }
+  return distances;
+}
+
 function theaterDraft(
   state: WorldState,
   campaign: Campaign,
@@ -202,25 +316,24 @@ function theaterDraft(
   // be recomputed inside the sort comparator, so a region of a few hundred
   // cells paid for it O(n log n) times over. It is measured once here instead.
   const targetCells: number[] = [];
-  const frontDistance = new Map<number, number>();
   for (const index of region.cells) {
-    if (!targetOwnsCell(state, index, campaign.target)) continue;
-    targetCells.push(index);
-    frontDistance.set(index, nearestDistanceInCells(state, index, boundaryCells));
+    if (targetOwnsCell(state, index, campaign.target)) targetCells.push(index);
   }
+  const frontDistance = frontDistances(state, region.cells, targetCells, boundaryCells);
+  // Depths are read in tuned-world cells, so a corridor reaches the same
+  // ground on any grid.
+  const fineness = gridFineness(state.config);
+  const lookahead = STRATEGIC_REGION_RULES.objectiveLookaheadCells * fineness;
   const corridor = targetCells.filter(
-    (index) => frontDistance.get(index)! <= STRATEGIC_REGION_RULES.objectiveLookaheadCells,
+    (index) => frontDistance.get(index)! <= lookahead,
   );
   const opportunityCells = corridor.length > 0 ? corridor : targetCells;
   const railCells = railCellsFor(state);
   const objectiveScore = (index: number): number => {
     const cell = state.cells[index]!;
     const rail = railCells.has(index) ? 10 : 0;
-    const depth = Math.min(
-      STRATEGIC_REGION_RULES.objectiveLookaheadCells,
-      frontDistance.get(index)!,
-    );
-    return infrastructureValue(state, index, campaign.attacker) + terrainOpportunity(cell.terrain as LandTerrainId) * 2 + rail + depth * 0.18;
+    const depth = Math.min(lookahead, frontDistance.get(index)!);
+    return infrastructureValue(state, index, campaign.attacker) + terrainOpportunity(cell.terrain as LandTerrainId) * 2 + rail + (depth / fineness) * 0.18;
   };
   const ranked = opportunityCells.map((index) => ({ index, score: objectiveScore(index) }));
   ranked.sort((first, second) => second.score - first.score);
@@ -266,7 +379,7 @@ function theaterDraft(
     landAverage * 2.4 +
     Math.sqrt(prizeTotal) * 2.15 +
     Math.sqrt(railTotal) * 1.8 +
-    Math.sqrt(opportunityCells.length) * 0.22;
+    Math.sqrt(opportunityCells.length / gridDensity(state.config)) * 0.22;
 
   return {
     regionId,
@@ -477,6 +590,29 @@ function cappedShares(
   return shares;
 }
 
+/**
+ * How much of the world's land is settled, once per tick.
+ *
+ * Every campaign's allocation reads it, and each used to sweep the whole grid
+ * for it -- fifty sweeps of forty thousand cells a tick for one number that
+ * cannot change between them, since nothing takes ground while allocations
+ * are being set.
+ */
+const SETTLED_SHARE = new WeakMap<object, { tick: number; share: number }>();
+
+function settledShareFor(state: WorldState): number {
+  const cached = SETTLED_SHARE.get(state.cells);
+  if (cached && cached.tick === state.tick) return cached.share;
+  let unclaimed = 0;
+  for (let index = 0; index < state.cells.length; index += 1) {
+    const cell = state.cells[index]!;
+    if (cell.terrain !== "water" && cell.owner === null) unclaimed += 1;
+  }
+  const share = 1 - unclaimed / Math.max(1, state.landTiles);
+  SETTLED_SHARE.set(state.cells, { tick: state.tick, share });
+  return share;
+}
+
 function allocateCampaign(state: WorldState, campaign: Campaign): void {
   const allTheaters = state.theaters.filter(
     (theater) => theater.campaignId === campaign.id && theater.staleRefreshes === 0,
@@ -489,10 +625,7 @@ function allocateCampaign(state: WorldState, campaign: Campaign): void {
     return;
   }
 
-  const settledShare = 1 - state.cells.reduce(
-    (total, cell) => total + Number(cell.terrain !== "water" && cell.owner === null),
-    0,
-  ) / Math.max(1, state.landTiles);
+  const settledShare = settledShareFor(state);
   const completionFloor = campaign.target === "wilderness"
     ? 0.8 + 8 * Math.pow(settledShare, CLAIM_RULES.completionUrgencyPower)
     : 0;
@@ -545,13 +678,14 @@ export function theaterFrontWeights(
   targets: readonly number[],
 ): Map<number, number> {
   const objectives = theater.objectiveCells.filter((index) => targetOwnsCell(state, index, theater.target));
+  const fineness = gridFineness(state.config);
   const raw = targets.map((index) => {
     const cell = state.cells[index]!;
     const terrain = cell.terrain as LandTerrainId;
     const objectiveDistance = objectives.length > 0
       ? nearestDistanceInCells(state, index, objectives)
       : distanceInCells(state, index, state.strategicRegions[theater.regionId]!.centroidIndex);
-    const objectivePull = 1 + 4.2 / (1 + objectiveDistance * 0.22);
+    const objectivePull = 1 + 4.2 / (1 + (objectiveDistance / fineness) * 0.22);
     const landValue = terrainOpportunity(terrain);
     const immediatePrize = infrastructureValue(state, index, theater.attacker);
     const localSupply = 0.72 + ownedNeighborCount(state, index, theater.attacker) * 0.12;

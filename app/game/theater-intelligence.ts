@@ -2,6 +2,7 @@ import { PLAYERS, PLAYER_ORDER } from "./players";
 import { getRelation } from "./diplomacy";
 import { ELEMENTS, realmMatchup } from "./elements";
 import { cellCoordinates, distanceBetween, neighborIndices, surroundingIndices } from "./grid";
+import { gridFineness } from "./rules";
 import type { PlayerId, LandTerrainId, WorldState } from "./types";
 
 export const THEATER_LAYERS = [
@@ -153,7 +154,7 @@ export function evaluateTheaterCellMaps(
     if (cell.terrain === "water") continue;
     const [x, y] = cellCoordinates(index, state.config.width);
     const distance = Math.hypot(x - capitalX, y - capitalY);
-    const proximity = Math.exp(-distance / 34);
+    const proximity = Math.exp(-distance / (34 * gridFineness(state.config)));
     const ownershipAccess = cell.owner === viewer
       ? 0.92
       : cell.owner === null

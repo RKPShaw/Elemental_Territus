@@ -150,9 +150,16 @@ export function bloomIsOverextended(power: ElementPowerState): boolean {
  */
 export function advancePowerState(
   faction: FactionState,
-  situation: { tick: number; campaigning: boolean; pressed: boolean },
+  situation: {
+    tick: number;
+    campaigning: boolean;
+    pressed: boolean;
+    /** Cells per tuned-world cell of area (gridDensity); a capture feeds the meter by its share of one. */
+    cellDensity?: number;
+  },
 ): PowerEvent | null {
   const { tick, campaigning, pressed } = situation;
+  const cellDensity = situation.cellDensity ?? 1;
   const power = faction.power;
   const element = faction.expressedElement;
   let event: PowerEvent | null = null;
@@ -178,7 +185,7 @@ export function advancePowerState(
     power.charge = clamp(
       power.charge
         - POWER_RULES.tempestDecayPerTick
-        + freshCaptures * POWER_RULES.tempestGainPerCapture,
+        + (freshCaptures / cellDensity) * POWER_RULES.tempestGainPerCapture,
       0,
       1,
     );

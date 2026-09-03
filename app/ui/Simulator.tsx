@@ -38,6 +38,7 @@ import {
 import type { TheaterLayer } from "../game/theater-intelligence";
 import {
   BASE_SIMULATION_TICKS_PER_SECOND,
+  unpackCells,
 } from "../game/simulation-protocol";
 import type { SimulationWorkerCommand, SimulationWorkerEvent } from "../game/simulation-protocol";
 import { WorldMap } from "./WorldMap";
@@ -199,6 +200,7 @@ export function Simulator() {
           : [...(previous?.reports ?? []), ...event.data.reportDelta];
         return {
           ...event.data.world,
+          cells: unpackCells(event.data.packedCells),
           reports: merged.length > REPORT_ARCHIVE_LIMIT
             ? merged.slice(-REPORT_ARCHIVE_LIMIT)
             : merged,

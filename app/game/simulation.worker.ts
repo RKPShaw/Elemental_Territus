@@ -5,6 +5,7 @@ import {
   BASE_SIMULATION_TICKS_PER_SECOND,
   VISUAL_SNAPSHOT_INTERVAL_MS,
 } from "./simulation-protocol";
+import { packCells, packedCellBuffers } from "./simulation-protocol";
 import type { SimulationWorkerCommand, SimulationWorkerEvent } from "./simulation-protocol";
 
 let engine: ElementalWarEngine | null = null;
@@ -20,7 +21,10 @@ let championAnnounced = false;
 
 function publish(replaceHistory = false): void {
   if (!engine) return;
-  const world = engine.snapshot();
+  // The grid goes across as packed columns and transfers without a copy; the
+  // rest of the world is small enough to clone.
+  const packedCells = engine.observe((state) => packCells(state.cells));
+  const world = engine.snapshot({ cells: false });
   championAnnounced = Boolean(world.champion);
   const reportDelta = replaceHistory
     ? world.reports
@@ -31,8 +35,8 @@ function publish(replaceHistory = false): void {
   // The display thread keeps the full archive, so retaining a second complete
   // copy here only grew worker memory until postMessage could no longer clone.
   publishedReportCount -= engine.pruneConsumedReports(publishedReportCount);
-  const event: SimulationWorkerEvent = { type: "snapshot", world, reportDelta, replaceHistory };
-  self.postMessage(event);
+  const event: SimulationWorkerEvent = { type: "snapshot", world, packedCells, reportDelta, replaceHistory };
+  self.postMessage(event, { transfer: packedCellBuffers(packedCells) });
   previousPublish = performance.now();
 }
 

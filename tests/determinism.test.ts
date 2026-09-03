@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ElementalWarEngine } from "../app/game/engine";
+import { DEFAULT_CONFIG } from "../app/game/world";
 import { cellDigest, worldDigest } from "./world-digest";
 
 /**
@@ -14,6 +15,17 @@ import { cellDigest, worldDigest } from "./world-digest";
  * If a change moves a digest, the change altered gameplay. Re-baselining is
  * correct only when the gameplay change was the point; it is never the way to
  * make a refactor pass.
+ *
+ * Re-recorded for the higher-resolution world: the default grid is now 252 by
+ * 156 (1.5 times the 168 by 104 world the balance was tuned on), drawn one
+ * pixel per area. Every digest moves by construction -- a finer grid is a
+ * different world from tick zero -- and the gameplay change is the point. It
+ * is, however, the only thing that moved: every rule denominated in cells was
+ * rescaled through gridFineness and gridDensity so the tuned world plays
+ * exactly as it did, and the previous table is kept below under its width.
+ * `ELEMENTAL_MAP_SCALE=1 npm run test:determinism` replays it, and it still
+ * reproduces every digest, at every checkpoint, that it did before this
+ * pass -- which is the proof that the rescaling changed nothing there.
  *
  * Re-recorded when the population-management pass (PR #19) merged with the
  * elemental overhaul (conquest-fusion, the living land, the settlement draft
@@ -334,7 +346,38 @@ interface Checkpoint {
   deep?: boolean;
 }
 
-const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
+type GoldenWorlds = ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }>;
+
+/** The 252 by 156 world the game ships with. */
+const GOLDEN_252: GoldenWorlds = [
+  {
+    seed: 0x240823,
+    checkpoints: [
+      { tick: 60, world: "8150f99f8772154a947cde019cc26f38", cells: "64162252d69254f7" },
+      { tick: 200, world: "66081721e1f372ec53222fedcffd59c9", cells: "32119e3dd6657684" },
+      { tick: 600, world: "64070bce0d18d8f68e8813abf0a5e60c", cells: "1daf6cf25c6057f5", deep: true },
+    ],
+  },
+  {
+    seed: 0x5eed01,
+    checkpoints: [
+      { tick: 60, world: "f971ef2fdd2b0bca008c6df6fba5e7f3", cells: "a9af56ef362cd870" },
+      { tick: 200, world: "e1c2730e6136d5c7626214f5b685764a", cells: "f5f58afee2d5a772" },
+      { tick: 600, world: "1ac89ba99e35a7817ddedbbd2acd2b47", cells: "104e8c0803534b12", deep: true },
+    ],
+  },
+  {
+    seed: 0xbadbeef,
+    checkpoints: [
+      { tick: 60, world: "e280836cf3c954a6341c1eb06939eca6", cells: "b72aaae65ecee85c" },
+      { tick: 200, world: "01a29cbbe673e1117a35bed46ea6c0bb", cells: "178f3303302b3788" },
+      { tick: 600, world: "8ee81c4dadee658cd06743ec74023e8b", cells: "dea6e0418232fdb4", deep: true },
+    ],
+  },
+];
+
+/** The 168 by 104 world the balance was tuned on, replayed with ELEMENTAL_MAP_SCALE=1. */
+const GOLDEN_168: GoldenWorlds = [
   {
     seed: 0x240823,
     checkpoints: [
@@ -360,6 +403,15 @@ const GOLDEN: ReadonlyArray<{ seed: number; checkpoints: Checkpoint[] }> = [
     ],
   },
 ];
+
+const GOLDEN_BY_WIDTH: Record<number, GoldenWorlds> = { 252: GOLDEN_252, 168: GOLDEN_168 };
+const GOLDEN: GoldenWorlds = GOLDEN_BY_WIDTH[DEFAULT_CONFIG.width] ?? [];
+if (GOLDEN.length === 0) {
+  throw new Error(
+    `no golden digests recorded for a ${DEFAULT_CONFIG.width}x${DEFAULT_CONFIG.height} world; `
+    + "run the determinism suite at a recorded ELEMENTAL_MAP_SCALE (1 or the default 1.5)",
+  );
+}
 
 const runDeep = process.env.DETERMINISM_DEEP === "1";
 

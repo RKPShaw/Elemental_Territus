@@ -7,7 +7,7 @@ import { SeededRandom, cellNoise, smoothCellNoise } from "./random";
 import { createEconomyLedger } from "./economics";
 import { createStrategicRegions } from "./regions";
 import { createTheaterMap } from "./theater-map";
-import { TERRAIN_RULES, calculateTroopCap, normalizedCellArea } from "./rules";
+import { TERRAIN_RULES, calculateTroopCap, gridDensity, gridFineness, normalizedCellArea } from "./rules";
 import { claimInitialTerritory, draftSpawnSites } from "./spawn";
 import { createPowerState } from "./powers";
 import { createTransmutationState } from "./ascension";
@@ -25,17 +25,27 @@ import type {
 } from "./types";
 
 /**
- * How many times wider and taller the map is than the 168x104 world the game
- * shipped with. Overridable through ELEMENTAL_MAP_SCALE so a sweep can find the
- * largest map that still fits the tick budget; fixed once the module loads, so
- * a run stays deterministic. Cell yields are already normalised against a
- * reference world (see normalizedCellArea), so scaling the map keeps a tile
- * worth what it was rather than making a bigger world a richer one.
+ * How many times wider and taller the map is than the 168x104 world the
+ * balance was tuned on.
+ *
+ * The default is 1.5: a 252 by 156 world of 39,312 areas, drawn one pixel
+ * per area. It was chosen by measurement against the tick budget -- a
+ * developed world costs about 45ms a tick at this size on a 2.8GHz core,
+ * inside the 62.5ms that 4x speed allows, where 2x (69,888 areas) ran to
+ * 170ms and a five-second world creation. Overridable through
+ * ELEMENTAL_MAP_SCALE, still relative to the tuned world, so a sweep can
+ * probe other sizes and `ELEMENTAL_MAP_SCALE=1` replays the old one; fixed
+ * once the module loads, so a run stays deterministic. Cell yields are
+ * normalised against a reference world (see normalizedCellArea) and every
+ * cell-denominated rule rescales through gridFineness and gridDensity, so a
+ * finer map keeps a tile worth what it was and a frontier crossing the same
+ * ground per tick, rather than making a bigger world a richer or slower one.
  */
+const DEFAULT_MAP_SCALE = 1.5;
 const MAP_SCALE = (() => {
   const raw = typeof process === "undefined" ? undefined : process.env?.ELEMENTAL_MAP_SCALE;
   const parsed = raw === undefined ? Number.NaN : Number.parseFloat(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAP_SCALE;
 })();
 
 export const DEFAULT_CONFIG: SimulationConfig = {
@@ -230,7 +240,9 @@ function carveRivers(
   const { width, height } = config;
   const random = new SeededRandom((seed ^ 0x5be0cd19) >>> 0 || 0x5be0cd19);
   const rivers = new Set<number>();
-  const targetCount = Math.max(5, Math.round(Math.min(width, height) / 11));
+  // So many rivers per world, not per cell: a finer grid draws the same
+  // rivers, each just traced through more cells.
+  const targetCount = Math.max(5, Math.round(Math.min(width, height) / 11 / gridFineness(config)));
   const sources: number[] = [];
   const minSourceGap = Math.min(width, height) / 5;
 
@@ -326,7 +338,7 @@ function carveStreams(
   const random = new SeededRandom((seed ^ 0x7ea6ce13) >>> 0 || 0x7ea6ce13);
   const streamCells = new Set<number>();
   const courses: number[][] = [];
-  const targetCount = Math.max(8, Math.round(Math.min(width, height) / 6));
+  const targetCount = Math.max(8, Math.round(Math.min(width, height) / 6 / gridFineness(config)));
   const sources: number[] = [];
   const minSourceGap = Math.min(width, height) / 9;
 
@@ -416,6 +428,7 @@ function generateTerrain(seed: number, config: SimulationConfig): GeneratedTerra
   }
 
   const rivers = carveRivers(seed, elevation, config);
+  const floodplainRadiusSquared = 2 * gridFineness(config) ** 2;
   // Streams stay out of the floodplain banding deliberately: turning their
   // banks to farmland reshaped the terrain-cost field enough to push the
   // strategic partition past its area budget. Streams are borders, not
@@ -451,7 +464,7 @@ function generateTerrain(seed: number, config: SimulationConfig): GeneratedTerra
       const moisture = moistureAt(seed, x, y, config);
       if (height_ >= mountainLine) terrain[index] = "mountains";
       else if (height_ >= hillLine) terrain[index] = "hills";
-      else if (height_ < valleyLine && nearRiver(rivers, index, width, height)) {
+      else if (height_ < valleyLine && nearRiver(rivers, index, width, height, floodplainRadiusSquared)) {
         // Floodplains: the low country along a river is the richest land in
         // the world, which makes the rivers worth fighting over as well as
         // hard to fight across.
@@ -485,7 +498,7 @@ function sinkIslets(terrain: TerrainId[], width: number, height: number): void {
   const seen = new Uint8Array(terrain.length);
   let landTotal = 0;
   for (const id of terrain) if (id !== "water") landTotal += 1;
-  const minimumSize = Math.max(24, Math.round(landTotal * 0.012));
+  const minimumSize = Math.max(Math.round(24 * gridDensity({ width, height })), Math.round(landTotal * 0.012));
   for (let start = 0; start < terrain.length; start += 1) {
     if (seen[start] || terrain[start] === "water") continue;
     const component = [start];
@@ -511,14 +524,31 @@ function sinkIslets(terrain: TerrainId[], width: number, height: number): void {
   }
 }
 
-function nearRiver(rivers: Set<number>, index: number, width: number, height: number): boolean {
+/**
+ * Whether a river runs within the floodplain of a cell. On the tuned world the
+ * floodplain is the eight surrounding cells (squared distance 2); a finer grid
+ * widens it by its fineness so the rich river valleys keep their physical
+ * breadth instead of thinning to a one-cell ribbon.
+ */
+function nearRiver(
+  rivers: Set<number>,
+  index: number,
+  width: number,
+  height: number,
+  radiusSquared: number,
+): boolean {
   const x = index % width;
   const y = (index - x) / width;
-  for (const [dx, dy] of RIVER_STEPS) {
-    const nx = x + dx;
+  const reach = Math.ceil(Math.sqrt(radiusSquared));
+  for (let dy = -reach; dy <= reach; dy += 1) {
     const ny = y + dy;
-    if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-    if (rivers.has(ny * width + nx)) return true;
+    if (ny < 0 || ny >= height) continue;
+    for (let dx = -reach; dx <= reach; dx += 1) {
+      if ((dx === 0 && dy === 0) || dx * dx + dy * dy > radiusSquared) continue;
+      const nx = x + dx;
+      if (nx < 0 || nx >= width) continue;
+      if (rivers.has(ny * width + nx)) return true;
+    }
   }
   return false;
 }

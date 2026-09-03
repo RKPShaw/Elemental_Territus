@@ -14,6 +14,8 @@ import {
 import {
   STRUCTURE_RULES,
   compactNumber,
+  gridDensity,
+  gridFineness,
 } from "../game/rules";
 import {
   THEATER_LAYER_LABELS,
@@ -65,19 +67,25 @@ const MAP_HEIGHT = 730;
 /**
  * The zoom range of the display.
  *
- * The world raster is fixed at one pixel per area (168 by 104 areas on the
- * default world), so zoom never re-renders the ground at a finer grain -- it
- * only scales the pixels. At 1x the whole map fits the viewport and each
- * area draws at roughly seven CSS pixels; at 8x each area is a large, flat
- * square of about fifty-six. There is nothing smaller inside an area to
- * reveal, so the range stops where a pixel is unmistakably a pixel.
+ * The world raster is fixed at one pixel per area, so zoom never re-renders
+ * the ground at a finer grain -- it only scales the pixels. At 1x the whole
+ * map fits the viewport; the range tops out where one area fills about
+ * fifty-six CSS pixels, a large, flat square with nothing smaller inside it
+ * to reveal. On a 252 by 156 world that is 12x from areas of under five
+ * pixels; on the old 168 by 104 world it was 8x from areas of seven.
  */
 const MIN_ZOOM = 1;
-const MAX_ZOOM = 8;
+const LARGEST_AREA_CSS_PX = 56;
+
+function maxZoomFor(state: WorldState): number {
+  return Math.max(4, Math.round(LARGEST_AREA_CSS_PX / (MAP_WIDTH / state.config.width)));
+}
 /** One wheel notch (deltaY ~100) scales the view by about 17%. */
 const WHEEL_ZOOM_RATE = 0.0016;
 /** Pointer travel in CSS pixels past which a press is a pan, not a tap. */
 const DRAG_SUPPRESS_TAP_PX = 5;
+/** World ticks between refreshes of the theater appraisal while it is shown. */
+const THEATER_MAP_REFRESH_TICKS = 4;
 
 /**
  * The visible window onto the map: `x`/`y` is the top-left corner of the
@@ -90,8 +98,8 @@ interface MapView {
   y: number;
 }
 
-function clampView(view: MapView): MapView {
-  const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, view.zoom));
+function clampView(view: MapView, maxZoom: number): MapView {
+  const zoom = Math.max(MIN_ZOOM, Math.min(maxZoom, view.zoom));
   return {
     zoom,
     x: Math.max(0, Math.min(MAP_WIDTH - MAP_WIDTH / zoom, view.x)),
@@ -103,15 +111,21 @@ function clampView(view: MapView): MapView {
  * The view after zooming to `zoom` while keeping the map point under the
  * viewport anchor (`anchorFx`, `anchorFy` in [0, 1]) stationary on screen.
  */
-function zoomedView(view: MapView, zoom: number, anchorFx: number, anchorFy: number): MapView {
-  const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+function zoomedView(
+  view: MapView,
+  zoom: number,
+  anchorFx: number,
+  anchorFy: number,
+  maxZoom: number,
+): MapView {
+  const clamped = Math.max(MIN_ZOOM, Math.min(maxZoom, zoom));
   const mapX = view.x + anchorFx * (MAP_WIDTH / view.zoom);
   const mapY = view.y + anchorFy * (MAP_HEIGHT / view.zoom);
   return clampView({
     zoom: clamped,
     x: mapX - anchorFx * (MAP_WIDTH / clamped),
     y: mapY - anchorFy * (MAP_HEIGHT / clamped),
-  });
+  }, maxZoom);
 }
 
 function geometry(state: WorldState): MapGeometry {
@@ -126,6 +140,42 @@ function centerFor(index: number, state: WorldState, shape: MapGeometry): [numbe
   return [(x + 0.5) * shape.cellWidth, (y + 0.5) * shape.cellHeight];
 }
 
+/**
+ * Which cells carry decor, chosen once per snapshot.
+ *
+ * The display loop draws the decor every frame under the zoom transform, and
+ * a full sweep of the grid per frame to find the few cells that carry a mark
+ * or a structure grew with the higher-resolution world. The lists change only
+ * when the world does, so they are indexed per snapshot.
+ *
+ * Terrain marks are scattered per unit of ground rather than per cell -- one
+ * every 197 tuned-world cells, so a finer grid keeps the same sprinkle -- and
+ * drawn at the size of a tuned-world cell, so they neither crowd nor shrink
+ * when the grid is made finer.
+ */
+interface DecorIndex {
+  marks: number[];
+  structures: number[];
+}
+
+const DECOR_INDEX = new WeakMap<WorldState, DecorIndex>();
+
+function decorIndexFor(state: WorldState): DecorIndex {
+  const cached = DECOR_INDEX.get(state);
+  if (cached) return cached;
+  const stride = Math.max(1, Math.round(197 * gridDensity(state.config)));
+  const marks: number[] = [];
+  const structures: number[] = [];
+  for (let index = 0; index < state.cells.length; index += 1) {
+    if ((index * 17 + state.seed) % stride === 0) marks.push(index);
+    const cell = state.cells[index]!;
+    if (cell.structure && cell.owner) structures.push(index);
+  }
+  const built = { marks, structures };
+  DECOR_INDEX.set(state, built);
+  return built;
+}
+
 function drawTerrainTexture(
   context: CanvasRenderingContext2D,
   state: WorldState,
@@ -133,9 +183,8 @@ function drawTerrainTexture(
   index: number,
 ) {
   const cell = state.cells[index]!;
-  if ((index * 17 + state.seed) % 197 !== 0) return;
   const [x, y] = centerFor(index, state, shape);
-  const radius = Math.min(shape.cellWidth, shape.cellHeight);
+  const radius = Math.min(shape.cellWidth, shape.cellHeight) * gridFineness(state.config);
   context.save();
   context.strokeStyle = "rgba(25, 43, 48, 0.18)";
   context.fillStyle = "rgba(255, 248, 219, 0.28)";
@@ -764,10 +813,26 @@ export function WorldMap({
   // theater tooltip, the zoom readout) re-render; the canvas itself reads
   // viewRef directly every animation frame.
   const [, bumpViewVersion] = useReducer((version: number) => version + 1, 0);
-  const theaterMaps = useMemo(
-    () => mapMode === "theaters" ? evaluateTheaterCellMaps(state, selected) : null,
-    [mapMode, selected, state],
-  );
+  // The theater appraisal costs tens of milliseconds on the display thread at
+  // the higher-resolution world, and snapshots arrive several times a second.
+  // It is an appraisal, not a live feed, so it is refreshed once a second of
+  // world time rather than on every snapshot.
+  const theaterMapsCacheRef = useRef<{ key: string; tick: number; maps: TheaterCellMaps } | null>(null);
+  const theaterMaps = useMemo(() => {
+    if (mapMode !== "theaters") return null;
+    const key = `${state.seed}|${selected}`;
+    const cached = theaterMapsCacheRef.current;
+    if (
+      cached
+      && cached.key === key
+      && state.tick >= cached.tick
+      && state.tick - cached.tick < THEATER_MAP_REFRESH_TICKS
+      && cached.maps.composite.length === state.cells.length
+    ) return cached.maps;
+    const maps = evaluateTheaterCellMaps(state, selected);
+    theaterMapsCacheRef.current = { key, tick: state.tick, maps };
+    return maps;
+  }, [mapMode, selected, state]);
 
   function applyView(view: MapView): void {
     viewRef.current = view;
@@ -860,6 +925,7 @@ export function WorldMap({
         view.zoom * Math.exp(-event.deltaY * deltaScale * WHEEL_ZOOM_RATE),
         anchorFx,
         anchorFy,
+        maxZoomFor(worldRef.current),
       );
       // The ground under the pointer changed; a held tooltip would go stale.
       setHoveredCell(null);
@@ -931,15 +997,12 @@ export function WorldMap({
         }
         const shape = geometry(world);
         if (modeRef.current === "political") {
-          for (let index = 0; index < world.cells.length; index += 1) {
-            drawTerrainTexture(context, world, shape, index);
-          }
+          const decor = decorIndexFor(world);
+          for (const index of decor.marks) drawTerrainTexture(context, world, shape, index);
           drawStreams(context, world, shape);
           drawTradeRoutes(context, world, shape);
           drawAllianceChains(context, world, shape);
-          for (let index = 0; index < world.cells.length; index += 1) {
-            drawStructure(context, world, shape, index);
-          }
+          for (const index of decor.structures) drawStructure(context, world, shape, index);
         }
         // The vignette frames the viewport, not the ground: screen space.
         context.setTransform(scale, 0, 0, scale, 0, 0);
@@ -1011,7 +1074,7 @@ export function WorldMap({
           zoom: view.zoom,
           x: view.x - (dx / bounds.width) * (MAP_WIDTH / view.zoom),
           y: view.y - (dy / bounds.height) * (MAP_HEIGHT / view.zoom),
-        }));
+        }, maxZoomFor(state)));
       }
     }
     if (mapMode !== "theaters") return;
@@ -1042,7 +1105,7 @@ export function WorldMap({
 
   function zoomBy(factor: number) {
     const view = viewRef.current;
-    applyView(zoomedView(view, view.zoom * factor, 0.5, 0.5));
+    applyView(zoomedView(view, view.zoom * factor, 0.5, 0.5, maxZoomFor(state)));
   }
 
   const view = viewRef.current;

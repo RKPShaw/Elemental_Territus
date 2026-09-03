@@ -4,7 +4,7 @@ import type { PlayerId, StructureType, WorldState } from "./types";
  * Where every player's structures are, indexed once and reused.
  *
  * Asking "where are this player's factories" by sweeping the map costs a full
- * pass over seventeen thousand cells. The trade system asks it four times per
+ * pass over forty thousand cells. The trade system asks it four times per
  * player per tick -- to build rail nodes, to spawn trains, to spawn ships --
  * so with a hundred players that is four hundred sweeps, seven million cell
  * visits, for a question one pass answers for everyone.

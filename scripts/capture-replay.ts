@@ -4,7 +4,7 @@
  * The simulation costs far more per tick than a browser can afford with fifty
  * players, so the world is played here and the viewer replays it. Ownership is
  * delta-encoded between frames -- only a few hundred cells change per frame out
- * of seventeen thousand -- which is what keeps the payload small enough to
+ * of forty thousand -- which is what keeps the payload small enough to
  * inline into a single page.
  *
  *   npm run capture:replay -- --ticks 600 --every 4 --out replay.json

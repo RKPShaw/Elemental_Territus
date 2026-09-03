@@ -262,11 +262,24 @@ drive the same simulation safely.
 - Border movement uses hidden local pressure; a cell wears its current owner
   until the tick it changes hands, and the map paints no contested squares and
   spawns no skirmish units.
-- The map renders one pixel per area at the world's own resolution — 168 by
-  104 areas on the default world — so every pixel carries exactly one cell's
-  attributes: terrain, owner, structures. Zooming scales those pixels between
-  fit-to-view and 8x without ever rendering finer ground; there is nothing
-  smaller inside an area to reveal.
+- The map renders one pixel per area at the world's own resolution — 252 by
+  156 areas (39,312) on the default world — so every pixel carries exactly one
+  cell's attributes: terrain, owner, structures. Zooming scales those pixels
+  between fit-to-view and 12x without ever rendering finer ground; there is
+  nothing smaller inside an area to reveal.
+- The default world is 1.5 times the 168 by 104 world the balance was tuned
+  on, chosen by measurement against the tick budget: a developed world costs
+  about 45ms a tick at this size on a 2.8GHz core, inside the 62.5ms that 4x
+  speed allows, where twice the tuned size ran to 170ms and a five-second
+  world creation. Every rule denominated in cells — settlement pressure per
+  tile, troops to take a tile, region size, fort and affinity radii, river
+  and stream counts, floodplain width, fission's territory thresholds —
+  rescales through `gridFineness` and `gridDensity` in `rules.ts`, so a finer
+  grid keeps pacing and balance where they were tuned; `ELEMENTAL_MAP_SCALE=1`
+  replays the tuned world exactly, digest for digest.
+- Snapshots cross from the simulation worker with the cell grid packed as
+  transferable typed arrays rather than forty thousand cloned objects, so a
+  higher-resolution world never stalls the display thread on arrival.
 - Borders are not drawn lines or probability fields: a realm's border is the
   perimeter of its territory — every owned area touching ground that is not
   the same realm's — painted a darker shade of the realm's own color.

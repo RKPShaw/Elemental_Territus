@@ -2,7 +2,7 @@ import { realmTitle } from "../naming";
 import { PLAYERS, PLAYER_ORDER } from "../players";
 import { ELEMENTS } from "../elements";
 import { advancePowerState, type PowerEvent } from "../powers";
-import { POWER_RULES } from "../rules";
+import { gridDensity, POWER_RULES } from "../rules";
 import { realmSubject } from "../reporting";
 import type {
   ChronicleEvent,
@@ -88,6 +88,7 @@ export class ElementPowersSystem implements SimulationSystem {
       const faction = state.factions[id];
       if (!faction.alive) continue;
       const event = advancePowerState(faction, {
+        cellDensity: gridDensity(state.config),
         tick: state.tick,
         campaigning: campaigning.has(id),
         pressed: pressed.has(id),
