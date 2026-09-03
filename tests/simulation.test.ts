@@ -216,7 +216,10 @@ test("capturing a capital hands the captor the defender's whole realm", () => {
   // frontier is left to prefer over conquest. The horizon has followed two
   // reworks: the crowd-aware draft spreads capitals into longer wars, and
   // band-managed populations defend them better — on the merged world this
-  // seed's first capital falls at tick 2,293.
+  // seed's first capital fell at tick 2,293. On the 252 by 156 world it falls
+  // at tick 724: the finer grid is a different world from tick zero, and the
+  // dealt-out map wars differently on it, so the horizon is left where it
+  // was with room to spare.
   engine.observe((state) => {
     for (const faction of Object.values(state.factions)) faction.gold = 1_000_000;
     dealWildernessToNearestCapital(state);
