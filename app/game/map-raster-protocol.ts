@@ -36,30 +36,29 @@ export const RASTER_TERRAIN_INDEX: ReadonlyMap<TerrainId, number> = new Map(
   RASTER_TERRAIN_ORDER.map((id, index) => [id, index]),
 );
 
+/**
+ * One raster pixel per authoritative cell.
+ *
+ * The map is not a picture of the world sampled at some display resolution;
+ * it *is* the world grid. Every pixel in the raster is exactly one area with
+ * that area's attributes — terrain, owner, perimeter — and zooming the map
+ * scales those pixels up or down on the display without ever inventing
+ * sub-cell detail. The raster therefore has no width or height of its own:
+ * it is always `gridWidth` by `gridHeight`.
+ */
 interface RasterRequestBase {
   type: "render";
   requestId: number;
   gridWidth: number;
   gridHeight: number;
-  rasterWidth: number;
-  rasterHeight: number;
   terrains: Uint8Array;
 }
 
 export interface PoliticalRasterRequest extends RasterRequestBase {
   mode: "political";
   selected: number;
+  /** Owner per cell in raster player order, -1 where unowned. */
   owners: Int8Array;
-  pressureOwners: Int8Array;
-  pressures: Float32Array;
-  /**
-   * The advancing claimant per cell in raster player order (-1 where none)
-   * and how far its claim has swept, from the political field smoother. The
-   * border pass tints a contested line with a darker shade of the advancing
-   * realm's color, so the direction of a push is readable from the border.
-   */
-  pushOwners: Int16Array;
-  pushStrengths: Float32Array;
   /**
    * RGB per player in raster player order, three bytes each: the documented
    * color of the element each realm currently expresses. Sent per frame
@@ -67,7 +66,6 @@ export interface PoliticalRasterRequest extends RasterRequestBase {
    * conquest forges it a new tier of element.
    */
   playerColors: Uint8Array;
-  warMatrix: Uint8Array;
 }
 
 export interface TheaterRasterRequest extends RasterRequestBase {
@@ -77,27 +75,14 @@ export interface TheaterRasterRequest extends RasterRequestBase {
 
 export type MapRasterRequest = PoliticalRasterRequest | TheaterRasterRequest;
 
-/**
- * Pixel buffers handed back to the worker once a frame has been composited.
- *
- * The interpolated display loop asks for many rasters a second, and each one
- * is megabytes of pixels; recycling the buffers keeps the steady state free of
- * large allocations on both sides, which is what keeps the garbage collector
- * out of the animation.
- */
-export interface RasterBufferRecycle {
-  type: "recycle";
-  buffers: ArrayBuffer[];
-}
-
-export type MapRasterWorkerMessage = MapRasterRequest | RasterBufferRecycle;
+export type MapRasterWorkerMessage = MapRasterRequest;
 
 export interface MapRasterResult {
   type: "rendered";
   requestId: number;
   mode: MapRasterRequest["mode"];
+  /** Always the grid dimensions: one pixel per area. */
   rasterWidth: number;
   rasterHeight: number;
   fill: Uint8ClampedArray<ArrayBuffer>;
-  borders: Uint8ClampedArray<ArrayBuffer> | null;
 }

@@ -124,10 +124,16 @@ export class ElementalWarEngine {
     return drop;
   }
 
-  snapshot(): WorldState {
+  /**
+   * An immutable copy of the world. `cells: false` leaves the cell grid out
+   * (an empty array): the live worker publishes the grid separately as packed
+   * typed arrays (see simulation-protocol.ts), so copying forty thousand cell
+   * objects only to serialize them again would be wasted work per snapshot.
+   */
+  snapshot(options: { cells?: boolean } = {}): WorldState {
     return {
       ...this.state,
-      cells: this.state.cells.map((cell) => ({ ...cell })),
+      cells: options.cells === false ? [] : this.state.cells.map((cell) => ({ ...cell })),
       factions: Object.fromEntries(
         Object.entries(this.state.factions).map(([id, faction]) => [
           id,

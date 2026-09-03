@@ -11,6 +11,8 @@ import {
   FISSION_RULES,
   SPAWN_RULES,
   clamp,
+  gridDensity,
+  gridFineness,
   normalizedCellLength,
 } from "../rules";
 import { initialStrategy } from "../strategy";
@@ -53,6 +55,9 @@ export class InstabilitySystem implements SimulationSystem {
   update(context: SimulationContext): void {
     const { state } = context;
     if (state.tick % FISSION_RULES.cadenceTicks !== 0) return;
+    // The rules count territory in tuned-world cells; a finer grid holds
+    // density-many cells per one of those.
+    const density = gridDensity(state.config);
     for (const id of PLAYER_ORDER) {
       const faction = state.factions[id];
       if (!faction.alive) {
@@ -63,7 +68,7 @@ export class InstabilitySystem implements SimulationSystem {
       const amplification = FISSION_RULES.tierAmplification[tier];
       if (
         amplification === 0
-        || faction.territory < FISSION_RULES.minimumTerritoryCells
+        || faction.territory < FISSION_RULES.minimumTerritoryCells * density
         || state.tick < faction.strainGraceUntil
       ) {
         faction.strain = clamp(
@@ -73,9 +78,9 @@ export class InstabilitySystem implements SimulationSystem {
         );
         continue;
       }
-      const supported = FISSION_RULES.supportedBaseArea
+      const supported = (FISSION_RULES.supportedBaseArea
         + FISSION_RULES.supportedPerCityLevel * faction.structures.city
-        + FISSION_RULES.supportedPerFort * faction.structures.fort;
+        + FISSION_RULES.supportedPerFort * faction.structures.fort) * density;
       const unsupportedShare = Math.max(0, 1 - supported / Math.max(1, faction.territory));
       const saturationPressure = Math.max(0, faction.saturation - FISSION_RULES.saturationGrace)
         / (1 - FISSION_RULES.saturationGrace);
@@ -188,7 +193,7 @@ export class InstabilitySystem implements SimulationSystem {
     const freedSet = new Set(freed);
     const drafted = picks.length === 0 ? [] : draftSites(state, picks, {
       value: state.strategicMeta.value,
-      affinityOf: (element) => elementAffinityField(state, element, SPAWN_RULES.affinityRadius),
+      affinityOf: (element) => elementAffinityField(state, element, SPAWN_RULES.affinityRadius * gridFineness(state.config)),
       valueWeight: SPAWN_RULES.valueWeight,
       affinityWeight: SPAWN_RULES.affinityWeight,
       crowdingWeight: SPAWN_RULES.crowdingWeight,

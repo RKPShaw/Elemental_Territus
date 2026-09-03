@@ -13,6 +13,7 @@ import {
   TERRAIN_RULES,
   compactNumber,
   clamp,
+  gridFineness,
 } from "../rules";
 import { strategyFactor } from "../strategy";
 import type { PlayerId, SimulationContext, SimulationSystem } from "../types";
@@ -55,7 +56,7 @@ export class StrategyAiSystem implements SimulationSystem {
         // same tiles fall at the same pace, and a realm whose committed
         // troops cost it no capacity would otherwise bank an army forever.
         const desiredFieldStrength = clamp(
-          openFrontier.length * SETTLER_FRONT_SATURATION,
+          (openFrontier.length / gridFineness(state.config)) * SETTLER_FRONT_SATURATION,
           CLAIM_RULES.minimumCampaignCommitment,
           faction.troopCap,
         );

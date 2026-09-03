@@ -1,7 +1,7 @@
 import { draftSites, elementAffinityField } from "./draft";
 import { draftOrder, playerElement } from "./players";
 import { buildStrategicMetaMap } from "./regions";
-import { SPAWN_RULES, normalizedCellLength } from "./rules";
+import { SPAWN_RULES, gridFineness, normalizedCellLength } from "./rules";
 import type { Cell, PlayerId, SimulationConfig } from "./types";
 
 interface SpawnWorld {
@@ -44,7 +44,7 @@ export function draftSpawnSites(world: SpawnWorld): SpawnSite[] {
   }));
   return draftSites(world, picks, {
     value: meta.value,
-    affinityOf: (element) => elementAffinityField(world, element, SPAWN_RULES.affinityRadius),
+    affinityOf: (element) => elementAffinityField(world, element, SPAWN_RULES.affinityRadius * gridFineness(world.config)),
     valueWeight: SPAWN_RULES.valueWeight,
     affinityWeight: SPAWN_RULES.affinityWeight,
     crowdingWeight: SPAWN_RULES.crowdingWeight,

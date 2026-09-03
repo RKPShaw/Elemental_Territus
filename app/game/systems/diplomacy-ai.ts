@@ -13,6 +13,8 @@ import {
   POPULATION_RULES,
   TRANSMUTATION_RULES,
   clamp,
+  gridDensity,
+  gridFineness,
 } from "../rules";
 import { strategyFactor } from "../strategy";
 import type { PlayerId, RelationState, SimulationContext, SimulationSystem } from "../types";
@@ -146,8 +148,11 @@ function warDesire(
   // whose wilderness frontier is still open prefers settling it. Frontiers
   // close at geography-dependent times, so this is one of the incentives that
   // staggers the opening wars instead of a schedule doing it.
-  const openFrontier = frontierTargets(state, actor, "wilderness").length;
-  const settlementPull = clamp(openFrontier / (self.territory * 0.1 + 8), 0, 1)
+  // Both read in tuned-world cells: a frontier is a line (fineness-many cells
+  // per stretch of it) and a territory an area (density-many per patch), and
+  // the pull between them must not depend on how finely the grid is drawn.
+  const openFrontier = frontierTargets(state, actor, "wilderness").length / gridFineness(state.config);
+  const settlementPull = clamp(openFrontier / ((self.territory / gridDensity(state.config)) * 0.1 + 8), 0, 1)
     * DIPLOMACY_RULES.openFrontierWarReluctance;
   // Opportunism: a target already at war with its host running thin invites
   // every other border to open too. This is what lets several realms fall on

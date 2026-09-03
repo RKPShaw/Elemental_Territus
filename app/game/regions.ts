@@ -1,8 +1,9 @@
 import { cellCoordinates, cellIndex, neighborIndices, surroundingIndices } from "./grid";
-import { STRATEGIC_REGION_RULES, TERRAIN_RULES, emptyTerrainProfile } from "./rules";
+import { STRATEGIC_REGION_RULES, TERRAIN_RULES, emptyTerrainProfile, gridDensity, gridFineness } from "./rules";
 import type {
   LandTerrainId,
   StrategicRegion,
+  TerrainId,
   TheaterTerrainProfile,
   WorldState,
 } from "./types";
@@ -160,22 +161,38 @@ function smoothLayer(
   input: Float32Array,
   passes: number,
 ): Float32Array {
+  const { width, height } = state.config;
+  // The water mask is read once: a pass used to test the terrain string of
+  // every neighbour of every cell, and allocate a neighbour array per cell,
+  // which at forty thousand cells and a couple of dozen passes per partition
+  // was most of the smoothing's cost. The neighbours are walked in the same
+  // order surroundingIndices yields them, so every sum is the same sum.
+  const water = new Uint8Array(state.cells.length);
+  for (let index = 0; index < water.length; index += 1) {
+    if (state.cells[index]!.terrain === "water") water[index] = 1;
+  }
   let source = input;
   for (let pass = 0; pass < passes; pass += 1) {
     const output = new Float32Array(source.length);
-    for (let index = 0; index < source.length; index += 1) {
-      if (state.cells[index]!.terrain === "water") continue;
-      let total = source[index]! * 5;
-      let weight = 5;
-      for (const neighbor of surroundingIndices(index, state.config.width, state.config.height)) {
-        if (state.cells[neighbor]!.terrain === "water") continue;
-        const diagonal = Math.abs(neighbor - index) !== 1
-          && Math.abs(neighbor - index) !== state.config.width;
-        const neighborWeight = diagonal ? 0.7 : 1;
-        total += source[neighbor]! * neighborWeight;
-        weight += neighborWeight;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const index = y * width + x;
+        if (water[index]) continue;
+        let total = source[index]! * 5;
+        let weight = 5;
+        for (let offset = 0; offset < SURROUNDING_OFFSETS.length; offset += 2) {
+          const nx = x + SURROUNDING_OFFSETS[offset]!;
+          const ny = y + SURROUNDING_OFFSETS[offset + 1]!;
+          if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+          const neighbor = ny * width + nx;
+          if (water[neighbor]) continue;
+          const diagonal = SURROUNDING_OFFSETS[offset] !== 0 && SURROUNDING_OFFSETS[offset + 1] !== 0;
+          const neighborWeight = diagonal ? 0.7 : 1;
+          total += source[neighbor]! * neighborWeight;
+          weight += neighborWeight;
+        }
+        output[index] = total / weight;
       }
-      output[index] = total / weight;
     }
     source = output;
   }
@@ -211,16 +228,21 @@ export function buildStrategicMetaMap(
     for (const index of route.pathIndices) infrastructureRaw[index] += 1.1;
   }
 
+  // One pass spreads a value one cell; a finer grid needs density-many passes
+  // to spread it across the same ground, so the layers keep their physical
+  // softness rather than sharpening with the pixel count.
+  const passesFor = (passes: number): number =>
+    Math.max(1, Math.round(passes * gridDensity(state.config)));
   const productivity = normalizeLayer(smoothLayer(
     state,
     productivityRaw,
-    STRATEGIC_REGION_RULES.terrainSmoothingPasses,
+    passesFor(STRATEGIC_REGION_RULES.terrainSmoothingPasses),
   ));
-  const relief = smoothLayer(state, reliefRaw, STRATEGIC_REGION_RULES.terrainSmoothingPasses);
+  const relief = smoothLayer(state, reliefRaw, passesFor(STRATEGIC_REGION_RULES.terrainSmoothingPasses));
   const infrastructure = normalizeLayer(smoothLayer(
     state,
     infrastructureRaw,
-    STRATEGIC_REGION_RULES.infrastructureSmoothingPasses,
+    passesFor(STRATEGIC_REGION_RULES.infrastructureSmoothingPasses),
   ));
   const valueRaw = new Float32Array(state.cells.length);
   for (let index = 0; index < valueRaw.length; index += 1) {
@@ -228,7 +250,7 @@ export function buildStrategicMetaMap(
     valueRaw[index] = productivity[index]! * STRATEGIC_REGION_RULES.productivityValueWeight
       + Math.sqrt(infrastructure[index]!) * STRATEGIC_REGION_RULES.infrastructureValueWeight;
   }
-  const value = normalizeLayer(smoothLayer(state, valueRaw, 1));
+  const value = normalizeLayer(smoothLayer(state, valueRaw, passesFor(1)));
   return { value, productivity, relief, infrastructure };
 }
 
@@ -369,8 +391,11 @@ function filteredAnchors(
     let stepX = residualX * STRATEGIC_REGION_RULES.filterAlpha + velocityX;
     let stepY = residualY * STRATEGIC_REGION_RULES.filterAlpha + velocityY;
     const length = Math.hypot(stepX, stepY);
-    if (length > STRATEGIC_REGION_RULES.maximumAnchorStep) {
-      const scale = STRATEGIC_REGION_RULES.maximumAnchorStep / length;
+    // The step limit is a distance in tuned-world cells; a finer grid walks
+    // proportionally more of its own cells to cover the same ground.
+    const maximumStep = STRATEGIC_REGION_RULES.maximumAnchorStep * gridFineness(state.config);
+    if (length > maximumStep) {
+      const scale = maximumStep / length;
       stepX *= scale;
       stepY *= scale;
       velocityX *= scale;
@@ -488,9 +513,14 @@ function partitionLand(
   // Land cells are collected once, ascending, and shared by every region's
   // seed search instead of each one re-testing the whole world.
   const landCells = new Int32Array(state.cells.length);
+  // Terrain is read into a flat array once: the walk below touches every
+  // neighbour of every land cell, and loading the cell object each time was
+  // a measurable share of the partition at forty thousand cells.
+  const terrains: TerrainId[] = new Array(state.cells.length);
   let landCount = 0;
   for (let index = 0; index < state.cells.length; index += 1) {
-    if (state.cells[index]!.terrain === "water") continue;
+    terrains[index] = state.cells[index]!.terrain;
+    if (terrains[index] === "water") continue;
     landCells[landCount] = index;
     landCount += 1;
   }
@@ -511,6 +541,12 @@ function partitionLand(
   }
 
   const { width, height } = state.config;
+  // Per-step costs -- distance, basin pull, heat advantage, inertia and the
+  // floor -- are paid once per cell walked, so a finer grid pays them more
+  // often over the same ground. Scaling them by the cell size keeps their
+  // weight against the per-event costs (terrain transitions, gradients, which
+  // sum to the same total along any physical path) where it was tuned.
+  const stepScale = 1 / gridFineness(state.config);
   while (heap.pop()) {
     const nodeCost = heap.poppedCost;
     const nodeTravelCost = heap.poppedTravelCost;
@@ -529,7 +565,7 @@ function partitionLand(
     }
     labels[nodeIndex] = nodeRegion;
     counts[nodeRegion]!++;
-    const terrain = state.cells[nodeIndex]!.terrain as LandTerrainId;
+    const terrain = terrains[nodeIndex] as LandTerrainId;
     const anchorCell = anchorCells[nodeRegion]!;
     const balancePenalty = STRATEGIC_REGION_RULES.areaBalanceStrength * fillRatio ** 4;
     // Neighbours are walked inline, in the same order surroundingIndices
@@ -541,8 +577,8 @@ function partitionLand(
       const ny = nodeY + SURROUNDING_OFFSETS[offset + 1]!;
       if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
       const neighbor = ny * width + nx;
-      if (labels[neighbor] >= 0 || state.cells[neighbor]!.terrain === "water") continue;
-      const nextTerrain = state.cells[neighbor]!.terrain as LandTerrainId;
+      const nextTerrain = terrains[neighbor]!;
+      if (labels[neighbor] >= 0 || nextTerrain === "water") continue;
       const inertia = previous?.[neighbor] === nodeRegion ? STRATEGIC_REGION_RULES.boundaryInertia : 0;
       const diagonal = Math.abs(neighbor - nodeIndex) !== 1
         && Math.abs(neighbor - nodeIndex) !== width;
@@ -552,15 +588,15 @@ function partitionLand(
         + Math.abs(meta.infrastructure[neighbor]! - meta.infrastructure[anchorCell]!)
           * STRATEGIC_REGION_RULES.infrastructureBasinAffinity;
       const step = Math.max(
-        0.18,
+        0.18 * stepScale,
         geometricDistance * (
-          1
+          stepScale
           + terrainTransitionCost(terrain, nextTerrain)
           + metaTransitionCost(meta, nodeIndex, neighbor)
-          + basinAffinity
+          + basinAffinity * stepScale
         )
-          - meta.value[neighbor]! * STRATEGIC_REGION_RULES.heatTravelAdvantage
-          - inertia,
+          - meta.value[neighbor]! * STRATEGIC_REGION_RULES.heatTravelAdvantage * stepScale
+          - inertia * stepScale,
       );
       const travelCost = nodeTravelCost + step;
       heap.push(travelCost + balancePenalty, travelCost, neighbor, nodeRegion);
@@ -632,7 +668,7 @@ export function createStrategicRegions(
   const landCount = state.cells.reduce((total, cell) => total + (cell.terrain === "water" ? 0 : 1), 0);
   const count = Math.max(
     STRATEGIC_REGION_RULES.minimumRegionCount,
-    Math.round(landCount / STRATEGIC_REGION_RULES.targetCellsPerRegion),
+    Math.round(landCount / (STRATEGIC_REGION_RULES.targetCellsPerRegion * gridDensity(state.config))),
   );
   let anchors = initialAnchors(state, meta.value, count);
   let regionByCell = partitionLand(state, anchors, meta, null);

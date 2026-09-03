@@ -19,6 +19,8 @@ import {
   DIPLOMACY_RULES,
   compactNumber,
   clamp,
+  gridDensity,
+  gridFineness,
   normalizedCellArea,
   normalizedCellLength,
 } from "../rules";
@@ -192,7 +194,7 @@ function captureEnemyTile(
       "battle",
       campaign.attacker,
     );
-  } else if (campaign.captures % 70 === 0) {
+  } else if (campaign.captures % Math.max(1, Math.round(70 * gridDensity(state.config))) === 0) {
     context.emit(
       `${realmTitle(state, campaign.attacker)} has pressed the border forward by ${campaign.captures} tiles in this campaign.`,
       "rise",
@@ -274,7 +276,7 @@ function finishCampaign(
     context.report({
       domain: "military",
       kind: "military.theater-victory",
-      importance: theater.captures >= 25 ? "major" : "notable",
+      importance: theater.captures >= 25 * gridDensity(state.config) ? "major" : "notable",
       storyKey: campaign.storyKey,
       initiator: realmSubject(state, campaign.attacker),
       targets: [theaterSubject(state, theater.id, theater.attacker), targetSubject(state, campaign.target)],
@@ -420,6 +422,7 @@ function processNavalCampaign(context: SimulationContext, campaign: Campaign): v
 
   const tile = state.cells[targetIndex]!;
   const cellArea = normalizedCellArea(state.config);
+  const tileTroops = CAMPAIGN_RULES.troopsToTakeATile / gridDensity(state.config);
   // A landing costs more than a march, but is priced the same way: force over
   // the cost of the ground, with nothing about the defender's army in it.
   const defense = conquestCostAt(state, targetIndex, campaign.target)
@@ -435,7 +438,7 @@ function processNavalCampaign(context: SimulationContext, campaign: Campaign): v
       * powerAttackFactor(state, campaign.attacker)
       * traitorVulnerability
       * state.config.aggression)
-    / (CAMPAIGN_RULES.troopsToTakeATile * Math.max(0.5, defense));
+    / (tileTroops * Math.max(0.5, defense));
   trackPressure(state, targetIndex);
   tile.pressureBy = campaign.attacker;
   tile.pressure += progress;
@@ -500,6 +503,11 @@ function processSettlementCampaign(context: SimulationContext, campaign: Campaig
     boundaryByRegion.set(regionId, regionBoundary);
   }
   const lengthScale = normalizedCellLength(state.config);
+  // A frontier is a line: a finer grid has fineness-many tiles along the same
+  // stretch of it, each carrying that share of the settlers. Pressure per tile
+  // rises by the same factor and the troops that saturate a tile fall by it,
+  // so the frontier crosses the same ground per tick at any cell size.
+  const fineness = gridFineness(state.config);
   const settle = openLens(state, campaign.attacker, "settle");
   // Bloom turns frontier into heartland half again as fast — unless the
   // overgrowth has outrun its people, when the check pauses the bonus.
@@ -516,7 +524,7 @@ function processSettlementCampaign(context: SimulationContext, campaign: Campaig
       const compactness = 1 + ownedNeighborCount(state, targetIndex, campaign.attacker) * 0.045;
       const assignedTroops = theater.allocation * (weights.get(targetIndex) ?? 0);
       const readiness = clamp(
-        assignedTroops / CLAIM_RULES.settlerFrontTroops,
+        assignedTroops / (CLAIM_RULES.settlerFrontTroops / fineness),
         CLAIM_RULES.minimumFrontReadiness,
         CLAIM_RULES.maximumFrontReadiness,
       );
@@ -533,6 +541,7 @@ function processSettlementCampaign(context: SimulationContext, campaign: Campaig
         compactness *
         preference *
         settleFactor *
+        fineness *
         state.config.aggression /
         (cost * Math.max(0.7, lengthScale));
       if (tile.pressureBy && tile.pressureBy !== campaign.attacker) {
@@ -570,6 +579,9 @@ function processLandCampaign(context: SimulationContext, campaign: Campaign): vo
     boundaryByRegion.set(regionId, regionBoundary);
   }
   const cellArea = normalizedCellArea(state.config);
+  // The cost of a tile follows the tile: a finer grid's tiles are smaller
+  // and cheaper by exactly their share of a tuned-world tile.
+  const tileTroops = CAMPAIGN_RULES.troopsToTakeATile / gridDensity(state.config);
   const traitorVulnerability = state.tick < defender.traitorUntil
     ? DIPLOMACY_RULES.traitorAttackMultiplier
     : 1;
@@ -578,6 +590,7 @@ function processLandCampaign(context: SimulationContext, campaign: Campaign): vo
   // conquest cost; obsidian additionally reflects casualties on every push.
   const attackFactor = powerAttackFactor(state, campaign.attacker);
   const reflectedCasualties = powerAttackerCasualtyFactor(state, campaign.target);
+  const matchup = realmMatchup(state, campaign.attacker, campaign.target);
   for (const theater of theaters) {
     const targets = boundaryByRegion.get(theater.regionId) ?? [];
     if (targets.length === 0) continue;
@@ -593,12 +606,12 @@ function processLandCampaign(context: SimulationContext, campaign: Campaign): vo
       const assignedTroops = theater.allocation * (weights.get(targetIndex) ?? 0);
       const progress =
         (assignedTroops
-          * realmMatchup(state, campaign.attacker, campaign.target)
+          * matchup
           * attackFactor
           * traitorVulnerability
           * localSupport
           * state.config.aggression)
-        / (CAMPAIGN_RULES.troopsToTakeATile * Math.max(0.5, defense));
+        / (tileTroops * Math.max(0.5, defense));
       if (tile.pressureBy && tile.pressureBy !== campaign.attacker) {
         tile.pressure = Math.max(0, tile.pressure - progress * 0.9);
         if (tile.pressure === 0) tile.pressureBy = campaign.attacker;

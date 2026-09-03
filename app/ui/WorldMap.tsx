@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ELEMENTS } from "../game/elements";
 import { realmLabel } from "../game/naming";
 import { PLAYER_ORDER } from "../game/players";
@@ -14,6 +14,8 @@ import {
 import {
   STRUCTURE_RULES,
   compactNumber,
+  gridDensity,
+  gridFineness,
 } from "../game/rules";
 import {
   THEATER_LAYER_LABELS,
@@ -28,9 +30,7 @@ import {
 import type {
   MapRasterRequest,
   MapRasterResult,
-  RasterBufferRecycle,
 } from "../game/map-raster-protocol";
-import { PoliticalFieldSmoother, politicalFieldArrays } from "../game/political-field";
 import type { PlayerId, WorldState } from "../game/types";
 import { isValidWaterPath } from "../game/water-navigation";
 
@@ -53,22 +53,6 @@ interface MapGeometry {
 }
 
 /**
- * Raster pixels per authoritative cell.
- *
- * Two was chosen when the ownership field cost one channel per realm and the
- * whole raster had to stay affordable; the map was drawn at 336 by 208 and
- * stretched to fill the canvas, which five broad regions survived and fifty
- * intricate frontiers do not. Now that the field is sparse, the expensive half
- * -- blurring -- is per cell and does not grow with this at all, so the linear
- * resolution costs only the sampling pass. Raised from four to eight when
- * coastlines and borders still read blurry at the old raster: at eight the
- * field renders at (or clamps to) the canvas's own pixel size, so upscaling
- * no longer softens the lines, and the sampling pass paid for the extra
- * pixels by skipping the claim merge on open water.
- */
-const STATIC_FIELD_GRID_SCALE = 8;
-
-/**
  * The map's logical coordinate space, in CSS pixels.
  *
  * The canvas backing store is this times the device pixel ratio, and every
@@ -79,6 +63,70 @@ const STATIC_FIELD_GRID_SCALE = 8;
  */
 const MAP_WIDTH = 1180;
 const MAP_HEIGHT = 730;
+
+/**
+ * The zoom range of the display.
+ *
+ * The world raster is fixed at one pixel per area, so zoom never re-renders
+ * the ground at a finer grain -- it only scales the pixels. At 1x the whole
+ * map fits the viewport; the range tops out where one area fills about
+ * fifty-six CSS pixels, a large, flat square with nothing smaller inside it
+ * to reveal. On a 252 by 156 world that is 12x from areas of under five
+ * pixels; on the old 168 by 104 world it was 8x from areas of seven.
+ */
+const MIN_ZOOM = 1;
+const LARGEST_AREA_CSS_PX = 56;
+
+function maxZoomFor(state: WorldState): number {
+  return Math.max(4, Math.round(LARGEST_AREA_CSS_PX / (MAP_WIDTH / state.config.width)));
+}
+/** One wheel notch (deltaY ~100) scales the view by about 17%. */
+const WHEEL_ZOOM_RATE = 0.0016;
+/** Pointer travel in CSS pixels past which a press is a pan, not a tap. */
+const DRAG_SUPPRESS_TAP_PX = 5;
+/** World ticks between refreshes of the theater appraisal while it is shown. */
+const THEATER_MAP_REFRESH_TICKS = 4;
+
+/**
+ * The visible window onto the map: `x`/`y` is the top-left corner of the
+ * window in map space, and the window spans `MAP_WIDTH / zoom` by
+ * `MAP_HEIGHT / zoom` map units.
+ */
+interface MapView {
+  zoom: number;
+  x: number;
+  y: number;
+}
+
+function clampView(view: MapView, maxZoom: number): MapView {
+  const zoom = Math.max(MIN_ZOOM, Math.min(maxZoom, view.zoom));
+  return {
+    zoom,
+    x: Math.max(0, Math.min(MAP_WIDTH - MAP_WIDTH / zoom, view.x)),
+    y: Math.max(0, Math.min(MAP_HEIGHT - MAP_HEIGHT / zoom, view.y)),
+  };
+}
+
+/**
+ * The view after zooming to `zoom` while keeping the map point under the
+ * viewport anchor (`anchorFx`, `anchorFy` in [0, 1]) stationary on screen.
+ */
+function zoomedView(
+  view: MapView,
+  zoom: number,
+  anchorFx: number,
+  anchorFy: number,
+  maxZoom: number,
+): MapView {
+  const clamped = Math.max(MIN_ZOOM, Math.min(maxZoom, zoom));
+  const mapX = view.x + anchorFx * (MAP_WIDTH / view.zoom);
+  const mapY = view.y + anchorFy * (MAP_HEIGHT / view.zoom);
+  return clampView({
+    zoom: clamped,
+    x: mapX - anchorFx * (MAP_WIDTH / clamped),
+    y: mapY - anchorFy * (MAP_HEIGHT / clamped),
+  }, maxZoom);
+}
 
 function geometry(state: WorldState): MapGeometry {
   return {
@@ -92,6 +140,42 @@ function centerFor(index: number, state: WorldState, shape: MapGeometry): [numbe
   return [(x + 0.5) * shape.cellWidth, (y + 0.5) * shape.cellHeight];
 }
 
+/**
+ * Which cells carry decor, chosen once per snapshot.
+ *
+ * The display loop draws the decor every frame under the zoom transform, and
+ * a full sweep of the grid per frame to find the few cells that carry a mark
+ * or a structure grew with the higher-resolution world. The lists change only
+ * when the world does, so they are indexed per snapshot.
+ *
+ * Terrain marks are scattered per unit of ground rather than per cell -- one
+ * every 197 tuned-world cells, so a finer grid keeps the same sprinkle -- and
+ * drawn at the size of a tuned-world cell, so they neither crowd nor shrink
+ * when the grid is made finer.
+ */
+interface DecorIndex {
+  marks: number[];
+  structures: number[];
+}
+
+const DECOR_INDEX = new WeakMap<WorldState, DecorIndex>();
+
+function decorIndexFor(state: WorldState): DecorIndex {
+  const cached = DECOR_INDEX.get(state);
+  if (cached) return cached;
+  const stride = Math.max(1, Math.round(197 * gridDensity(state.config)));
+  const marks: number[] = [];
+  const structures: number[] = [];
+  for (let index = 0; index < state.cells.length; index += 1) {
+    if ((index * 17 + state.seed) % stride === 0) marks.push(index);
+    const cell = state.cells[index]!;
+    if (cell.structure && cell.owner) structures.push(index);
+  }
+  const built = { marks, structures };
+  DECOR_INDEX.set(state, built);
+  return built;
+}
+
 function drawTerrainTexture(
   context: CanvasRenderingContext2D,
   state: WorldState,
@@ -99,9 +183,8 @@ function drawTerrainTexture(
   index: number,
 ) {
   const cell = state.cells[index]!;
-  if ((index * 17 + state.seed) % 197 !== 0) return;
   const [x, y] = centerFor(index, state, shape);
-  const radius = Math.min(shape.cellWidth, shape.cellHeight);
+  const radius = Math.min(shape.cellWidth, shape.cellHeight) * gridFineness(state.config);
   context.save();
   context.strokeStyle = "rgba(25, 43, 48, 0.18)";
   context.fillStyle = "rgba(255, 248, 219, 0.28)";
@@ -165,18 +248,6 @@ function drawStreams(
 }
 
 const CAMPAIGN_LABEL_POSITIONS = new Map<string, { x: number; y: number }>();
-
-function drawFieldLayer(
-  context: CanvasRenderingContext2D,
-  layer: HTMLCanvasElement,
-  smoothing = false,
-) {
-  context.save();
-  context.imageSmoothingEnabled = smoothing;
-  if (smoothing) context.imageSmoothingQuality = "high";
-  context.drawImage(layer, 0, 0, MAP_WIDTH, MAP_HEIGHT);
-  context.restore();
-}
 
 function drawStructure(
   context: CanvasRenderingContext2D,
@@ -643,164 +714,13 @@ function drawVignette(context: CanvasRenderingContext2D) {
   context.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
 }
 
-/**
- * Reused canvases for compositing static frames.
- *
- * The interpolated display pipeline composes a new static frame many times a
- * second; allocating fresh canvases for each one made the garbage collector a
- * regular guest in the animation. Three pooled layers cover the crossfade pair
- * plus the frame being composed, the scratch pair holds the raster pixels on
- * their way to the GPU, and the decor pair caches everything that only changes
- * per authoritative snapshot -- terrain marks, trade routes, structures,
- * alliance chains and the vignette -- so a field frame costs four blits.
- */
-interface MapLayerResources {
-  pool: HTMLCanvasElement[];
-  poolIndex: number;
-  fillScratch: HTMLCanvasElement | null;
-  borderScratch: HTMLCanvasElement | null;
-  decorFor: WorldState | null;
-  underDecor: HTMLCanvasElement | null;
-  overDecor: HTMLCanvasElement | null;
-}
-
-function createLayerResources(): MapLayerResources {
-  return {
-    pool: [],
-    poolIndex: 0,
-    fillScratch: null,
-    borderScratch: null,
-    decorFor: null,
-    underDecor: null,
-    overDecor: null,
-  };
-}
-
-function sizedCanvas(
-  existing: HTMLCanvasElement | null,
-  width: number,
-  height: number,
-): HTMLCanvasElement {
-  const canvas = existing ?? document.createElement("canvas");
-  if (canvas.width !== width) canvas.width = width;
-  if (canvas.height !== height) canvas.height = height;
-  return canvas;
-}
-
-function acquirePooledLayer(
-  resources: MapLayerResources,
-  width: number,
-  height: number,
-): HTMLCanvasElement {
-  while (resources.pool.length < 3) resources.pool.push(document.createElement("canvas"));
-  const layer = sizedCanvas(resources.pool[resources.poolIndex]!, width, height);
-  resources.pool[resources.poolIndex] = layer;
-  resources.poolIndex = (resources.poolIndex + 1) % resources.pool.length;
-  return layer;
-}
-
-function composeDecorLayers(
-  resources: MapLayerResources,
-  state: WorldState,
-  scale: number,
-  width: number,
-  height: number,
-): void {
-  const shape = geometry(state);
-  const under = sizedCanvas(resources.underDecor, width, height);
-  const over = sizedCanvas(resources.overDecor, width, height);
-  resources.underDecor = under;
-  resources.overDecor = over;
-  const underContext = under.getContext("2d");
-  const overContext = over.getContext("2d");
-  if (!underContext || !overContext) return;
-  underContext.setTransform(scale, 0, 0, scale, 0, 0);
-  underContext.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
-  for (let index = 0; index < state.cells.length; index += 1) {
-    drawTerrainTexture(underContext, state, shape, index);
-  }
-  drawStreams(underContext, state, shape);
-  drawTradeRoutes(underContext, state, shape);
-  overContext.setTransform(scale, 0, 0, scale, 0, 0);
-  overContext.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
-  drawAllianceChains(overContext, state, shape);
-  for (let index = 0; index < state.cells.length; index += 1) {
-    drawStructure(overContext, state, shape, index);
-  }
-  drawVignette(overContext);
-  resources.decorFor = state;
-}
-
-function composeStaticWorld(
-  resources: MapLayerResources,
-  job: RasterJob,
-  raster: MapRasterResult,
-  scale: number,
-): HTMLCanvasElement {
-  const layer = acquirePooledLayer(resources, job.canvasWidth, job.canvasHeight);
-  const context = layer.getContext("2d");
-  if (!context) return layer;
-  context.setTransform(scale, 0, 0, scale, 0, 0);
-  context.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
-
-  const fillScratch = sizedCanvas(resources.fillScratch, raster.rasterWidth, raster.rasterHeight);
-  resources.fillScratch = fillScratch;
-  fillScratch
-    .getContext("2d")
-    ?.putImageData(new ImageData(raster.fill, raster.rasterWidth, raster.rasterHeight), 0, 0);
-  drawFieldLayer(context, fillScratch, true);
-  if (job.mapMode === "theaters") {
-    drawVignette(context);
-    return layer;
-  }
-
-  if (
-    resources.decorFor !== job.state ||
-    resources.underDecor?.width !== job.canvasWidth ||
-    resources.underDecor?.height !== job.canvasHeight
-  ) {
-    composeDecorLayers(resources, job.state, scale, job.canvasWidth, job.canvasHeight);
-  }
-  if (resources.underDecor) drawFieldLayer(context, resources.underDecor);
-  if (raster.borders) {
-    const borderScratch = sizedCanvas(resources.borderScratch, raster.rasterWidth, raster.rasterHeight);
-    resources.borderScratch = borderScratch;
-    const borderContext = borderScratch.getContext("2d");
-    if (borderContext) {
-      borderContext.putImageData(
-        new ImageData(raster.borders, raster.rasterWidth, raster.rasterHeight),
-        0,
-        0,
-      );
-      drawFieldLayer(context, borderScratch, true);
-    }
-  }
-  if (resources.overDecor) drawFieldLayer(context, resources.overDecor);
-  return layer;
-}
-
-interface RasterJob {
-  request: MapRasterRequest;
-  state: WorldState;
-  selected: PlayerId;
-  mapMode: MapMode;
-  canvasWidth: number;
-  canvasHeight: number;
-}
-
 function createRasterRequest(
   requestId: number,
   state: WorldState,
-  previous: WorldState | null,
-  blend: number,
   selected: PlayerId,
   mapMode: MapMode,
   maps: TheaterCellMaps | null,
   theaterLayer: TheaterLayer,
-  rasterWidth: number,
-  rasterHeight: number,
-  smoother: PoliticalFieldSmoother,
-  now: number,
 ): MapRasterRequest {
   const terrains = new Uint8Array(state.cells.length);
   for (let index = 0; index < state.cells.length; index += 1) {
@@ -811,16 +731,19 @@ function createRasterRequest(
     requestId,
     gridWidth: state.config.width,
     gridHeight: state.config.height,
-    rasterWidth,
-    rasterHeight,
     terrains,
   };
   if (mapMode === "theaters") {
     if (!maps) throw new Error("Theater raster requested without theater intelligence fields");
     return { ...common, mode: "theaters", values: maps[theaterLayer].slice() };
   }
-  const field = politicalFieldArrays(previous, state, blend);
-  const { pushOwners, pushStrengths } = smoother.smooth(field, now);
+  // One byte per area: who owns it. The worker derives the border from this
+  // alone -- an owned area whose neighbour is anything else is perimeter.
+  const owners = new Int8Array(state.cells.length).fill(-1);
+  for (let index = 0; index < state.cells.length; index += 1) {
+    const owner = state.cells[index]!.owner;
+    if (owner) owners[index] = RASTER_PLAYER_INDEX.get(owner)!;
+  }
   // The color each realm paints with is the documented color of the element
   // it currently expresses, read fresh every frame so an ascension repaints
   // the realm the moment the conquest forges its new tier.
@@ -832,25 +755,12 @@ function createRasterRequest(
     playerColors[index * 3 + 1] = (value >> 8) & 255;
     playerColors[index * 3 + 2] = value & 255;
   }
-  const warMatrix = new Uint8Array(RASTER_PLAYER_ORDER.length ** 2);
-  for (const relation of Object.values(state.relations)) {
-    if (relation.status !== "war") continue;
-    const first = RASTER_PLAYER_INDEX.get(relation.parties[0])!;
-    const second = RASTER_PLAYER_INDEX.get(relation.parties[1])!;
-    warMatrix[first * RASTER_PLAYER_ORDER.length + second] = 1;
-    warMatrix[second * RASTER_PLAYER_ORDER.length + first] = 1;
-  }
   return {
     ...common,
     mode: "political",
     selected: RASTER_PLAYER_INDEX.get(selected)!,
-    owners: field.owners,
-    pressureOwners: field.pressureOwners,
-    pressures: field.pressures,
-    pushOwners,
-    pushStrengths,
+    owners,
     playerColors,
-    warMatrix,
   };
 }
 
@@ -859,45 +769,10 @@ function rasterTransferables(request: MapRasterRequest): Transferable[] {
   if (request.mode === "theaters") {
     transfer.push(request.values.buffer);
   } else {
-    transfer.push(
-      request.owners.buffer,
-      request.pressureOwners.buffer,
-      request.pressures.buffer,
-      request.pushOwners.buffer,
-      request.pushStrengths.buffer,
-      request.playerColors.buffer,
-      request.warMatrix.buffer,
-    );
+    transfer.push(request.owners.buffer, request.playerColors.buffer);
   }
   return transfer;
 }
-
-interface StaticFrames {
-  previous: HTMLCanvasElement | null;
-  current: HTMLCanvasElement | null;
-  transitionStarted: number;
-  /** Crossfade length, matched to how quickly field frames actually arrive. */
-  transitionDuration: number;
-}
-
-/**
- * The two most recent authoritative snapshots, and the wall-clock rhythm they
- * arrive at. The display loop renders the field at a moment gliding from the
- * older to the newer one, so fronts move continuously instead of stepping
- * once per snapshot.
- */
-interface FieldTimeline {
-  previous: WorldState | null;
-  current: WorldState;
-  arrivedAt: number;
-  intervalMs: number;
-}
-
-const STATIC_TRANSITION_FALLBACK_MS = 240;
-/** Floor between field renders; the raster worker's own pace is the ceiling. */
-const FIELD_FRAME_MIN_GAP_MS = 30;
-/** Skip re-rendering the field until the blend has moved at least this far. */
-const FIELD_FRAME_MIN_BLEND_STEP = 0.05;
 
 export function WorldMap({
   state,
@@ -912,10 +787,14 @@ export function WorldMap({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rasterWorkerRef = useRef<Worker | null>(null);
   const rasterBusyRef = useRef(false);
-  const queuedRasterRef = useRef<RasterJob | null>(null);
-  const pendingRasterJobsRef = useRef(new Map<number, RasterJob>());
   const nextRasterRequestRef = useRef(0);
   const latestRasterRequestRef = useRef(0);
+  /**
+   * The rendered world raster, exactly one canvas pixel per area. The display
+   * loop scales it up with image smoothing off, so zooming in makes the
+   * pixels larger instead of conjuring finer ones.
+   */
+  const fillCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const worldRef = useRef(state);
   const selectedRef = useRef(selected);
   const modeRef = useRef(mapMode);
@@ -925,105 +804,69 @@ export function WorldMap({
   const visualTickRef = useRef(state.tick);
   const visualSeedRef = useRef(state.seed);
   const lastAnimationAtRef = useRef(0);
-  const framesRef = useRef<StaticFrames>({
-    previous: null,
-    current: null,
-    transitionStarted: 0,
-    transitionDuration: STATIC_TRANSITION_FALLBACK_MS,
-  });
-  const resourcesRef = useRef<MapLayerResources>(createLayerResources());
-  const timelineRef = useRef<FieldTimeline>({
-    previous: null,
-    current: state,
-    arrivedAt: 0,
-    intervalMs: 250,
-  });
   const fieldDirtyRef = useRef(true);
-  const fieldSmootherRef = useRef<PoliticalFieldSmoother | null>(null);
-  const dispatchedBlendRef = useRef(1);
-  const lastDispatchAtRef = useRef(0);
-  const lastStaticFrameAtRef = useRef(0);
   const pixelScaleRef = useRef(1);
+  const viewRef = useRef<MapView>({ zoom: 1, x: 0, y: 0 });
+  const dragRef = useRef<{ pointerId: number; clientX: number; clientY: number; travelled: number } | null>(null);
   const [hoveredCell, setHoveredCell] = useState<number | null>(null);
-  const theaterMaps = useMemo(
-    () => mapMode === "theaters" ? evaluateTheaterCellMaps(state, selected) : null,
-    [mapMode, selected, state],
-  );
+  // Bumped whenever the view changes so React-positioned overlays (the
+  // theater tooltip, the zoom readout) re-render; the canvas itself reads
+  // viewRef directly every animation frame.
+  const [, bumpViewVersion] = useReducer((version: number) => version + 1, 0);
+  // The theater appraisal costs tens of milliseconds on the display thread at
+  // the higher-resolution world, and snapshots arrive several times a second.
+  // It is an appraisal, not a live feed, so it is refreshed once a second of
+  // world time rather than on every snapshot.
+  const theaterMapsCacheRef = useRef<{ key: string; tick: number; maps: TheaterCellMaps } | null>(null);
+  const theaterMaps = useMemo(() => {
+    if (mapMode !== "theaters") return null;
+    const key = `${state.seed}|${selected}`;
+    const cached = theaterMapsCacheRef.current;
+    if (
+      cached
+      && cached.key === key
+      && state.tick >= cached.tick
+      && state.tick - cached.tick < THEATER_MAP_REFRESH_TICKS
+      && cached.maps.composite.length === state.cells.length
+    ) return cached.maps;
+    const maps = evaluateTheaterCellMaps(state, selected);
+    theaterMapsCacheRef.current = { key, tick: state.tick, maps };
+    return maps;
+  }, [mapMode, selected, state]);
 
-  function dispatchRasterJob(job: RasterJob): void {
-    const worker = rasterWorkerRef.current;
-    if (!worker) {
-      queuedRasterRef.current = job;
-      return;
-    }
-    rasterBusyRef.current = true;
-    pendingRasterJobsRef.current.set(job.request.requestId, job);
-    worker.postMessage(job.request, rasterTransferables(job.request));
+  function applyView(view: MapView): void {
+    viewRef.current = view;
+    bumpViewVersion();
   }
 
   /**
    * The field render pump, called once per display frame.
    *
-   * A frame is rendered when something changed (a new snapshot, a new
-   * selection, a mode switch) or while the political field is still gliding
-   * between the previous and current snapshot. The worker's own pace, a
-   * modest floor, and a minimum blend step together decide the actual rate,
-   * so a fast machine gets fluid fronts and a slow one degrades to exactly
-   * the old snapshot-at-a-time behaviour.
+   * A frame is rendered only when the field is dirty -- a new snapshot, a new
+   * selection, a mode or layer switch. Ownership is authoritative per cell,
+   * so there is nothing to interpolate between snapshots: a cell wears its
+   * owner's pixel until the tick it changes hands.
    */
-  function maybeDispatchFieldFrame(now: number): void {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const timeline = timelineRef.current;
+  function maybeDispatchFieldFrame(): void {
+    if (!fieldDirtyRef.current || rasterBusyRef.current) return;
+    const worker = rasterWorkerRef.current;
+    if (!worker) return;
     const mode = modeRef.current;
-    const blend = timeline.previous
-      ? Math.max(0, Math.min(1, (now - timeline.arrivedAt) / timeline.intervalMs))
-      : 1;
-    const interpolating = mode === "political"
-      && timeline.previous !== null
-      && dispatchedBlendRef.current < 1;
-    if (!fieldDirtyRef.current && !interpolating) return;
-    if (rasterBusyRef.current) return;
-    if (now - lastDispatchAtRef.current < FIELD_FRAME_MIN_GAP_MS) return;
-    if (
-      !fieldDirtyRef.current &&
-      blend < 1 &&
-      blend - dispatchedBlendRef.current < FIELD_FRAME_MIN_BLEND_STEP
-    ) return;
     if (mode === "theaters" && !theaterMapsRef.current) return;
-    const current = timeline.current;
     const requestId = nextRasterRequestRef.current + 1;
     nextRasterRequestRef.current = requestId;
     latestRasterRequestRef.current = requestId;
-    const fieldWidth = Math.max(1, Math.min(canvas.width, current.config.width * STATIC_FIELD_GRID_SCALE));
-    const fieldHeight = Math.max(1, Math.min(canvas.height, current.config.height * STATIC_FIELD_GRID_SCALE));
-    const smoother = fieldSmootherRef.current ?? new PoliticalFieldSmoother();
-    fieldSmootherRef.current = smoother;
-    const job: RasterJob = {
-      request: createRasterRequest(
-        requestId,
-        current,
-        mode === "political" ? timeline.previous : null,
-        blend,
-        selectedRef.current,
-        mode,
-        theaterMapsRef.current,
-        theaterLayerRef.current,
-        fieldWidth,
-        fieldHeight,
-        smoother,
-        now,
-      ),
-      state: current,
-      selected: selectedRef.current,
-      mapMode: mode,
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
-    };
+    const request = createRasterRequest(
+      requestId,
+      worldRef.current,
+      selectedRef.current,
+      mode,
+      theaterMapsRef.current,
+      theaterLayerRef.current,
+    );
     fieldDirtyRef.current = false;
-    dispatchedBlendRef.current = blend;
-    lastDispatchAtRef.current = now;
-    dispatchRasterJob(job);
+    rasterBusyRef.current = true;
+    worker.postMessage(request, rasterTransferables(request));
   }
 
   useEffect(() => {
@@ -1044,47 +887,52 @@ export function WorldMap({
     rasterWorkerRef.current = worker;
     const handleRaster = (event: MessageEvent<MapRasterResult>) => {
       if (event.data.type !== "rendered") return;
-      const job = pendingRasterJobsRef.current.get(event.data.requestId);
-      pendingRasterJobsRef.current.delete(event.data.requestId);
       rasterBusyRef.current = false;
-      if (job && event.data.requestId === latestRasterRequestRef.current) {
-        const now = performance.now();
-        const next = composeStaticWorld(
-          resourcesRef.current,
-          job,
-          event.data,
-          pixelScaleRef.current,
-        );
-        framesRef.current = {
-          previous: framesRef.current.current,
-          current: next,
-          transitionStarted: now,
-          transitionDuration: lastStaticFrameAtRef.current > 0
-            ? Math.max(40, Math.min(320, now - lastStaticFrameAtRef.current))
-            : STATIC_TRANSITION_FALLBACK_MS,
-        };
-        lastStaticFrameAtRef.current = now;
-      }
-      // The pixels have been composited; hand the buffers back for reuse.
-      const buffers: ArrayBuffer[] = [event.data.fill.buffer];
-      if (event.data.borders) buffers.push(event.data.borders.buffer);
-      worker.postMessage({ type: "recycle", buffers } satisfies RasterBufferRecycle, buffers);
-      const queued = queuedRasterRef.current;
-      queuedRasterRef.current = null;
-      if (queued) dispatchRasterJob(queued);
+      if (event.data.requestId !== latestRasterRequestRef.current) return;
+      const fillCanvas = fillCanvasRef.current ?? document.createElement("canvas");
+      fillCanvasRef.current = fillCanvas;
+      if (fillCanvas.width !== event.data.rasterWidth) fillCanvas.width = event.data.rasterWidth;
+      if (fillCanvas.height !== event.data.rasterHeight) fillCanvas.height = event.data.rasterHeight;
+      fillCanvas
+        .getContext("2d")
+        ?.putImageData(new ImageData(event.data.fill, event.data.rasterWidth, event.data.rasterHeight), 0, 0);
     };
     worker.addEventListener("message", handleRaster);
-    const queued = queuedRasterRef.current;
-    queuedRasterRef.current = null;
-    if (queued) dispatchRasterJob(queued);
     return () => {
       worker.removeEventListener("message", handleRaster);
       worker.terminate();
       rasterWorkerRef.current = null;
       rasterBusyRef.current = false;
-      queuedRasterRef.current = null;
-      pendingRasterJobsRef.current.clear();
     };
+  }, []);
+
+  // Wheel zoom wants preventDefault, and React registers its wheel handlers
+  // passively, so the listener is attached natively.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const bounds = canvas.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return;
+      const view = viewRef.current;
+      const anchorFx = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+      const anchorFy = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
+      // Wheels report pixels, lines or pages depending on the browser.
+      const deltaScale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 120 : 1;
+      viewRef.current = zoomedView(
+        view,
+        view.zoom * Math.exp(-event.deltaY * deltaScale * WHEEL_ZOOM_RATE),
+        anchorFx,
+        anchorFy,
+        maxZoomFor(worldRef.current),
+      );
+      // The ground under the pointer changed; a held tooltip would go stale.
+      setHoveredCell(null);
+      bumpViewVersion();
+    };
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
   }, []);
 
   useEffect(() => {
@@ -1093,35 +941,13 @@ export function WorldMap({
     modeRef.current = mapMode;
     theaterLayerRef.current = theaterLayer;
     theaterMapsRef.current = theaterMaps;
-    const now = performance.now();
-    const timeline = timelineRef.current;
     if (visualSeedRef.current !== state.seed) {
       visualSeedRef.current = state.seed;
       visualTickRef.current = state.tick;
-      fieldSmootherRef.current?.reset();
-      timelineRef.current = {
-        previous: null,
-        current: state,
-        arrivedAt: now,
-        intervalMs: timeline.intervalMs,
-      };
-      dispatchedBlendRef.current = 1;
+      viewRef.current = { zoom: 1, x: 0, y: 0 };
+      bumpViewVersion();
     } else {
       visualTickRef.current = Math.max(visualTickRef.current, state.tick);
-      if (timeline.current !== state) {
-        const gap = Math.max(90, Math.min(1000, now - timeline.arrivedAt));
-        timelineRef.current = {
-          // Only glide when the world actually advanced; a re-published tick
-          // (pausing, aggression changes) has nothing to interpolate.
-          previous: state.tick > timeline.current.tick ? timeline.current : null,
-          current: state,
-          arrivedAt: now,
-          intervalMs: timeline.arrivedAt > 0
-            ? timeline.intervalMs * 0.5 + gap * 0.5
-            : timeline.intervalMs,
-        };
-        dispatchedBlendRef.current = 0;
-      }
     }
     fieldDirtyRef.current = true;
   }, [state, selected, mapMode, theaterLayer, theaterMaps]);
@@ -1145,33 +971,55 @@ export function WorldMap({
           world.tick,
           Math.min(world.tick + 8, visualTickRef.current + elapsedSeconds * playbackRef.current),
         );
-        maybeDispatchFieldFrame(time);
+        maybeDispatchFieldFrame();
         const scale = pixelScaleRef.current;
+        const view = viewRef.current;
+        const worldScale = scale * view.zoom;
+        const applyWorldTransform = () => context.setTransform(
+          worldScale,
+          0,
+          0,
+          worldScale,
+          -view.x * worldScale,
+          -view.y * worldScale,
+        );
         context.setTransform(scale, 0, 0, scale, 0, 0);
         context.clearRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
-        const frames = framesRef.current;
-        const transition = Math.max(
-          0,
-          Math.min(1, (time - frames.transitionStarted) / frames.transitionDuration),
-        );
-        if (frames.previous && transition >= 1) frames.previous = null;
-        if (frames.previous && transition < 1) drawFieldLayer(context, frames.previous);
-        if (frames.current) {
+        applyWorldTransform();
+        const fillCanvas = fillCanvasRef.current;
+        if (fillCanvas && fillCanvas.width > 0) {
+          // Nearest-neighbour, always: an area is one flat pixel however far
+          // the display magnifies it.
           context.save();
-          context.globalAlpha = frames.previous ? transition : 1;
-          drawFieldLayer(context, frames.current);
+          context.imageSmoothingEnabled = false;
+          context.drawImage(fillCanvas, 0, 0, MAP_WIDTH, MAP_HEIGHT);
           context.restore();
         }
+        const shape = geometry(world);
         if (modeRef.current === "political") {
-          const shape = geometry(world);
+          const decor = decorIndexFor(world);
+          for (const index of decor.marks) drawTerrainTexture(context, world, shape, index);
+          drawStreams(context, world, shape);
+          drawTradeRoutes(context, world, shape);
+          drawAllianceChains(context, world, shape);
+          for (const index of decor.structures) drawStructure(context, world, shape, index);
+        }
+        // The vignette frames the viewport, not the ground: screen space.
+        context.setTransform(scale, 0, 0, scale, 0, 0);
+        drawVignette(context);
+        if (modeRef.current === "political") {
+          applyWorldTransform();
           const extrapolatedTicks = Math.max(0, visualTickRef.current - world.tick);
           // Frame-rate-independent easing for the campaign labels.
           const labelBlend = 1 - Math.exp(-elapsedSeconds * 9);
           drawTradeVehicles(context, world, shape, extrapolatedTicks);
           drawCampaigns(context, world, shape, selectedRef.current, showAllTheaters, extrapolatedTicks, labelBlend);
           drawWarships(context, world, shape, world.tick + extrapolatedTicks);
+          context.setTransform(scale, 0, 0, scale, 0, 0);
         }
-        if (renderMarker !== undefined) canvas.dataset.renderedMarker = renderMarker;
+        if (renderMarker !== undefined && fillCanvasRef.current) {
+          canvas.dataset.renderedMarker = renderMarker;
+        }
       }
       frameId = window.requestAnimationFrame(drawFrame);
     };
@@ -1183,24 +1031,66 @@ export function WorldMap({
     const canvas = canvasRef.current;
     if (!canvas) return -1;
     const bounds = canvas.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return -1;
+    const view = viewRef.current;
+    const mapX = view.x + ((event.clientX - bounds.left) / bounds.width) * (MAP_WIDTH / view.zoom);
+    const mapY = view.y + ((event.clientY - bounds.top) / bounds.height) * (MAP_HEIGHT / view.zoom);
     const x = Math.max(0, Math.min(
       state.config.width - 1,
-      Math.floor(((event.clientX - bounds.left) / bounds.width) * state.config.width),
+      Math.floor((mapX / MAP_WIDTH) * state.config.width),
     ));
     const y = Math.max(0, Math.min(
       state.config.height - 1,
-      Math.floor(((event.clientY - bounds.top) / bounds.height) * state.config.height),
+      Math.floor((mapY / MAP_HEIGHT) * state.config.height),
     ));
     return y * state.config.width + x;
   }
 
-  function handlePointer(event: React.PointerEvent<HTMLCanvasElement>) {
+  function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const bounds = canvas.getBoundingClientRect();
-    const x = Math.floor(((event.clientX - bounds.left) / bounds.width) * state.config.width);
-    const y = Math.floor(((event.clientY - bounds.top) / bounds.height) * state.config.height);
-    const index = y * state.config.width + x;
+    canvas.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      travelled: 0,
+    };
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
+    const drag = dragRef.current;
+    const canvas = canvasRef.current;
+    if (drag && drag.pointerId === event.pointerId && canvas) {
+      const bounds = canvas.getBoundingClientRect();
+      if (bounds.width > 0 && bounds.height > 0) {
+        const view = viewRef.current;
+        const dx = event.clientX - drag.clientX;
+        const dy = event.clientY - drag.clientY;
+        drag.clientX = event.clientX;
+        drag.clientY = event.clientY;
+        drag.travelled += Math.hypot(dx, dy);
+        applyView(clampView({
+          zoom: view.zoom,
+          x: view.x - (dx / bounds.width) * (MAP_WIDTH / view.zoom),
+          y: view.y - (dy / bounds.height) * (MAP_HEIGHT / view.zoom),
+        }, maxZoomFor(state)));
+      }
+    }
+    if (mapMode !== "theaters") return;
+    const index = cellAtPointer(event);
+    const next = index >= 0 && state.cells[index]?.terrain !== "water" ? index : null;
+    setHoveredCell((previous) => previous === next ? previous : next);
+  }
+
+  function handlePointerUp(event: React.PointerEvent<HTMLCanvasElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    // A press that travelled was a pan; only a tap selects.
+    if (drag.travelled > DRAG_SUPPRESS_TAP_PX) return;
+    const index = cellAtPointer(event);
+    if (index < 0) return;
     if (mapMode === "theaters") {
       setHoveredCell(state.cells[index]?.terrain === "water" ? null : index);
       return;
@@ -1209,13 +1099,16 @@ export function WorldMap({
     if (owner) onSelect(owner);
   }
 
-  function handlePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (mapMode !== "theaters") return;
-    const index = cellAtPointer(event);
-    const next = index >= 0 && state.cells[index]?.terrain !== "water" ? index : null;
-    setHoveredCell((previous) => previous === next ? previous : next);
+  function handlePointerCancel() {
+    dragRef.current = null;
   }
 
+  function zoomBy(factor: number) {
+    const view = viewRef.current;
+    applyView(zoomedView(view, view.zoom * factor, 0.5, 0.5, maxZoomFor(state)));
+  }
+
+  const view = viewRef.current;
   const wars = Object.values(state.relations).filter((relation) => relation.status === "war").length;
   const truces = Object.values(state.relations).filter((relation) => relation.status === "truce").length;
   const trains = state.tradeVehicles.filter((vehicle) => vehicle.kind === "train").length;
@@ -1239,7 +1132,10 @@ export function WorldMap({
   };
   const percent = (value: number) => Math.round(value * 100);
   const tooltipPosition = hoveredPosition
-    ? hoveredPosition
+    ? [
+        (((hoveredPosition[0] + 0.5) * (MAP_WIDTH / state.config.width) - view.x) * view.zoom) / MAP_WIDTH,
+        (((hoveredPosition[1] + 0.5) * (MAP_HEIGHT / state.config.height) - view.y) * view.zoom) / MAP_HEIGHT,
+      ]
     : null;
   return (
     <div className="world-map-shell">
@@ -1248,19 +1144,27 @@ export function WorldMap({
         width={1180}
         height={730}
         className="world-map"
-        onPointerDown={handlePointer}
+        onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onPointerLeave={() => setHoveredCell(null)}
         aria-label={mapMode === "theaters"
           ? `${realmLabel(state, selected)} interpretation of the world's strategic theaters. Green is high value and red is low value.`
-          : `Live political and terrain map of ${state.worldName}. Select a colored player to inspect it.`}
+          : `Live political and terrain map of ${state.worldName}, one pixel per area. Select a colored player to inspect it; drag to pan and scroll to zoom.`}
       />
+      <div className="map-zoom" role="group" aria-label="Map zoom">
+        <button type="button" onClick={() => zoomBy(1.5)} aria-label="Zoom in">+</button>
+        <button type="button" onClick={() => zoomBy(1 / 1.5)} aria-label="Zoom out">−</button>
+        <button type="button" onClick={() => applyView({ zoom: 1, x: 0, y: 0 })} aria-label="Fit whole map">⤢</button>
+        <span aria-hidden="true">{view.zoom >= 10 ? Math.round(view.zoom) : view.zoom.toFixed(1)}×</span>
+      </div>
       {mapMode === "theaters" && hoveredValue !== null && hoveredBreakdown && tooltipPosition && (
         <div
           className="theater-tooltip"
           style={{
-            left: `${((tooltipPosition[0] + 0.5) / state.config.width) * 100}%`,
-            top: `${((tooltipPosition[1] + 0.5) / state.config.height) * 100}%`,
+            left: `${tooltipPosition[0]! * 100}%`,
+            top: `${tooltipPosition[1]! * 100}%`,
           }}
         >
           <strong>{THEATER_LAYER_LABELS[theaterLayer]} · {percent(hoveredValue)}</strong>
@@ -1284,15 +1188,15 @@ export function WorldMap({
         </div>
       ) : (
         <div className="map-legend" aria-hidden="true">
-          <span><i className="legend-peace" /> border</span>
-          <span><i className="legend-war" /> war front</span>
-          <span><i className="legend-push" /> push · attacker&apos;s shade</span>
+          <span><i className="legend-peace" /> border · darker perimeter</span>
           <span><i className="legend-alliance" /> allied border</span>
           <span><i className="legend-trade" /> convoys {trains} · ships {ships} · pulses {pulses} · flyers {flyers}</span>
         </div>
       )}
       <div className="map-hint" aria-hidden="true">
-        {mapMode === "theaters" ? "select a realm below to compare strategic values" : "tap a player to inspect its treasury & diplomacy"}
+        {mapMode === "theaters"
+          ? "select a realm below to compare strategic values"
+          : "drag to pan · scroll to zoom · tap a player to inspect"}
       </div>
     </div>
   );

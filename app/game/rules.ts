@@ -18,6 +18,30 @@ export function normalizedCellLength(config: { width: number; height: number }):
   return Math.sqrt(normalizedCellArea(config));
 }
 
+/**
+ * The world the balance numbers were tuned on -- 168 by 104 cells, twice the
+ * reference world on each axis -- as its normalized cell size.
+ *
+ * Every constant below that is written in cells (a radius of so many cells, a
+ * pressure per tile per tick, a territory of so many cells) means what it
+ * meant on that world. A finer or coarser default grid rescales those through
+ * the two ratios here, so the rules see a tile's physical worth rather than
+ * how many pixels the map happens to spend on it. On the tuned world both
+ * ratios are exactly 1, so nothing there moves by so much as a rounding.
+ */
+const TUNED_CELL_LENGTH = 0.5;
+const TUNED_CELL_AREA = 0.25;
+
+/** Cells per tuned-world cell along one axis: 1 on 168x104, 1.5 on 252x156. */
+export function gridFineness(config: { width: number; height: number }): number {
+  return TUNED_CELL_LENGTH / normalizedCellLength(config);
+}
+
+/** Cells per tuned-world cell of area, the fineness squared: 1 on 168x104, 2.25 on 252x156. */
+export function gridDensity(config: { width: number; height: number }): number {
+  return TUNED_CELL_AREA / normalizedCellArea(config);
+}
+
 export const TERRAIN_RULES: Record<TerrainId, TerrainRule> = {
   water: {
     id: "water",
@@ -372,6 +396,9 @@ export const CAMPAIGN_RULES = {
    * world if anybody wins.
    */
   troopsToTakeATile: 9_000,
+  // A tile here is a tuned-world tile: a finer grid divides this by its
+  // density (see gridDensity), so the same ground costs the same troop-ticks
+  // however many cells the map spends on it.
   /** A contested beach costs more than open ground. */
   landingCostMultiplier: 1.22,
   navalLandingPressurePerTick: 0.064,
@@ -396,6 +423,7 @@ export const CAMPAIGN_RULES = {
 } as const;
 
 export const STRATEGIC_REGION_RULES = {
+  /** Land per region in tuned-world cells; rescaled by grid density so regions keep their physical size. */
   targetCellsPerRegion: 192,
   minimumRegionCount: 24,
   repartitionTicks: 12,
@@ -441,6 +469,7 @@ export const STRATEGIC_REGION_RULES = {
   infrastructureBasinAffinity: 0.42,
   heatTravelAdvantage: 0.5,
   boundaryInertia: 0.2,
+  /** Depth of the objective corridor in tuned-world cells; rescaled by grid fineness. */
   objectiveLookaheadCells: 14,
   maximumObjectives: 8,
 } as const;
@@ -1150,7 +1179,7 @@ export const SPAWN_RULES = {
   valueWeight: 1,
   /** Weight of how well nearby terrain suits the player's element. */
   affinityWeight: 0.85,
-  /** Radius in cells over which elemental terrain affinity is sampled. */
+  /** Radius in tuned-world cells over which elemental terrain affinity is sampled; rescaled by grid fineness. */
   affinityRadius: 3,
   /**
    * Separation shrinks by this factor whenever no site qualifies, so a crowded
@@ -1187,7 +1216,7 @@ export const SPAWN_RULES = {
 export const FISSION_RULES = {
   /** Ticks between strain evaluations. */
   cadenceTicks: 12,
-  /** Cells one realm administers for free. */
+  /** Tuned-world cells one realm administers for free (every cell count here is rescaled by grid density). */
   supportedBaseArea: 30,
   /** Additional supported cells per stacked city level. */
   supportedPerCityLevel: 16,
@@ -1269,6 +1298,10 @@ export const CLAIM_RULES = {
    * advances everywhere at once, so world fill time runs roughly inverse to
    * this rate — 0.62 filled the world by tick ~180, 0.16 by ~550 — and 0.03
    * puts the close of the frontier a few thousand ticks out.
+   *
+   * Per tuned-world tile: a finer grid multiplies each tile's pressure by its
+   * fineness (and divides settlerFrontTroops by it), so a frontier crosses the
+   * same ground per tick whatever the cell size.
    */
   pressurePerTick: 0.03,
   populationCostPerCell: 100,

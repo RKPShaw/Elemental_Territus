@@ -5,7 +5,7 @@ import type { PlayerId, WorldState } from "./types";
  *
  * "Do these two touch, and along how many edges" is the cheapest question the
  * diplomacy and strategy planners ask and the most expensive one to answer:
- * done directly it is a full sweep of seventeen thousand cells with a
+ * done directly it is a full sweep of forty thousand cells with a
  * neighbour lookup each. Diplomacy asks it for every relation in the table, so
  * at a hundred players that is a few thousand sweeps a tick -- tens of millions
  * of cell visits for a table one pass fills in for everybody.

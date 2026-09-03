@@ -60,7 +60,7 @@ function elementFitOf(state: WorldState, viewer: PlayerId): (terrain: LandTerrai
  * A player's beliefs about every region, read once.
  *
  * believedValue merges across a sight group, so asking it per cell would walk
- * the group and the roster for all seventeen thousand cells. Regions number in
+ * the group and the roster for all forty thousand cells. Regions number in
  * the dozens, so the whole belief set is gathered up front and the per-cell
  * read is an array index.
  */

@@ -11,7 +11,7 @@
     "build": "bash scripts/build-verified.sh",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs && npm run test:sim",
-    "test:sim": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs --test tests/simulation.test.ts tests/elements.test.ts tests/ascension.test.ts tests/strategy.test.ts tests/powers.test.ts tests/terraform.test.ts tests/draft.test.ts tests/instability.test.ts tests/information.test.ts tests/political-field.test.ts tests/determinism.test.ts",
+    "test:sim": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs --test tests/simulation.test.ts tests/elements.test.ts tests/ascension.test.ts tests/strategy.test.ts tests/powers.test.ts tests/terraform.test.ts tests/draft.test.ts tests/instability.test.ts tests/information.test.ts tests/map-raster.test.ts tests/snapshot-protocol.test.ts tests/determinism.test.ts",
     "test:determinism": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs --test tests/determinism.test.ts",
     "sim": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/sim.ts",
     "scaling": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/ts-loader.mjs scripts/scaling.ts",
