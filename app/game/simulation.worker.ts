@@ -18,6 +18,17 @@ let previousPublish = 0;
 let loopStarted = false;
 let publishedReportCount = 0;
 let championAnnounced = false;
+/**
+ * True while a posted snapshot has not been acknowledged by the display
+ * thread. postMessage is fire-and-forget: without this gate the worker kept
+ * cloning ~6MB worlds onto the queue on a wall-clock timer even when the
+ * display thread could no longer keep pace, and the queued clones grew the
+ * browser without bound until the next clone itself failed with an
+ * out-of-memory DataCloneError. Scheduled publishes wait for the ack;
+ * command-triggered publishes (initialize, pause, temperament) still go out
+ * immediately because each is a single user action, not a stream.
+ */
+let awaitingAck = false;
 
 function publish(replaceHistory = false): void {
   if (!engine) return;
@@ -37,6 +48,7 @@ function publish(replaceHistory = false): void {
   publishedReportCount -= engine.pruneConsumedReports(publishedReportCount);
   const event: SimulationWorkerEvent = { type: "snapshot", world, packedCells, reportDelta, replaceHistory };
   self.postMessage(event, { transfer: packedCellBuffers(packedCells) });
+  awaitingAck = true;
   previousPublish = performance.now();
 }
 
@@ -69,7 +81,11 @@ function runLoop(): void {
   // the tab ran out of memory. That is the crash that ended a game the moment
   // it was won.
   const championNow = engine ? engine.observe((state) => Boolean(state.champion)) : false;
-  if (engine && (now - previousPublish >= VISUAL_SNAPSHOT_INTERVAL_MS || (championNow && !championAnnounced))) {
+  if (
+    engine &&
+    !awaitingAck &&
+    (now - previousPublish >= VISUAL_SNAPSHOT_INTERVAL_MS || (championNow && !championAnnounced))
+  ) {
     publish();
   }
   scheduleLoop();
@@ -84,6 +100,10 @@ function ensureLoop(): void {
 
 self.addEventListener("message", (event: MessageEvent<SimulationWorkerCommand>) => {
   const command = event.data;
+  if (command.type === "snapshot-ack") {
+    awaitingAck = false;
+    return;
+  }
   if (command.type === "initialize") {
     running = command.running;
     speed = command.speed;
@@ -92,6 +112,7 @@ self.addEventListener("message", (event: MessageEvent<SimulationWorkerCommand>) 
     engine.setAggression(aggression);
     accumulator = 0;
     publishedReportCount = 0;
+    awaitingAck = false;
     publish(true);
     ensureLoop();
     return;
@@ -122,5 +143,6 @@ self.addEventListener("message", (event: MessageEvent<SimulationWorkerCommand>) 
   accumulator = 0;
   previousTime = performance.now();
   publishedReportCount = 0;
+  awaitingAck = false;
   publish(true);
 });
