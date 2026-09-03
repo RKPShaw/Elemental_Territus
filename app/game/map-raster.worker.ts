@@ -3,6 +3,7 @@
 import { TERRAIN_RULES } from "./rules";
 import {
   RASTER_PLAYER_ORDER,
+  RASTER_SCALE,
   RASTER_TERRAIN_ORDER,
 } from "./map-raster-protocol";
 import type {
@@ -45,31 +46,78 @@ function mix(base: RgbColor, overlay: RgbColor, amount: number): RgbColor {
 const WATER_TERRAIN = RASTER_TERRAIN_ORDER.indexOf("water");
 
 /**
- * How much darker a perimeter pixel is than its realm's interior.
+ * How much darker a perimeter rim pixel is than its realm's interior.
  *
- * The border of a realm is not a drawn line: it is the outermost ring of the
+ * The border of a realm is not a drawn line: it is the outermost rim of the
  * realm's own areas, painted a darker shade of the realm's color. One factor,
  * applied to the composited pixel, keeps the hue readable — two realms meeting
- * still read as two colors, each rimmed in its own darker self.
+ * still read as two colors, each rimmed in its own darker self. At five raster
+ * pixels per area the rim is one raster pixel wide, on only the sides that
+ * actually face foreign ground.
  */
 const PERIMETER_DARKEN = 0.58;
+
+/**
+ * Paints one area's block of the raster: a flat `RASTER_SCALE`-square of the
+ * area's color, with a one-raster-pixel rim in the rim color on each side
+ * (and corner) whose bit is set in `edges`: 1 left, 2 right, 4 up, 8 down,
+ * 16 up-left, 32 up-right, 64 down-left, 128 down-right.
+ */
+function paintBlock(
+  fill: Uint8ClampedArray,
+  rasterWidth: number,
+  x: number,
+  y: number,
+  red: number,
+  green: number,
+  blue: number,
+  edges: number,
+  rimRed: number,
+  rimGreen: number,
+  rimBlue: number,
+) {
+  const last = RASTER_SCALE - 1;
+  for (let sy = 0; sy <= last; sy += 1) {
+    let base = (((y * RASTER_SCALE) + sy) * rasterWidth + x * RASTER_SCALE) * 4;
+    for (let sx = 0; sx <= last; sx += 1) {
+      const rim = edges !== 0 && (
+        ((edges & 1) !== 0 && sx === 0) ||
+        ((edges & 2) !== 0 && sx === last) ||
+        ((edges & 4) !== 0 && sy === 0) ||
+        ((edges & 8) !== 0 && sy === last) ||
+        ((edges & 16) !== 0 && sx === 0 && sy === 0) ||
+        ((edges & 32) !== 0 && sx === last && sy === 0) ||
+        ((edges & 64) !== 0 && sx === 0 && sy === last) ||
+        ((edges & 128) !== 0 && sx === last && sy === last)
+      );
+      fill[base] = Math.round(rim ? rimRed : red);
+      fill[base + 1] = Math.round(rim ? rimGreen : green);
+      fill[base + 2] = Math.round(rim ? rimBlue : blue);
+      fill[base + 3] = 255;
+      base += 4;
+    }
+  }
+}
 
 function fieldIndex(owner: number): number {
   return owner >= 0 ? owner : NEUTRAL_FIELD;
 }
 
 /**
- * The political map, one pixel per area.
+ * The political map, one flat block per area at five raster pixels per axis.
  *
  * Ownership used to be treated as a probability field: claims were blurred
  * across the neighbourhood, sampled bilinearly at a display raster several
  * times the grid's size, and the border drawn where the two strongest claims
- * met. None of that survives here. Every cell of the world is exactly one
- * pixel wearing that area's attributes — its terrain tinted by its owner's
- * banner — and a realm's border is simply the perimeter of its territory:
- * any owned area touching ground that is not the same realm's is painted a
- * darker shade of the realm's color. Zoom happens on the display side by
- * scaling these pixels, never by re-rendering finer ones.
+ * met. None of that survives here. Every cell of the world is one flat block
+ * wearing that area's attributes — its terrain tinted by its owner's banner —
+ * and a realm's border is simply the perimeter of its territory. The five
+ * raster pixels per area exist so the perimeter can be an edge instead of an
+ * area: only the one-raster-pixel rim on the sides (and outward corners) that
+ * actually face foreign ground darkens, so the frontier is a thin line of the
+ * realm's own darker self rather than a whole darkened area. Zoom still
+ * happens on the display side by scaling these pixels, never by re-rendering
+ * finer ones.
  *
  * Exported for headless benchmarks and tests; the worker protocol is the
  * real interface.
@@ -77,7 +125,9 @@ function fieldIndex(owner: number): number {
 export function renderPolitical(request: PoliticalRasterRequest): MapRasterResult {
   const { gridWidth, gridHeight } = request;
   const cells = gridWidth * gridHeight;
-  const fill = new Uint8ClampedArray(cells * 4);
+  const rasterWidth = gridWidth * RASTER_SCALE;
+  const rasterHeight = gridHeight * RASTER_SCALE;
+  const fill = new Uint8ClampedArray(cells * RASTER_SCALE * RASTER_SCALE * 4);
 
   // Flat channel tables: terrain fills by terrain index, each realm's overlay
   // color and blend strength by claim field. Realm colors arrive with the
@@ -109,12 +159,8 @@ export function renderPolitical(request: PoliticalRasterRequest): MapRasterResul
     const row = y * gridWidth;
     for (let x = 0; x < gridWidth; x += 1) {
       const index = row + x;
-      const pixel = index * 4;
       if (request.terrains[index] === WATER_TERRAIN) {
-        fill[pixel] = water.red;
-        fill[pixel + 1] = water.green;
-        fill[pixel + 2] = water.blue;
-        fill[pixel + 3] = 255;
+        paintBlock(fill, rasterWidth, x, y, water.red, water.green, water.blue, 0, 0, 0, 0);
         continue;
       }
       const owner = request.owners[index]!;
@@ -122,41 +168,53 @@ export function renderPolitical(request: PoliticalRasterRequest): MapRasterResul
       const amount = field === request.selected ? 0.76 : overlayAmount[field]!;
       const terrainBase = request.terrains[index]! * 3;
       const overlayBase = field * 3;
-      let red = terrainLut[terrainBase]!
+      const red = terrainLut[terrainBase]!
         + (overlayLut[overlayBase]! - terrainLut[terrainBase]!) * amount;
-      let green = terrainLut[terrainBase + 1]!
+      const green = terrainLut[terrainBase + 1]!
         + (overlayLut[overlayBase + 1]! - terrainLut[terrainBase + 1]!) * amount;
-      let blue = terrainLut[terrainBase + 2]!
+      const blue = terrainLut[terrainBase + 2]!
         + (overlayLut[overlayBase + 2]! - terrainLut[terrainBase + 2]!) * amount;
-      // The border: an owned area on the perimeter of its realm — any
-      // cardinal neighbour inside the map that is not the same owner, water
-      // and wilderness included — wears a darker shade of its realm's pixel.
-      // The map edge is the end of the world, not a frontier, so it does not
-      // darken.
+      // The border: an owned area on the perimeter of its realm rims the
+      // sides that face ground that is not the same realm's — water and
+      // wilderness included — in a darker shade of its own pixel. Outward
+      // corners rim too so two frontier lines meet without a notch. The map
+      // edge is the end of the world, not a frontier, so it does not darken.
+      let edges = 0;
       if (owner >= 0) {
-        const perimeter =
-          (x > 0 && request.owners[index - 1] !== owner) ||
-          (x < gridWidth - 1 && request.owners[index + 1] !== owner) ||
-          (y > 0 && request.owners[index - gridWidth] !== owner) ||
-          (y < gridHeight - 1 && request.owners[index + gridWidth] !== owner);
-        if (perimeter) {
-          red *= PERIMETER_DARKEN;
-          green *= PERIMETER_DARKEN;
-          blue *= PERIMETER_DARKEN;
-        }
+        const left = x > 0;
+        const right = x < gridWidth - 1;
+        const up = y > 0;
+        const down = y < gridHeight - 1;
+        if (left && request.owners[index - 1] !== owner) edges |= 1;
+        if (right && request.owners[index + 1] !== owner) edges |= 2;
+        if (up && request.owners[index - gridWidth] !== owner) edges |= 4;
+        if (down && request.owners[index + gridWidth] !== owner) edges |= 8;
+        if (left && up && request.owners[index - gridWidth - 1] !== owner) edges |= 16;
+        if (right && up && request.owners[index - gridWidth + 1] !== owner) edges |= 32;
+        if (left && down && request.owners[index + gridWidth - 1] !== owner) edges |= 64;
+        if (right && down && request.owners[index + gridWidth + 1] !== owner) edges |= 128;
       }
-      fill[pixel] = Math.round(red);
-      fill[pixel + 1] = Math.round(green);
-      fill[pixel + 2] = Math.round(blue);
-      fill[pixel + 3] = 255;
+      paintBlock(
+        fill,
+        rasterWidth,
+        x,
+        y,
+        red,
+        green,
+        blue,
+        edges,
+        red * PERIMETER_DARKEN,
+        green * PERIMETER_DARKEN,
+        blue * PERIMETER_DARKEN,
+      );
     }
   }
   return {
     type: "rendered",
     requestId: request.requestId,
     mode: request.mode,
-    rasterWidth: gridWidth,
-    rasterHeight: gridHeight,
+    rasterWidth,
+    rasterHeight,
     fill,
   };
 }
@@ -170,14 +228,17 @@ function theaterHeat(value: number): RgbColor {
 }
 
 /**
- * The theater-value map, one pixel per area like the political map: each land
- * cell wears its own banded heat tint, and a cell whose band steps down to a
- * cardinal neighbour darkens — a one-cell contour on the higher ground.
+ * The theater-value map, one flat block per area like the political map: each
+ * land cell wears its own banded heat tint, and a cell whose band steps down
+ * to a cardinal neighbour rims the facing side — a thin contour line on the
+ * higher ground, one raster pixel wide at five per area.
  */
 export function renderTheaters(request: TheaterRasterRequest): MapRasterResult {
   const { gridWidth, gridHeight } = request;
   const cells = gridWidth * gridHeight;
-  const fill = new Uint8ClampedArray(cells * 4);
+  const rasterWidth = gridWidth * RASTER_SCALE;
+  const rasterHeight = gridHeight * RASTER_SCALE;
+  const fill = new Uint8ClampedArray(cells * RASTER_SCALE * RASTER_SCALE * 4);
   const bands = new Int8Array(cells).fill(-1);
   const water = rgb(TERRAIN_RULES.water.fill);
   const neutral = rgb("#e1dac7");
@@ -193,13 +254,9 @@ export function renderTheaters(request: TheaterRasterRequest): MapRasterResult {
     const row = y * gridWidth;
     for (let x = 0; x < gridWidth; x += 1) {
       const index = row + x;
-      const pixel = index * 4;
       const band = bands[index]!;
       if (band < 0) {
-        fill[pixel] = water.red;
-        fill[pixel + 1] = water.green;
-        fill[pixel + 2] = water.blue;
-        fill[pixel + 3] = 255;
+        paintBlock(fill, rasterWidth, x, y, water.red, water.green, water.blue, 0, 0, 0, 0);
         continue;
       }
       const value = Math.max(0, Math.min(1, request.values[index]!));
@@ -207,34 +264,50 @@ export function renderTheaters(request: TheaterRasterRequest): MapRasterResult {
       // continuous gradient inside it.
       const bandCenter = band / 10 + 0.05;
       const displayedValue = value * 0.72 + Math.min(1, bandCenter) * 0.28;
-      let color = mix(neutral, theaterHeat(displayedValue), 0.9);
-      // Contours at cell resolution: darken the higher band where it meets a
-      // lower one, and the shoreline where land meets water.
-      const coastline =
-        (x > 0 && bands[index - 1] === -1) ||
-        (x < gridWidth - 1 && bands[index + 1] === -1) ||
-        (y > 0 && bands[index - gridWidth] === -1) ||
-        (y < gridHeight - 1 && bands[index + gridWidth] === -1);
-      const boundary =
-        (x > 0 && bands[index - 1]! >= 0 && bands[index - 1]! < band) ||
-        (x < gridWidth - 1 && bands[index + 1]! >= 0 && bands[index + 1]! < band) ||
-        (y > 0 && bands[index - gridWidth]! >= 0 && bands[index - gridWidth]! < band) ||
-        (y < gridHeight - 1 && bands[index + gridWidth]! >= 0 && bands[index + gridWidth]! < band);
-      if (coastline || boundary) {
-        color = mix(color, contour, coastline ? 0.84 : band % 2 === 0 ? 0.68 : 0.48);
-      }
-      fill[pixel] = color.red;
-      fill[pixel + 1] = color.green;
-      fill[pixel + 2] = color.blue;
-      fill[pixel + 3] = 255;
+      const color = mix(neutral, theaterHeat(displayedValue), 0.9);
+      // Contours as edges: the higher band rims the sides where it meets a
+      // lower one, and the shoreline rims where land faces water. Only the
+      // facing rim of the block darkens, so the contour is a thin line.
+      let coastline = false;
+      let edges = 0;
+      const step = (neighbourBand: number, bit: number) => {
+        if (neighbourBand === -1) {
+          coastline = true;
+          edges |= bit;
+        } else if (neighbourBand < band) {
+          edges |= bit;
+        }
+      };
+      if (x > 0) step(bands[index - 1]!, 1);
+      if (x < gridWidth - 1) step(bands[index + 1]!, 2);
+      if (y > 0) step(bands[index - gridWidth]!, 4);
+      if (y < gridHeight - 1) step(bands[index + gridWidth]!, 8);
+      if (x > 0 && y > 0) step(bands[index - gridWidth - 1]!, 16);
+      if (x < gridWidth - 1 && y > 0) step(bands[index - gridWidth + 1]!, 32);
+      if (x > 0 && y < gridHeight - 1) step(bands[index + gridWidth - 1]!, 64);
+      if (x < gridWidth - 1 && y < gridHeight - 1) step(bands[index + gridWidth + 1]!, 128);
+      const rim = mix(color, contour, coastline ? 0.84 : band % 2 === 0 ? 0.68 : 0.48);
+      paintBlock(
+        fill,
+        rasterWidth,
+        x,
+        y,
+        color.red,
+        color.green,
+        color.blue,
+        edges,
+        rim.red,
+        rim.green,
+        rim.blue,
+      );
     }
   }
   return {
     type: "rendered",
     requestId: request.requestId,
     mode: request.mode,
-    rasterWidth: gridWidth,
-    rasterHeight: gridHeight,
+    rasterWidth,
+    rasterHeight,
     fill,
   };
 }

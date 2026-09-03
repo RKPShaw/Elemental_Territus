@@ -37,15 +37,19 @@ export const RASTER_TERRAIN_INDEX: ReadonlyMap<TerrainId, number> = new Map(
 );
 
 /**
- * One raster pixel per authoritative cell.
+ * How many raster pixels one authoritative cell spans on each axis.
  *
- * The map is not a picture of the world sampled at some display resolution;
- * it *is* the world grid. Every pixel in the raster is exactly one area with
- * that area's attributes — terrain, owner, perimeter — and zooming the map
- * scales those pixels up or down on the display without ever inventing
- * sub-cell detail. The raster therefore has no width or height of its own:
- * it is always `gridWidth` by `gridHeight`.
+ * The map is still not a picture of the world sampled at some display
+ * resolution: every area is one flat block of its own attributes — terrain,
+ * owner — and no sub-cell detail is ever invented. The raster is simply five
+ * times finer than the grid so that *edges* can be drawn at sub-area width: a
+ * realm's perimeter is a one-raster-pixel rim on the facing side of the
+ * frontier area instead of a whole darkened area, and theater contours are
+ * likewise thin. The raster is always `gridWidth * RASTER_SCALE` by
+ * `gridHeight * RASTER_SCALE`.
  */
+export const RASTER_SCALE = 5;
+
 interface RasterRequestBase {
   type: "render";
   requestId: number;
@@ -53,7 +57,6 @@ interface RasterRequestBase {
   gridHeight: number;
   terrains: Uint8Array;
 }
-
 export interface PoliticalRasterRequest extends RasterRequestBase {
   mode: "political";
   selected: number;
@@ -81,7 +84,7 @@ export interface MapRasterResult {
   type: "rendered";
   requestId: number;
   mode: MapRasterRequest["mode"];
-  /** Always the grid dimensions: one pixel per area. */
+  /** Always the grid dimensions times RASTER_SCALE: one 5x5 block per area. */
   rasterWidth: number;
   rasterHeight: number;
   fill: Uint8ClampedArray<ArrayBuffer>;

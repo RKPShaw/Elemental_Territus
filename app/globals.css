@@ -1481,10 +1481,41 @@ canvas:focus-visible {
   background: #62c889;
 }
 
-.map-legend .legend-trade {
+/* The four transport signatures, matching their on-map pixel forms. */
+.map-legend .legend-earth {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  border: 1px solid rgba(38, 30, 18, 0.9);
+  background: #8a6b45;
+}
+
+.map-legend .legend-water {
+  width: 9px;
+  height: 6px;
+  border-radius: 0 3px 3px 0;
+  border: 1px solid rgba(255, 250, 226, 0.95);
+  background: #4f86a8;
+  box-shadow: -4px 0 0 -1px rgba(148, 197, 222, 0.85);
+}
+
+.map-legend .legend-air {
+  width: 0;
   height: 0;
-  border-top: 2px dashed #e5c56f;
+  border-radius: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 8px solid #7d93a8;
   background: transparent;
+  filter: drop-shadow(2px 2px 0 rgba(14, 27, 35, 0.28));
+}
+
+.map-legend .legend-fire {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: radial-gradient(circle, #fff4d6 0%, #ffb052 55%, #e07a2c 100%);
+  box-shadow: 0 0 4px 1px rgba(255, 150, 60, 0.75);
 }
 
 .map-legend.theater-legend i {
