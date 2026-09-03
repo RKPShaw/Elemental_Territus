@@ -262,11 +262,14 @@ drive the same simulation safely.
 - Border movement uses hidden local pressure; a cell wears its current owner
   until the tick it changes hands, and the map paints no contested squares and
   spawns no skirmish units.
-- The map renders one pixel per area at the world's own resolution — 252 by
-  156 areas (39,312) on the default world — so every pixel carries exactly one
-  cell's attributes: terrain, owner, structures. Zooming scales those pixels
-  between fit-to-view and 12x without ever rendering finer ground; there is
-  nothing smaller inside an area to reveal.
+- The map renders one flat five-by-five pixel block per area — 252 by 156
+  areas (39,312) on the default world, a 1260 by 780 raster — so every block
+  carries exactly one cell's attributes: terrain, owner, structures. The
+  extra raster resolution exists only so edges can be thin: a realm's border
+  is a one-raster-pixel rim on the sides of its frontier areas that face
+  foreign ground. Zooming scales those pixels between fit-to-view and 12x
+  without ever rendering finer ground; there is nothing smaller inside an
+  area to reveal.
 - The default world is 1.5 times the 168 by 104 world the balance was tuned
   on, chosen by measurement against the tick budget: a developed world costs
   under 40ms a tick at this size on a 2.8GHz core (the tuned size costs 15),

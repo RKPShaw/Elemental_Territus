@@ -67,8 +67,9 @@ const MAP_HEIGHT = 730;
 /**
  * The zoom range of the display.
  *
- * The world raster is fixed at one pixel per area, so zoom never re-renders
- * the ground at a finer grain -- it only scales the pixels. At 1x the whole
+ * The world raster is fixed at five pixels per area -- fine enough for thin
+ * frontier rims, but still flat blocks -- so zoom never re-renders the ground
+ * at a finer grain: it only scales the pixels. At 1x the whole
  * map fits the viewport; the range tops out where one area fills about
  * fifty-six CSS pixels, a large, flat square with nothing smaller inside it
  * to reveal. On a 252 by 156 world that is 12x from areas of under five
@@ -460,6 +461,20 @@ function positionAlong(
   };
 }
 
+/**
+ * Trade transports, each about the size of one area pixel, told apart by the
+ * elemental signature of the ground they cross rather than by bulk:
+ *
+ * - a train is *earth*: a solid blocky square, flat on the land;
+ * - a ship is *water*: a blunt rounded hull trailing a pale fading wake;
+ * - a flyer is *air*: a slim swept chevron casting a small offset ground
+ *   shadow, so it reads as above the map rather than on it;
+ * - a pulse is *fire*: a white-hot core inside a warm ember glow, running
+ *   its conduit like a spark down a wire.
+ *
+ * Every body still wears its owner's expressed-element color, so ownership
+ * and transport kind read independently at a glance.
+ */
 function drawTradeVehicles(
   context: CanvasRenderingContext2D,
   state: WorldState,
@@ -467,6 +482,7 @@ function drawTradeVehicles(
   extrapolatedTicks = 0,
 ) {
   sweepPathGeometry();
+  const px = Math.min(shape.cellWidth, shape.cellHeight);
   for (const vehicle of state.tradeVehicles) {
     const path = vehicle.pathIndices.length > 1
       ? vehicle.pathIndices
@@ -479,29 +495,89 @@ function drawTradeVehicles(
       : Math.min(vehicle.totalDistance, vehicle.distanceTravelled + vehicle.velocity * extrapolatedTicks);
     const visualProgress = vehicle.totalDistance > 0 ? visualDistance / vehicle.totalDistance : vehicle.progress;
     const { x, y, angle } = positionAlong(geometry, visualProgress);
+    const color = ELEMENTS[state.factions[vehicle.owner].expressedElement].deepColor;
+    if (vehicle.kind === "flyer") {
+      // The air signature: the ground shadow falls down-right in map space,
+      // detached from the body, before the body itself is drawn.
+      context.save();
+      context.translate(x + px * 0.32, y + px * 0.38);
+      context.rotate(angle);
+      context.fillStyle = "rgba(14, 27, 35, 0.28)";
+      context.beginPath();
+      context.ellipse(0, 0, px * 0.42, px * 0.2, 0, 0, Math.PI * 2);
+      context.fill();
+      context.restore();
+    }
     context.save();
     context.translate(x, y);
     context.rotate(angle);
-    context.fillStyle = ELEMENTS[state.factions[vehicle.owner].expressedElement].deepColor;
-    context.strokeStyle = "rgba(255,250,226,.95)";
-    context.lineWidth = 1;
-    context.beginPath();
-    if (vehicle.kind === "train") context.roundRect(-5, -3, 10, 6, 2);
-    else if (vehicle.kind === "pulse") context.arc(0, 0, 2.6, 0, Math.PI * 2);
-    else if (vehicle.kind === "flyer") {
-      context.moveTo(7, 0);
-      context.lineTo(-5, -4.5);
-      context.lineTo(-2.5, 0);
-      context.lineTo(-5, 4.5);
+    if (vehicle.kind === "train") {
+      // Earth: one solid square of ground-hauled cargo.
+      context.fillStyle = color;
+      context.strokeStyle = "rgba(38, 30, 18, 0.9)";
+      context.lineWidth = px * 0.14;
+      context.beginPath();
+      context.rect(-px * 0.41, -px * 0.41, px * 0.82, px * 0.82);
+      context.fill();
+      context.stroke();
+    } else if (vehicle.kind === "ship") {
+      // Water: the wake astern, fading with distance, then the blunt hull.
+      context.lineCap = "round";
+      context.lineWidth = px * 0.18;
+      context.strokeStyle = "rgba(214, 240, 252, 0.8)";
+      context.beginPath();
+      context.moveTo(-px * 0.5, 0);
+      context.lineTo(-px * 0.85, 0);
+      context.stroke();
+      context.strokeStyle = "rgba(214, 240, 252, 0.35)";
+      context.beginPath();
+      context.moveTo(-px * 1.0, 0);
+      context.lineTo(-px * 1.3, 0);
+      context.stroke();
+      context.fillStyle = color;
+      context.strokeStyle = "rgba(255, 250, 226, 0.95)";
+      context.lineWidth = px * 0.12;
+      context.beginPath();
+      context.moveTo(px * 0.5, 0);
+      context.lineTo(px * 0.1, -px * 0.34);
+      context.lineTo(-px * 0.42, -px * 0.3);
+      context.lineTo(-px * 0.42, px * 0.3);
+      context.lineTo(px * 0.1, px * 0.34);
       context.closePath();
+      context.fill();
+      context.stroke();
+    } else if (vehicle.kind === "pulse") {
+      // Fire: an ember glow around a white-hot core.
+      const glow = context.createRadialGradient(0, 0, 0, 0, 0, px * 0.85);
+      glow.addColorStop(0, "rgba(255, 244, 214, 0.95)");
+      glow.addColorStop(0.4, "rgba(255, 176, 82, 0.65)");
+      glow.addColorStop(1, "rgba(255, 140, 50, 0)");
+      context.fillStyle = glow;
+      context.beginPath();
+      context.arc(0, 0, px * 0.85, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = color;
+      context.beginPath();
+      context.arc(0, 0, px * 0.3, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "rgba(255, 248, 230, 0.95)";
+      context.beginPath();
+      context.arc(0, 0, px * 0.14, 0, Math.PI * 2);
+      context.fill();
     } else {
-      context.moveTo(6, 0);
-      context.lineTo(-4, -3.5);
-      context.lineTo(-2, 3.5);
+      // Air: a slim swept chevron, drawn over its detached shadow.
+      context.fillStyle = color;
+      context.strokeStyle = "rgba(255, 250, 226, 0.95)";
+      context.lineWidth = px * 0.1;
+      context.beginPath();
+      context.moveTo(px * 0.55, 0);
+      context.lineTo(-px * 0.45, -px * 0.42);
+      context.lineTo(-px * 0.18, 0);
+      context.lineTo(-px * 0.45, px * 0.42);
       context.closePath();
+      context.fill();
+      context.stroke();
     }
-    context.fill();
-    context.stroke();
     context.restore();
   }
 }
@@ -790,9 +866,10 @@ export function WorldMap({
   const nextRasterRequestRef = useRef(0);
   const latestRasterRequestRef = useRef(0);
   /**
-   * The rendered world raster, exactly one canvas pixel per area. The display
-   * loop scales it up with image smoothing off, so zooming in makes the
-   * pixels larger instead of conjuring finer ones.
+   * The rendered world raster, a flat five-by-five block of canvas pixels per
+   * area. The display loop scales it with image smoothing off, so zooming in
+   * makes the pixels larger instead of conjuring finer ones; the extra
+   * resolution exists so borders and contours can be thin rims.
    */
   const fillCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const worldRef = useRef(state);
@@ -1151,7 +1228,7 @@ export function WorldMap({
         onPointerLeave={() => setHoveredCell(null)}
         aria-label={mapMode === "theaters"
           ? `${realmLabel(state, selected)} interpretation of the world's strategic theaters. Green is high value and red is low value.`
-          : `Live political and terrain map of ${state.worldName}, one pixel per area. Select a colored player to inspect it; drag to pan and scroll to zoom.`}
+          : `Live political and terrain map of ${state.worldName}, one flat block per area. Select a colored player to inspect it; drag to pan and scroll to zoom.`}
       />
       <div className="map-zoom" role="group" aria-label="Map zoom">
         <button type="button" onClick={() => zoomBy(1.5)} aria-label="Zoom in">+</button>
@@ -1190,7 +1267,10 @@ export function WorldMap({
         <div className="map-legend" aria-hidden="true">
           <span><i className="legend-peace" /> border · darker perimeter</span>
           <span><i className="legend-alliance" /> allied border</span>
-          <span><i className="legend-trade" /> convoys {trains} · ships {ships} · pulses {pulses} · flyers {flyers}</span>
+          <span><i className="legend-earth" /> earth convoys {trains}</span>
+          <span><i className="legend-water" /> water ships {ships}</span>
+          <span><i className="legend-air" /> air flyers {flyers}</span>
+          <span><i className="legend-fire" /> fire pulses {pulses}</span>
         </div>
       )}
       <div className="map-hint" aria-hidden="true">
