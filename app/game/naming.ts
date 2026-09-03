@@ -137,6 +137,9 @@ export function realmTitle(state: WorldState, id: PlayerId): string {
   return state.factions[id]?.identity?.title ?? PLAYERS[id].realmName;
 }
 
+/** Renames a realm keeps on record; older entries fall off the front. */
+const NAME_CHANGE_LOG_LIMIT = 48;
+
 export interface RenameOutcome {
   from: string;
   to: string;
@@ -165,5 +168,11 @@ export function applyRename(
   identity.styledElement = element;
   identity.title = title;
   identity.changes.push({ tick, from: outcome.from, to: title, reason });
+  // The rename log is the last uncapped collection in world state, and it is
+  // cloned into every published snapshot. A realm that renames forever (union,
+  // fission, ascension cycles) must not grow the worker's heap forever with it.
+  if (identity.changes.length > NAME_CHANGE_LOG_LIMIT) {
+    identity.changes.splice(0, identity.changes.length - NAME_CHANGE_LOG_LIMIT);
+  }
   return outcome;
 }
